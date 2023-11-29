@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/sst/ion/internal/components"
+	"github.com/sst/ion/pkg/global"
 )
 
 func (p *Project) CheckDeps() bool {
@@ -39,7 +40,9 @@ func (p *Project) InstallDeps() error {
 
 	os.RemoveAll(filepath.Join(p.PathTemp(), "node_modules"))
 
-	cmd := exec.Command("npm", "install")
+	pm := global.PackageManager()
+	slog.Info("using package manager", "manager", pm)
+	cmd := exec.Command(pm, "install")
 	cmd.Dir = p.PathTemp()
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout

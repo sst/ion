@@ -19,6 +19,35 @@ func ConfigDir() string {
 	return configDir
 }
 
+var packageManager = ""
+
+func SetPackageManager(pm string) {
+	packageManager = pm
+}
+
+func PackageManager() string {
+	if packageManager == "" {
+		packageManager = getPackageManager()
+	}
+	return packageManager
+}
+
+func getPackageManager() string {
+	packageManagers := []string{
+		"pnpm",
+		"yarn",
+		"npm",
+	}
+
+	for _, pm := range packageManagers {
+		if _, err := exec.LookPath(pm); err == nil {
+			return pm
+		}
+	}
+
+	return "npm"
+}
+
 func NeedsPlugins() bool {
 	files, err := os.ReadDir(filepath.Join(configDir, "plugins"))
 	if err != nil {

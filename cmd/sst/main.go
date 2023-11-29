@@ -23,6 +23,10 @@ func main() {
 			&cli.BoolFlag{
 				Name: "verbose",
 			},
+			&cli.StringFlag{
+				Name:    "package-manager",
+				Aliases: []string{"pm"},
+			},
 		},
 		Before: func(c *cli.Context) error {
 			level := slog.LevelWarn
@@ -42,6 +46,12 @@ func main() {
 					return err
 				}
 			}
+
+			pm := c.String("package-manager")
+			if pm != "" {
+				global.SetPackageManager(pm)
+			}
+
 			color.New(color.FgCyan, color.Bold).Print("SST ❍ ion " + version + "  ")
 			color.New(color.FgHiBlack).Print("ready!\n")
 			return nil
