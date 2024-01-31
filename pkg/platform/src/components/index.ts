@@ -6,3 +6,4 @@ export * from "./postgres.js";
 export * from "./vector.js";
 export * from "./worker.js";
 export * from "./secret.js";
+export * from "./nextV3.js";

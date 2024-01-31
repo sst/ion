@@ -25,8 +25,8 @@ import { Link } from "./link.js";
 import { Transform } from "./component.js";
 
 type CloudFrontFunctionConfig = { injections: string[] };
-type EdgeFunctionConfig = { function: Unwrap<FunctionArgs> };
-type FunctionOriginConfig = {
+export type EdgeFunctionConfig = { function: Unwrap<FunctionArgs> };
+export type FunctionOriginConfig = {
   type: "function";
   function: Unwrap<FunctionArgs>;
   injections?: string[];
