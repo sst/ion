@@ -1,3 +1,4 @@
+// @ts-ignore
 /// <reference path="./.sst/platform/src/global.d.ts" />
 
 export default $config({
