@@ -10,8 +10,8 @@ export type {} from "@smithy/types";
 import { HASH_CHARS, hashNumberToString } from "../naming";
 
 export const bootstrap = {
-  forRegion(region: string) {
-    if (bootstrapBuckets[region]) {
+  async forRegion(region: string) {
+    if (await bootstrapBuckets[region]) {
       return bootstrapBuckets[region]!;
     }
 
