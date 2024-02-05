@@ -14,8 +14,6 @@ import * as aws from "@pulumi/aws";
 import { Size, toMBs } from "./util/size.js";
 import { Function } from "./function.js";
 import {
-  EdgeFunctionConfig,
-  FunctionOriginConfig,
   Plan,
   SsrSiteArgs,
   buildApp,
@@ -33,116 +31,41 @@ import { sanitizeToPascalCase } from "./helpers/naming.js";
 import { Hint } from "./hint.js";
 
 const LAYER_VERSION = "2";
-const DEFAULT_OPEN_NEXT_VERSION = "3.0.0-rc.3";
+const DEFAULT_OPEN_NEXT_VERSION = "2.3.1";
 const DEFAULT_CACHE_POLICY_ALLOWED_HEADERS = [
   "accept",
-  "x-prerender-revalidate",
   "rsc",
   "next-router-prefetch",
   "next-router-state-tree",
   "next-url",
 ];
 
-type BaseFunction = {
-  handler: string;
-  bundle: string;
-};
-
-type OpenNextFunctionOrigin = {
-  type: "function";
-  streaming?: boolean;
-  wrapper: string;
-  converter: string;
-} & BaseFunction;
-
-type OpenNextECSOrigin = {
-  type: "ecs";
-  bundle: string;
-  wrapper: string;
-  converter: string;
-  dockerfile: string;
-};
-
-type CommonOverride = {
-  queue: string;
-  incrementalCache: string;
-  tagCache: string;
-};
-
-type OpenNextServerFunctionOrigin = OpenNextFunctionOrigin & CommonOverride;
-type OpenNextServerECSOrigin = OpenNextECSOrigin & CommonOverride;
-
-type OpenNextS3Origin = {
-  type: "s3";
-  originPath: string;
-  copy: {
-    from: string;
-    to: string;
-    cached: boolean;
-    versionedSubDir?: string;
-  }[];
-};
-
-type OpenNextOrigins =
-  | OpenNextServerFunctionOrigin
-  | OpenNextServerECSOrigin
-  | OpenNextS3Origin;
-
-type ImageFnOrigins = OpenNextFunctionOrigin & { imageLoader: string };
-type ImageECSOrigins = OpenNextECSOrigin & { imageLoader: string };
-
-type ImageOrigins = ImageFnOrigins | ImageECSOrigins;
-
-type DefaultOrigins = {
-  s3: OpenNextS3Origin;
-  default: OpenNextServerFunctionOrigin | OpenNextServerECSOrigin;
-  imageOptimizer: ImageOrigins;
-};
-
-interface OpenNextOutput {
-  edgeFunctions: {
-    [key: string]: BaseFunction;
-  } & {
-    middleware?: BaseFunction & { pathResolver: string };
-  };
-  origins: DefaultOrigins & {
-    [key: string]: OpenNextOrigins;
-  };
-  behaviors: {
-    pattern: string;
-    origin?: string;
-    edgeFunction?: string;
-  }[];
-  additionalProps?: {
-    disableIncrementalCache?: boolean;
-    disableTagCache?: boolean;
-    initializationFunction?: BaseFunction;
-    warmer?: BaseFunction;
-    revalidationFunction?: BaseFunction;
-  };
-}
-
-export interface NextjsV3Args extends SsrSiteArgs {
+export interface NextjsArgs extends SsrSiteArgs {
   /**
    * OpenNext version for building the Next.js site.
    * @default Latest OpenNext version
    * @example
    * ```js
-   * openNextVersion: "3.0.0-rc.3",
+   * openNextVersion: "2.2.4",
    * ```
    */
   openNextVersion?: string;
   /**
    * How the logs are stored in CloudWatch
    * - "combined" - Logs from all routes are stored in the same log group.
-   * - "per-route" - Logs from each route are stored in a separate log group. Doesn't work right now
-   * @default "combined"
+   * - "per-route" - Logs from each route are stored in a separate log group.
+   * @default "per-route"
    * @example
    * ```js
    * logging: "combined",
    * ```
    */
   logging?: "combined" | "per-route";
+  /**
+   * The server function is deployed to Lambda in a single region. Alternatively, you can enable this option to deploy to Lambda@Edge.
+   * @default false
+   */
+  edge?: boolean;
   imageOptimization?: {
     /**
      * The amount of memory in MB allocated for image optimization function.
@@ -155,6 +78,43 @@ export interface NextjsV3Args extends SsrSiteArgs {
      * ```
      */
     memory?: Size;
+  };
+  experimental?: {
+    /**
+     * Enable streaming. Currently an experimental feature in OpenNext.
+     * @default false
+     * @example
+     * ```js
+     * experimental: {
+     *   streaming: true,
+     * }
+     * ```
+     */
+    streaming?: boolean;
+    /**
+     * Disabling incremental cache will cause the entire page to be revalidated on each request. This can result in ISR and SSG pages to be in an inconsistent state. Specify this option if you are using SSR pages only.
+     *
+     * Note that it is possible to disable incremental cache while leaving on-demand revalidation enabled.
+     * @default false
+     * @example
+     * ```js
+     * experimental: {
+     *   disableIncrementalCache: true,
+     * }
+     * ```
+     */
+    disableIncrementalCache?: boolean;
+    /**
+     * Disabling DynamoDB cache will cause on-demand revalidation by path (`revalidatePath`) and by cache tag (`revalidateTag`) to fail silently.
+     * @default false
+     * @example
+     * ```js
+     * experimental: {
+     *   disableDynamoDBCache: true,
+     * }
+     * ```
+     */
+    disableDynamoDBCache?: boolean;
   };
 }
 
@@ -169,8 +129,9 @@ export interface NextjsV3Args extends SsrSiteArgs {
  * });
  * ```
  */
-export class NextjsV3 extends Component {
+export class Nextjs extends Component {
   private doNotDeploy: Output<boolean>;
+  private edge: Output<boolean>;
   private cdn: Cdn;
   private assets: Bucket;
   private server?: Function;
@@ -178,13 +139,14 @@ export class NextjsV3 extends Component {
 
   constructor(
     name: string,
-    args?: NextjsV3Args,
+    args?: NextjsArgs,
     opts?: ComponentResourceOptions
   ) {
-    super("sst:sst:NextjsV3", name, args, opts);
+    super("sst:sst:Nextjs", name, args, opts);
 
     const parent = this;
     const logging = normalizeLogging();
+    const experimental = normalizeExperimental();
     const buildCommand = normalizeBuildCommand();
     buildCommand.apply((buildCommand) => console.log(buildCommand));
     const { sitePath, doNotDeploy } = prepare(args || {});
@@ -219,17 +181,13 @@ export class NextjsV3 extends Component {
 
     const outputPath = buildApp(name, args || {}, sitePath, buildCommand);
     const { access, bucket } = createBucket(parent, name);
-    // Load open-next.output.json
-    const openNextOutput = loadOpenNextOutput();
-    
     const revalidationQueue = createRevalidationQueue();
     const revalidationTable = createRevalidationTable();
 
     const plan = buildPlan(bucket);
     // TODO set dependency
     // TODO ensure sourcemaps are removed in function code
-    // We don't need to remove source maps in V3
-    // removeSourcemaps();
+    removeSourcemaps();
 
     const { distribution, ssrFunctions, edgeFunctions } =
       createServersAndDistribution(
@@ -246,7 +204,6 @@ export class NextjsV3 extends Component {
     handleMissingSourcemap(); // TODO implement
 
     if (isPerRouteLoggingEnabled()) {
-      throw new Error("Not implemented yet")
       //disableDefaultLogging();
       uploadSourcemaps();
     }
@@ -255,7 +212,7 @@ export class NextjsV3 extends Component {
     this.assets = bucket;
     this.cdn = distribution as unknown as Cdn;
     this.server = serverFunction as unknown as Function;
-    // this.edge = plan.edge;
+    this.edge = plan.edge;
     Hint.register(
       this.urn,
       all([this.cdn.domainUrl, this.cdn.url]).apply(([domainUrl, url]) => {
@@ -267,43 +224,46 @@ export class NextjsV3 extends Component {
     //app.registerTypes(this);
 
     function normalizeLogging() {
-      //TODO: implement per-route logging
-      return output(args?.logging).apply((logging) => logging ?? "combined");
+      return output(args?.logging).apply((logging) => logging ?? "per-route");
+    }
+
+    function normalizeExperimental() {
+      return output(args?.experimental).apply((experimental) => ({
+        streaming: experimental?.streaming ?? false,
+        disableDynamoDBCache: experimental?.disableDynamoDBCache ?? false,
+        disableIncrementalCache: experimental?.disableIncrementalCache ?? false,
+        ...experimental,
+      }));
     }
 
     function normalizeBuildCommand() {
-      return all([args?.buildCommand]).apply(
-        ([buildCommand]) =>
+      return all([args?.buildCommand, experimental]).apply(
+        ([buildCommand, experimental]) =>
           buildCommand ??
           [
             "npx",
             "--yes",
             `open-next@${args?.openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION}`,
             "build",
+            ...(experimental.streaming ? ["--streaming"] : []),
+            ...(experimental.disableDynamoDBCache
+              ? ["--dangerously-disable-dynamodb-cache"]
+              : []),
+            ...(experimental.disableIncrementalCache
+              ? ["--dangerously-disable-incremental-cache"]
+              : []),
           ].join(" ")
       );
-    }
-
-    function loadOpenNextOutput() {
-      return output(outputPath).apply((_path) => {
-        const openNextOutputPath = path.join(_path, ".open-next", "open-next.output.json");
-        if (!fs.existsSync(openNextOutputPath)) {
-          throw new Error(
-            `Failed to load open-next.output.json from "${openNextOutputPath}".`
-          );
-        }
-        const content = fs.readFileSync(openNextOutputPath).toString();
-        return JSON.parse(content) as OpenNextOutput;
-      })
     }
 
     function buildPlan(bucket: Bucket) {
       return all([
         outputPath,
         $app.providers?.aws?.region!,
+        args?.edge,
+        args?.experimental,
         args?.imageOptimization,
-        openNextOutput
-      ]).apply(([outputPath, region, imageOptimization, output]) =>
+      ]).apply(([outputPath, region, edge, experimental, imageOptimization]) =>
         all([
           bucket.name,
           useRoutes(),
@@ -316,19 +276,10 @@ export class NextjsV3 extends Component {
             { url: revalidationQueueUrl, arn: revalidationQueueArn },
             { name: revalidationTableName, arn: revalidationTableArn },
           ]) => {
-
-            const imageOpt = output.origins.imageOptimizer as OpenNextFunctionOrigin;
-            const defaultFn = output.origins.default;
-            const remainingFns = Object.entries(output.origins).filter(([key, value]) => {
-              const result = key !== "imageOptimizer" && key !== "default" && key !== "s3";
-              return result;
-            }) as [string, OpenNextFunctionOrigin | OpenNextECSOrigin][];
-
-            const createEcsOrigin = (origin: OpenNextECSOrigin) => {
-              throw new Error("Not implemented yet")
-            }
-
-            const defaultFunctionProps = {
+            const serverConfig = {
+              description: "Next.js server",
+              bundle: path.join(outputPath, ".open-next", "server-function"),
+              handler: "index.handler",
               environment: {
                 CACHE_BUCKET_NAME: bucketName,
                 CACHE_BUCKET_KEY_PREFIX: "_cache",
@@ -388,65 +339,41 @@ export class NextjsV3 extends Component {
                     //                : `arn:aws:lambda:${stack.region}:226609089145:layer:sst-extension-arm64:${LAYER_VERSION}`
                   ]
                 : undefined,
-            }
-            
-
-            const createFunctionOrigin = (origin: OpenNextFunctionOrigin) : FunctionOriginConfig => {
-                return {
-                  type: "function",
-                  function: {
-                    description: "Next.js server",
-                    bundle: path.join(outputPath, origin.bundle),
-                    handler: origin.handler,
-                    ...defaultFunctionProps,
-                  },
-                  streaming: origin.streaming
-              }
-            }
-
-            const createEdgeOrigin = (origin: BaseFunction) : EdgeFunctionConfig => {
-              return {
-                function: {
-                  description: "Next.js edge",
-                  bundle: path.join(outputPath, origin.bundle),
-                  handler: origin.handler,
-                  ...defaultFunctionProps,
-                },
-              }
-            }
-            
-
-            const remainingOrigins = remainingFns.reduce((acc, [key, value]) => {
-              acc = {
-                ...acc, [key]:
-                  value.type === "ecs" ? createEcsOrigin(value) : createFunctionOrigin(value)
-              };
-              return acc;
-            }
-              , {} as Record<string, FunctionOriginConfig>)
-        
-            const edgeFunctions = Object.entries(output.edgeFunctions).reduce((acc, [key, value]) => {
-              return { ...acc, [key]: createEdgeOrigin(value) };
-            }, {} as Record<string, EdgeFunctionConfig>);
+            };
 
             return validatePlan(
               transform(args?.transform?.plan, {
-                edge: false,
+                edge: edge ?? false,
                 cloudFrontFunctions: {
                   serverCfFunction: {
                     injections: [useCloudFrontFunctionHostHeaderInjection()],
                   },
                 },
-                edgeFunctions,
+                edgeFunctions: edge
+                  ? { server: { function: serverConfig } }
+                  : undefined,
                 origins: {
+                  ...(edge
+                    ? {}
+                    : {
+                        server: {
+                          type: "function",
+                          function: serverConfig,
+                          streaming: experimental?.streaming,
+                          injections: isPerRouteLoggingEnabled()
+                            ? [useServerFunctionPerRouteLoggingInjection()]
+                            : [],
+                        },
+                      }),
                   imageOptimizer: {
                     type: "image-optimization-function",
                     function: {
                       description: "Next.js image optimizer",
-                      handler: imageOpt.handler,
+                      handler: "index.handler",
                       bundle: path.join(
                         outputPath,
-                        imageOpt.bundle
+                        ".open-next",
+                        "image-optimization-function"
                       ),
                       runtime: "nodejs18.x",
                       architecture: "arm64",
@@ -457,19 +384,87 @@ export class NextjsV3 extends Component {
                       memory: imageOptimization?.memory ?? "1536 MB",
                     },
                   },
-                  s3: output.origins.s3,
-                  default: defaultFn.type === "ecs" ? createEcsOrigin(defaultFn) : createFunctionOrigin(defaultFn),
-                  ...remainingOrigins,
+                  s3: {
+                    type: "s3",
+                    originPath: "_assets",
+                    copy: [
+                      {
+                        from: ".open-next/assets",
+                        to: "_assets",
+                        cached: true,
+                        versionedSubDir: "_next",
+                      },
+                      { from: ".open-next/cache", to: "_cache", cached: false },
+                    ],
+                  },
                 },
-                behaviors: output.behaviors.map((behavior) => {
-                  return {
-                    pattern: behavior.pattern === "*" ? undefined : behavior.pattern,
-                    origin: behavior.origin ?? "",
-                    cacheType: behavior.origin === "s3" ? "static" : "server" as const,
+                behaviors: [
+                  ...(edge
+                    ? [
+                        {
+                          cacheType: "server",
+                          cfFunction: "serverCfFunction",
+                          edgeFunction: "server",
+                          origin: "s3",
+                        } as const,
+                        {
+                          cacheType: "server",
+                          pattern: "api/*",
+                          cfFunction: "serverCfFunction",
+                          edgeFunction: "server",
+                          origin: "s3",
+                        } as const,
+                        {
+                          cacheType: "server",
+                          pattern: "_next/data/*",
+                          cfFunction: "serverCfFunction",
+                          edgeFunction: "server",
+                          origin: "s3",
+                        } as const,
+                      ]
+                    : [
+                        {
+                          cacheType: "server",
+                          cfFunction: "serverCfFunction",
+                          origin: "server",
+                        } as const,
+                        {
+                          cacheType: "server",
+                          pattern: "api/*",
+                          cfFunction: "serverCfFunction",
+                          origin: "server",
+                        } as const,
+                        {
+                          cacheType: "server",
+                          pattern: "_next/data/*",
+                          cfFunction: "serverCfFunction",
+                          origin: "server",
+                        } as const,
+                      ]),
+                  {
+                    cacheType: "server",
+                    pattern: "_next/image*",
                     cfFunction: "serverCfFunction",
-                    edgeFunction: behavior.edgeFunction ?? "",
-                  };
-                }),
+                    origin: "imageOptimizer",
+                  },
+                  // create 1 behaviour for each top level asset file/folder
+                  ...fs
+                    .readdirSync(path.join(outputPath, ".open-next/assets"))
+                    .map(
+                      (item) =>
+                        ({
+                          cacheType: "static",
+                          pattern: fs
+                            .statSync(
+                              path.join(outputPath, ".open-next/assets", item)
+                            )
+                            .isDirectory()
+                            ? `${item}/*`
+                            : item,
+                          origin: "s3",
+                        }) as const
+                    ),
+                ],
                 serverCachePolicy: {
                   allowedHeaders: DEFAULT_CACHE_POLICY_ALLOWED_HEADERS,
                 },
@@ -510,9 +505,9 @@ if (event.rawPath) {
     }
 
     function createRevalidationQueue() {
-      return openNextOutput.apply((output) => {
+      return experimental.apply((experimental) => {
         if (!serverFunction) return;
-        if (output.additionalProps?.disableIncrementalCache) return;
+        if (experimental.disableIncrementalCache) return;
 
         const queue = new aws.sqs.Queue(
           `${name}RevalidationQueue`,
@@ -561,10 +556,10 @@ if (event.rawPath) {
     }
 
     function createRevalidationTable() {
-      return all([openNextOutput, outputPath, usePrerenderManifest()]).apply(
-        ([output, outputPath, prerenderManifest]) => {
+      return all([experimental, outputPath, usePrerenderManifest()]).apply(
+        ([experimental, outputPath, prerenderManifest]) => {
           if (!serverFunction) return;
-          if (output.additionalProps?.disableTagCache) return;
+          if (experimental.disableDynamoDBCache) return;
 
           const table = new aws.dynamodb.Table(
             `${name}RevalidationTable`,
@@ -919,7 +914,7 @@ if (event.rawPath) {
     }
 
     function isPerRouteLoggingEnabled() {
-      return !doNotDeploy && args?.logging === "per-route";
+      return !doNotDeploy && !args?.edge && args?.logging === "per-route";
     }
 
     function handleMissingSourcemap() {
