@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { globSync } from "glob";
 import {
   ComponentResourceOptions,
+  Input,
   Output,
   all,
   asset,
@@ -14,9 +15,6 @@ import * as aws from "@pulumi/aws";
 import { Size, toMBs } from "./util/size.js";
 import { Function } from "./function.js";
 import {
-  EdgeFunctionConfig,
-  FunctionOriginConfig,
-  Plan,
   SsrSiteArgs,
   buildApp,
   createBucket,
@@ -113,7 +111,7 @@ export interface NextjsArgs extends SsrSiteArgs {
    * openNextVersion: "3.0.0-rc.3",
    * ```
    */
-  openNextVersion?: string;
+  openNextVersion?: Input<string>;
   /**
    * How the logs are stored in CloudWatch
    * - "combined" - Logs from all routes are stored in the same log group.
@@ -248,13 +246,13 @@ export class Nextjs extends Component {
     }
 
     function normalizeBuildCommand() {
-      return all([args?.buildCommand]).apply(
-        ([buildCommand]) =>
+      return all([args?.buildCommand, args?.openNextVersion]).apply(
+        ([buildCommand, openNextVersion]) =>
           buildCommand ??
           [
             "npx",
             "--yes",
-            `open-next@${args?.openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION}`,
+            `open-next@${openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION}`,
             "build",
           ].join(" ")
       );
