@@ -582,6 +582,17 @@ export class Nextjs extends Component implements Link.Linkable {
             bundle: ".open-next/dynamodb-provider",
           };
         }
+
+        const basePath = getBasePath(outputPath);
+
+        if (basePath && basePath.length > 0) {
+          for (const behavior of json.behaviors) {
+            if (behavior.pattern !== "*") {
+              behavior.pattern = `${basePath}/${behavior.pattern}`;
+            }
+          }
+        }
+
         return json;
       });
     }
@@ -940,6 +951,29 @@ export class Nextjs extends Component implements Link.Linkable {
           }) as Plan;
         },
       );
+    }
+
+    function getBasePath(outputPath: string) {
+      const routesManifestPath = path.join(
+        outputPath,
+        ".next",
+        "routes-manifest.json",
+      );
+
+      if (!fs.existsSync(routesManifestPath)) {
+        throw new VisibleError(
+          `Failed to load routes-manifest.json from "${routesManifestPath}".`,
+        );
+      }
+
+      const routesManifestContent = fs
+        .readFileSync(routesManifestPath)
+        .toString();
+
+      const basePathWithSlash = JSON.parse(routesManifestContent)
+        .basePath as string;
+
+      return basePathWithSlash.slice(1);
     }
 
     function createRevalidationQueue() {
@@ -1310,8 +1344,8 @@ if (event.rawPath) {
       // to ensure we receive the cached page instead of the preview version, we set the
       // header "x-prerender-bypass", and add it to cache policy's allowed headers.
       return `
-  if (request.cookies["__prerender_bypass"]) { 
-    request.headers["x-prerender-bypass"] = { value: "true" }; 
+  if (request.cookies["__prerender_bypass"]) {
+    request.headers["x-prerender-bypass"] = { value: "true" };
   }`;
     }
 
