@@ -362,7 +362,11 @@ export interface SsrSiteArgs {
      * Transform the Bucket resource used for uploading the assets.
      */
     assets?: Transform<BucketArgs>;
-  };
+    /**
+     * Transform the CloudFront distribution resource underlying the Cdn component.
+     */
+    distribution?: Transform<aws.cloudfront.DistributionArgs>
+  }
 }
 
 export function prepare(args: SsrSiteArgs, opts: ComponentResourceOptions) {
@@ -1029,23 +1033,24 @@ function handler(event) {
           domain: args.domain,
           wait: !$dev,
           transform: {
-            distribution: (distribution) => ({
-              ...distribution,
-              comment: `${name} app`,
-              origins: Object.values(origins),
-              originGroups: Object.values(originGroups),
-              defaultRootObject: "",
-              defaultCacheBehavior: buildBehavior(
-                plan.behaviors.find((behavior) => !behavior.pattern)!,
-              ),
-              orderedCacheBehaviors: plan.behaviors
-                .filter((behavior) => behavior.pattern)
-                .map((behavior) => ({
-                  pathPattern: behavior.pattern!,
-                  ...buildBehavior(behavior),
-                })),
-              customErrorResponses: plan.errorResponses,
-            }),
+            distribution: (distribution) =>
+              transform(args.transform?.distribution, {
+                ...distribution,
+                comment: `${name} app`,
+                origins: Object.values(origins),
+                originGroups: Object.values(originGroups),
+                defaultRootObject: "",
+                defaultCacheBehavior: buildBehavior(
+                  plan.behaviors.find((behavior) => !behavior.pattern)!,
+                ),
+                orderedCacheBehaviors: plan.behaviors
+                  .filter((behavior) => behavior.pattern)
+                  .map((behavior) => ({
+                    pathPattern: behavior.pattern!,
+                    ...buildBehavior(behavior),
+                  })),
+                customErrorResponses: plan.errorResponses,
+              }),
           },
         },
         // create distribution after s3 upload finishes
