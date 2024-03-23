@@ -12,7 +12,7 @@ export default $config({
     const swift = new sst.aws.Function("Swift", {
       runtime: "provided.al2023",
       architecture: process.arch === "arm64" ? "arm64" : "x86_64",
-      bundle: ".build/lambda",
+      bundle: ".build/lambda/app",
       handler: "bootstrap",
       url: true,
       streaming: false,
