@@ -38,7 +38,7 @@ function build(target: string) {
       -v ./:/workspace \
       -w /workspace \
       swift:5.10-amazonlinux2 \
-      bash -cl "swift build -c release --static-swift-stdlib"
+      bash -cl "swift build -c release --product ${target} --static-swift-stdlib"
   `);
   execSync(`
     mkdir -p .build/lambda/${target}
