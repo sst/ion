@@ -29,7 +29,5 @@ queue.subscribe({
   architecture: process.arch === "arm64" ? "arm64" : "x86_64",
   bundle: build("queue"),
   handler: "bootstrap",
-  url: true,
-  streaming: false,
 });
 ```
