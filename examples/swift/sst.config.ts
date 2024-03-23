@@ -1,6 +1,6 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
-import { execSync } from "node:child_process";
+const swiftVersion = "5.10";
 
 export default $config({
   app(input) {
@@ -32,18 +32,14 @@ export default $config({
 });
 
 function build(target: string) {
-  execSync(`
+  require("child_process").execSync(`
     docker run \
       --rm \
       -v ./:/workspace \
       -w /workspace \
-      swift:5.10-amazonlinux2 \
+      swift:${swiftVersion}-amazonlinux2 \
       bash -cl "swift build -c release --product ${target} --static-swift-stdlib"
-  `);
-  execSync(`
     mkdir -p .build/lambda/${target}
-  `);
-  execSync(`
     cp .build/release/${target} .build/lambda/${target}/bootstrap
   `);
   return `.build/lambda/${target}`;
