@@ -16,6 +16,10 @@ Deploy just like any other sst project:
 sst deploy --stage production
 ```
 
+### Github Actions
+
+When deploying from your local machine, your application is built with Docker. If you want to deploy from Github Actions or another CI service, you'll need to use the swift:5.10-amazonlinux2 image.
+
 ## Multiple Targets
 
 A simple Swift application might include just one lambda function to act as an http server. But a more complex application will want to take advantage of queues and other event driven architectures. This is trivial to do, simply create more `sst.aws.Function`s and reference the relevant target for that function in `build(someTarget)`. Any `executableTarget` in your `Package.swift` can be passed to build.

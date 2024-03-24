@@ -33,12 +33,7 @@ export default $config({
 
 function build(target: string) {
   require("child_process").execSync(`
-    docker run \
-      --rm \
-      -v ./:/workspace \
-      -w /workspace \
-      swift:${swiftVersion}-amazonlinux2 \
-      bash -cl "swift build -c release --product ${target} --static-swift-stdlib"
+    swift package --disable-sandbox archive --products ${target} --swift-version ${swiftVersion}
     mkdir -p .build/lambda/${target}
     cp .build/release/${target} .build/lambda/${target}/bootstrap
   `);
