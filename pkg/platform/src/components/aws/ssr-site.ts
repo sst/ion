@@ -13,7 +13,7 @@ import {
   ComponentResourceOptions,
 } from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { Cdn, CdnDomainArgs } from "./cdn.js";
+import { Cdn, CdnArgs, CdnDomainArgs } from "./cdn.js";
 import { Function, FunctionArgs } from "./function.js";
 import { DistributionInvalidation } from "./providers/distribution-invalidation.js";
 import { useProvider } from "./helpers/provider.js";
@@ -358,6 +358,18 @@ export interface SsrSiteArgs {
    * resources.
    */
   transform?: {
+    /**
+     * Transform the server function resource.
+     */
+    serverFunction?: Transform<FunctionArgs>;
+    /**
+     * Transform the function used for optimizing images.
+     */
+    imageOptimizationFunction?: Transform<FunctionArgs>;
+    /**
+     * Transform the CDN configuration.
+     */
+    cdn?: Transform<CdnArgs>;
     /**
      * Transform the Bucket resource used for uploading the assets.
      */
@@ -827,7 +839,7 @@ function handler(event) {
     function buildServerOrigin(fnName: string, props: ServerOriginConfig) {
       const fn = new Function(
         `${name}${sanitizeToPascalCase(fnName)}`,
-        {
+        transform(args.transform?.serverFunction, {
           description: `${name} server`,
           runtime: "nodejs20.x",
           timeout: "20 seconds",
@@ -855,7 +867,7 @@ function handler(event) {
           url: true,
           live: false,
           _ignoreCodeChanges: $dev,
-        },
+        }),
         { parent },
       );
       ssrFunctions.push(fn);
@@ -879,7 +891,7 @@ function handler(event) {
     ) {
       const fn = new Function(
         `${name}${sanitizeToPascalCase(fnName)}`,
-        {
+        transform(args.transform?.imageOptimizationFunction, {
           timeout: "25 seconds",
           logging: {
             retention: "3 days",
@@ -895,7 +907,7 @@ function handler(event) {
           live: false,
           _ignoreCodeChanges: $dev,
           _skipMetadata: true,
-        },
+        }),
         { parent },
       );
 
@@ -1035,7 +1047,7 @@ function handler(event) {
     function createDistribution() {
       return new Cdn(
         `${name}Cdn`,
-        {
+        transform(args.transform?.cdn, {
           domain: args.domain,
           wait: !$dev,
           transform: {
@@ -1057,7 +1069,7 @@ function handler(event) {
               customErrorResponses: plan.errorResponses,
             }),
           },
-        },
+        }),
         // create distribution after s3 upload finishes
         { dependsOn: bucketFile, parent },
       );
