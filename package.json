@@ -4,5 +4,9 @@
     "www",
     "pkg/platform",
     "sdk/js"
-  ]
+  ],
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20240320.1",
+    "undici": "^6.10.1"
+  }
 }

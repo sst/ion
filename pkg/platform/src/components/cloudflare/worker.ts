@@ -387,6 +387,10 @@ export class Worker extends Component {
     return this.workersUrl.url.apply((url) => (url ? `https://${url}` : url));
   }
 
+  public get name() {
+    return this.script.name
+  }
+
   /**
    * The underlying [resources](/docs/components/#nodes) this component creates.
    */
