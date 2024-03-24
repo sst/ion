@@ -34,7 +34,7 @@ echo "downloading $filename"
 url="https://github.com/sst/ion/releases/latest/download/$filename"
 mkdir ssttmp
 cd ssttmp
-curl -sL $url | tar xz
+curl -# -L $url | tar xz
 mv sst $INSTALL_DIR
 cd ../
 rm -rf ssttmp
@@ -144,3 +144,8 @@ else
   esac
 fi
 
+# Add the directory containing the sst binary to the PATH in GitHub Actions
+if [ "$GITHUB_ACTIONS" == "true" ]; then
+    echo "$INSTALL_DIR" >> $GITHUB_PATH
+    echo "Ion added to PATH in the runner environment"
+fi
