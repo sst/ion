@@ -5,147 +5,78 @@ APP=sst
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m)
 
-case "$os" in
-linux)
-case "$arch" in
-x86_64) filename="$APP-linux-x86_64.tar.gz" ;;
-arm64) filename="$APP-linux-arm64.tar.gz" ;;
-i386) filename="$APP-linux-i386.tar.gz" ;;
-*) echo "unsupported architecture: $arch"; exit 1 ;;
-esac
-;;
-darwin)
-case "$arch" in
-x86_64) filename="sst-mac-x86_64.tar.gz" ;;
-arm64) filename="sst-mac-arm64.tar.gz" ;;
-*) echo "unsupported architecture: $arch"; exit 1 ;;
-esac
-;;
-*)
-echo "unsupported os: $os"
-exit 1
-;;
-esac
+filename="$APP-$os-$arch.tar.gz"
+
+if [[ "$filename" == *"-linux-"* && "$arch" != "x86_64" && "$arch" != "arm64" && "$arch" != "i386" ]] || \
+[[ "$filename" == *"-darwin-"* && "$arch" != "x86_64" && "$arch" != "arm64" ]] || \
+[[ "$filename" != *"-linux-"* && "$filename" != *"-darwin-"* ]]; then
+    echo "unsupported os or architecture: $os $arch"
+    exit 1
+fi
 
 INSTALL_DIR=$HOME/.sst/bin
 mkdir -p $INSTALL_DIR
 
-echo "downloading $filename"
 url="https://github.com/sst/ion/releases/latest/download/$filename"
-mkdir ssttmp
-cd ssttmp
+
+# Check if sst is already in the PATH
+if command -v sst >/dev/null 2>&1; then
+    installed_version=$(sst version)
+    
+    latest_version=$(curl -s https://api.github.com/repos/sst/ion/releases/latest | grep -oP '(?<="tag_name": ")[^"]+' | sed 's/^v//')
+    
+    if [[ "$installed_version" != "$latest_version" ]]; then
+        read -p "Do you want to download the latest version? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    else
+        echo "Already installed: $installed_version"
+        exit 0
+    fi
+fi
+
+echo "Downloading $filename from $url"
+mkdir -p ssttmp && cd ssttmp
 curl -# -L $url | tar xz
 mv sst $INSTALL_DIR
-cd ../
-rm -rf ssttmp
-echo "sst $($INSTALL_DIR/sst version) has been installed to $INSTALL_DIR"
+cd .. && rm -rf ssttmp
 
-REFRESH_COMMAND=''
-if [[ ":$PATH:" == *":$INSTALL_DIR:"* ]]; then
-  echo "$INSTALL_DIR is already in your PATH"
-else
-  echo "adding $INSTALL_DIR to your PATH"
-  case $(basename "$SHELL") in
-  fish)
-    fish_config=$HOME/.config/fish/config.fish
+# Add the directory to the PATH
+add_to_path() {
+    local config_file=$1
+    local command=$2
+    
+    if [[ -w $config_file ]]; then
+        echo -e "\n# sst" >> "$config_file"
+        echo "$command" >> "$config_file"
+        echo "Added $INSTALL_DIR to PATH in $config_file"
+    else
+        echo "manually add the directory to $config_file (or similar):"
+        echo "  $command"
+    fi
+}
 
-      commands=(
-          "fish_add_path $INSTALL_DIR"
-      )
-
-      if [[ -w $fish_config ]]; then
-          {
-              echo -e '\n# sst'
-              for command in "${commands[@]}"; do
-                  echo "$command"
-              done
-          } >>"$fish_config"
-          exec fish -i
-      else
-          echo "manually add the directory to $fish_config (or similar):"
-
-          for command in "${commands[@]}"; do
-              echo "  $command"
-          done
-      fi
-      ;;
-  zsh)
-      zsh_config=$HOME/.zshrc
-
-      commands=(
-          "export PATH=$INSTALL_DIR:\$PATH"
-      )
-
-      if [[ -w $zsh_config ]]; then
-          {
-              echo -e '\n# sst'
-              for command in "${commands[@]}"; do
-                  echo "$command"
-              done
-          } >>"$zsh_config"
-          exec zsh -i
-      else
-          echo "manually add the directory to $zsh_config (or similar):"
-
-          for command in "${commands[@]}"; do
-              echo "  $command"
-          done
-      fi
-      ;;
-  bash)
-      bash_configs=(
-          "$HOME/.bashrc"
-          "$HOME/.bash_profile"
-      )
-      commands=(
-          "export PATH=$INSTALL_DIR:\$PATH"
-      )
-      if [[ ${XDG_CONFIG_HOME:-} ]]; then
-          bash_configs+=(
-              "$XDG_CONFIG_HOME/.bash_profile"
-              "$XDG_CONFIG_HOME/.bashrc"
-              "$XDG_CONFIG_HOME/bash_profile"
-              "$XDG_CONFIG_HOME/bashrc"
-          )
-      fi
-
-      set_manually=true
-      for bash_config in "${bash_configs[@]}"; do
-          if [[ -w $bash_config ]]; then
-              {
-                  echo -e '\n# bun'
-
-                  for command in "${commands[@]}"; do
-                      echo "$command"
-                  done
-              } >>"$bash_config"
-
-              echo "added \"$INSTALL_DIR\" to \$PATH in \"$bash_config\""
-
-              source $bash_config
-              set_manually=false
-              break
-          fi
-      done
-
-      if [[ $set_manually = true ]]; then
-          echo "manually add the directory to $bash_configs (or similar):"
-
-          for command in "${commands[@]}"; do
-              echo "  $command"
-          done
-      fi
-      ;;
-  *)
-      echo 'manually add the directory to ~/.bashrc (or similar):'
-      info_bold "  export $install_env=$quoted_install_dir"
-      info_bold "  export PATH=\"$bin_env:\$PATH\""
-      ;;
-  esac
+if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    case $(basename "$SHELL") in
+        fish)
+            add_to_path "$HOME/.config/fish/config.fish" "fish_add_path $INSTALL_DIR"
+        ;;
+        zsh)
+            add_to_path "$HOME/.zshrc" "export PATH=$INSTALL_DIR:\$PATH"
+        ;;
+        bash)
+            add_to_path "$HOME/.bashrc" "export PATH=$INSTALL_DIR:\$PATH"
+        ;;
+        *)
+            echo 'manually add the directory to ~/.bashrc (or similar):'
+            echo "  export PATH=$INSTALL_DIR:\$PATH"
+        ;;
+    esac
 fi
 
 # Add the directory containing the sst binary to the PATH in GitHub Actions
 if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
     echo "$INSTALL_DIR" >> $GITHUB_PATH
-    echo "Ion added to PATH in the runner environment"
-fi
+f
