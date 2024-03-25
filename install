@@ -70,12 +70,11 @@ check_version() {
 }
 
 download_and_install() {
-    print_message info "Downloading latest ${ORANGE}SST ${GREEN}version: ${YELLOW}$latest_version ${GREEN}..."
+    print_message info "Downloading latest ${ORANGE}SST ❍ ion ${GREEN}version: ${YELLOW}$latest_version ${GREEN}..."
     mkdir -p ssttmp && cd ssttmp
     curl -# -L $url | tar xz
     mv sst $INSTALL_DIR
     cd .. && rm -rf ssttmp
-    print_message info "Added ${ORANGE}SST ${GREEN}to $INSTALL_DIR"
 }
 
 check_version
@@ -88,7 +87,7 @@ add_to_path() {
     if [[ -w $config_file ]]; then
         echo -e "\n# sst" >> "$config_file"
         echo "$command" >> "$config_file"
-        print_message info "Added $INSTALL_DIR to \$PATH in $config_file"
+        print_message info "Successfully added ${ORANGE}SST ❍ ion ${GREEN}to \$PATH in $config_file"
     else
         print_message warning "Manually add the directory to $config_file (or similar):"
         print_message info "  $command"
