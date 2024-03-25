@@ -2,48 +2,66 @@
 set -euo pipefail
 APP=sst
 
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+ORANGE='\033[38;2;255;140;0m'
+NC='\033[0m' # No Color
+
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m)
 
 filename="$APP-$os-$arch.tar.gz"
 
-if [[ "$filename" == *"-linux-"* && "$arch" != "x86_64" && "$arch" != "arm64" && "$arch" != "i386" ]] || \
-[[ "$filename" == *"-darwin-"* && "$arch" != "x86_64" && "$arch" != "arm64" ]] || \
-[[ "$filename" != *"-linux-"* && "$filename" != *"-darwin-"* ]]; then
-    echo "unsupported os or architecture: $os $arch"
-    exit 1
-fi
+case "$filename" in
+    *"-linux-"*)
+        [[ "$arch" == "x86_64" || "$arch" == "arm64" || "$arch" == "i386" ]] || exit 1
+    ;;
+    *"-darwin-"*)
+        [[ "$arch" == "x86_64" || "$arch" == "arm64" ]] || exit 1
+    ;;
+    *)
+        echo "${RED}Unsupported OS/Arch: $os/$arch${NC}"
+        exit 1
+    ;;
+esac
 
 INSTALL_DIR=$HOME/.sst/bin
 mkdir -p $INSTALL_DIR
 
 url="https://github.com/sst/ion/releases/latest/download/$filename"
 
-# Check if sst is already in the PATH
-if command -v sst >/dev/null 2>&1; then
-    installed_version=$(sst version)
-    
-    latest_version=$(curl -s https://api.github.com/repos/sst/ion/releases/latest | grep -oP '(?<="tag_name": ")[^"]+' | sed 's/^v//')
-    
-    if [[ "$installed_version" != "$latest_version" ]]; then
-        read -p "Do you want to download the latest version? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
+latest_version=$(curl -s https://api.github.com/repos/sst/ion/releases/latest | grep -oP '(?<="tag_name": ")[^"]+' | sed 's/^v//')
+
+check_version() {
+    if command -v sst >/dev/null 2>&1; then
+        installed_version=$(sst version)
+        
+        if [[ "$installed_version" != "$latest_version" ]]; then
+            read -p "${GREEN}Do you want to download the latest version? (y/n)${NC} " -n 1 -r
+            echo
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                exit 1
+            fi
+        else
+            echo -e "${GREEN}Already on latest version: ${YELLOW}$installed_version${NC}"
+            exit 0
         fi
-    else
-        echo "Already installed: $installed_version"
-        exit 0
     fi
-fi
+}
 
-echo "Downloading $filename from $url"
-mkdir -p ssttmp && cd ssttmp
-curl -# -L $url | tar xz
-mv sst $INSTALL_DIR
-cd .. && rm -rf ssttmp
+download_and_install() {
+    echo -e "${GREEN}Downloading $filename version: ${YELLOW}$latest_version${NC} ${GREEN}...${NC}"
+    mkdir -p ssttmp && cd ssttmp
+    curl -# -L $url | tar xz
+    mv sst $INSTALL_DIR
+    cd .. && rm -rf ssttmp
+    echo -e "${ORANGE}Successfully added SST to $INSTALL_DIR${NC}"
+}
 
-# Add the directory to the PATH
+check_version
+download_and_install
+
 add_to_path() {
     local config_file=$1
     local command=$2
@@ -53,8 +71,8 @@ add_to_path() {
         echo "$command" >> "$config_file"
         echo "Added $INSTALL_DIR to PATH in $config_file"
     else
-        echo "manually add the directory to $config_file (or similar):"
-        echo "  $command"
+        echo -e "${YELLOW}Manually add the directory to $config_file (or similar):${NC}"
+        echo -e "${YELLOW}  $command ${NC}"
     fi
 }
 
@@ -70,13 +88,13 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
             add_to_path "$HOME/.bashrc" "export PATH=$INSTALL_DIR:\$PATH"
         ;;
         *)
-            echo 'manually add the directory to ~/.bashrc (or similar):'
-            echo "  export PATH=$INSTALL_DIR:\$PATH"
+            echo -e "${ORANGE}Manually add the directory to ~/.bashrc (or similar):${NC}"
+            echo -e "${ORANGE}  export PATH=$INSTALL_DIR:\$PATH${NC}"
         ;;
     esac
 fi
 
-# Add the directory containing the sst binary to the PATH in GitHub Actions
 if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
     echo "$INSTALL_DIR" >> $GITHUB_PATH
+    echo "${ORANGE}Added $INSTALL_DIR to PATH in GitHub Actions${NC}"
 fi
