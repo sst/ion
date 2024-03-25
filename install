@@ -5,7 +5,6 @@ APP=sst
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-ORANGE='\033[38;2;255;140;0m'
 NC='\033[0m' # No Color
 
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -32,6 +31,10 @@ mkdir -p "$INSTALL_DIR"
 url="https://github.com/sst/ion/releases/latest/download/$filename"
 
 latest_version=$(curl -s https://api.github.com/repos/sst/ion/releases/latest | grep -oP '(?<="tag_name": ")[^"]+' | sed 's/^v//')
+if [[ $? -ne 0 ]]; then
+    echo "${RED}Failed to fetch latest version${NC}"
+    exit 1
+fi
 
 print_message() {
     local level=$1
@@ -46,11 +49,6 @@ print_message() {
     
     echo -e "${color}${message}${NC}"
 }
-
-if [[ $? -ne 0 ]]; then
-    print_message error "Failed to fetch latest version"
-    exit 1
-fi
 
 check_version() {
     if command -v sst >/dev/null 2>&1; then
