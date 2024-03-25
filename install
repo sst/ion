@@ -79,4 +79,4 @@ fi
 # Add the directory containing the sst binary to the PATH in GitHub Actions
 if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
     echo "$INSTALL_DIR" >> $GITHUB_PATH
-f
+fi
