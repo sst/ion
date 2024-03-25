@@ -145,7 +145,7 @@ else
 fi
 
 # Add the directory containing the sst binary to the PATH in GitHub Actions
-if [ "$GITHUB_ACTIONS" == "true" ]; then
+if [ -n "${GITHUB_ACTIONS-}" ] && [ "${GITHUB_ACTIONS}" == "true" ]; then
     echo "$INSTALL_DIR" >> $GITHUB_PATH
     echo "Ion added to PATH in the runner environment"
 fi
