@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	flag "github.com/spf13/pflag"
 	"io"
 	"log/slog"
 	"os"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	flag "github.com/spf13/pflag"
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
@@ -28,7 +29,7 @@ import (
 	"github.com/sst/ion/pkg/telemetry"
 )
 
-var version = "dev"
+var version string
 
 var logFile = (func() *os.File {
 	logFile, err := os.CreateTemp("", "sst-*.log")
@@ -39,6 +40,7 @@ var logFile = (func() *os.File {
 })()
 
 func main() {
+	version = checkLocalVersion()
 	telemetry.SetVersion(version)
 	defer telemetry.Close()
 	telemetry.Track("cli.start", map[string]interface{}{
@@ -937,7 +939,8 @@ var Root = Command{
 
 				color.New(color.FgGreen, color.Bold).Print(ui.IconCheck)
 				if newVersion == version {
-					color.New(color.FgWhite).Printf("  Already on latest %s\n", version)
+					color.New(color.FgWhite).Printf("  Already on latest version: ")
+					color.New(color.FgCyan).Println(version)
 				} else {
 					color.New(color.FgWhite).Printf("  Upgraded %s ➜ ", version)
 					color.New(color.FgCyan, color.Bold).Println(newVersion)
@@ -1501,4 +1504,18 @@ func guessStage() string {
 	}
 
 	return stage
+}
+
+func checkLocalVersion() string {
+	cmd := exec.Command("sst", "version")
+	output, err := cmd.Output()
+
+	if err != nil {
+		slog.Error("Failed to execute command: sst version", "error", err)
+		return ""
+	}
+
+	version := strings.TrimSpace(string(output))
+	slog.Info("Local sst version: ", "version", version)
+	return version
 }
