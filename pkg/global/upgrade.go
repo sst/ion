@@ -54,13 +54,7 @@ func Upgrade(existingVersion string, nextVersion string) (string, error) {
 		}
 		nextVersion = releaseInfo.TagName
 	}
-	if !strings.HasPrefix(nextVersion, "v") {
-		nextVersion = "v" + nextVersion
-	}
-	if !strings.HasPrefix(existingVersion, "v") {
-		existingVersion = "v" + existingVersion
-	}
-	if nextVersion == existingVersion {
+	if strings.TrimLeft(nextVersion, "v") == strings.TrimLeft(existingVersion, "v") {
 		return nextVersion, nil
 	}
 	url := "https://github.com/sst/ion/releases/download/" + nextVersion + "/sst-" + filename
