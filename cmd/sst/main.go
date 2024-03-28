@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	flag "github.com/spf13/pflag"
 	"io"
 	"log/slog"
 	"os"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	flag "github.com/spf13/pflag"
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
@@ -1474,6 +1475,10 @@ func initProject(cli *Cli) (*project.Project, error) {
 		if err != nil {
 			return nil, util.NewReadableError(err, "Could not install dependencies")
 		}
+	}
+
+	if err := p.LoadProviders(); err != nil {
+		return nil, util.NewReadableError(err, err.Error())
 	}
 
 	if err := p.LoadHome(); err != nil {

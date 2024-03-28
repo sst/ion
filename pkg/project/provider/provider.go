@@ -15,10 +15,34 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-type Home interface {
-	Init(app, stage string, provider map[string]interface{}) error
+type Provider interface {
+	Init(key string, args map[string]interface{}) error
+	Key() string
+	AsHome(app, stage string) (Home, error)
 	Env() (map[string]string, error)
+}
 
+func InitProvider(key string, args map[string]interface{}) (Provider, error) {
+	var provider Provider
+	switch key {
+	case "aws":
+		provider = &AwsProvider{}
+	case "cloudflare":
+		provider = &CloudflareProvider{}
+	default:
+		provider = &GenericProvider{}
+	}
+
+	err := provider.Init(key, args)
+	if err != nil {
+		return nil, err
+	}
+
+	return provider, nil
+}
+
+type Home interface {
+	Provider
 	getData(key, app, stage string) (io.Reader, error)
 	putData(key, app, stage string, data io.Reader) error
 	removeData(key, app, stage string) error

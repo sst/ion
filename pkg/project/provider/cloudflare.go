@@ -25,19 +25,19 @@ type bootstrap struct {
 	State string `json:"state"`
 }
 
-func (c *CloudflareProvider) Init(app, stage string, provider map[string]interface{}) error {
+func (c *CloudflareProvider) Init(key string, args map[string]interface{}) (err error) {
 	accountID := os.Getenv("CLOUDFLARE_DEFAULT_ACCOUNT_ID")
 	apiToken := os.Getenv("CLOUDFLARE_API_TOKEN")
 	apiKey := os.Getenv("CLOUDFLARE_API_KEY")
 	email := os.Getenv("CLOUDFLARE_EMAIL")
-	if provider["apiToken"] != nil {
-		apiToken = provider["apiToken"].(string)
+	if args["apiToken"] != nil {
+		apiToken = args["apiToken"].(string)
 	}
-	if provider["apiKey"] != nil {
-		apiKey = provider["apiKey"].(string)
+	if args["apiKey"] != nil {
+		apiKey = args["apiKey"].(string)
 	}
-	if provider["email"] != nil {
-		email = provider["email"].(string)
+	if args["email"] != nil {
+		email = args["email"].(string)
 	}
 	var api *cloudflare.API
 	c.env = map[string]string{}
@@ -64,13 +64,20 @@ func (c *CloudflareProvider) Init(app, stage string, provider map[string]interfa
 	c.env["CLOUDFLARE_DEFAULT_ACCOUNT_ID"] = accountID
 	c.identifier = cloudflare.AccountIdentifier(accountID)
 	slog.Info("cloudflare account selected", "account", accountID)
+	return nil
+}
 
+func (p *CloudflareProvider) Key() string {
+	return "cloudflare"
+}
+
+func (c *CloudflareProvider) AsHome(app, stage string) (Home, error) {
 	ctx := context.Background()
-	buckets, err := api.ListR2Buckets(ctx, c.identifier, cloudflare.ListR2BucketsParams{
+	buckets, err := c.client.ListR2Buckets(ctx, c.identifier, cloudflare.ListR2BucketsParams{
 		Name: "sst-state",
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, bucket := range buckets {
 		if bucket.Name == "sst-state" {
@@ -87,14 +94,14 @@ func (c *CloudflareProvider) Init(app, stage string, provider map[string]interfa
 			Name: "sst-state",
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		c.bootstrap = &bootstrap{
 			State: "sst-state",
 		}
 	}
 
-	return nil
+	return c, nil
 }
 
 //go:linkname makeRequestContext github.com/cloudflare/cloudflare-go.(*API).makeRequestContext

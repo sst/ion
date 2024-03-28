@@ -32,6 +32,24 @@ type AwsProvider struct {
 	credentials sync.Once
 }
 
+func (p *AwsProvider) Init(key string, args map[string]interface{}) (err error) {
+	p.args = args
+
+	cfg, err := AwsResolveConfig(args)
+	if err != nil {
+		return err
+	}
+	if cfg.Region == "" {
+		cfg.Region = "us-east-1"
+	}
+	p.config = cfg
+	return nil
+}
+
+func (p *AwsProvider) Key() string {
+	return "aws"
+}
+
 func (a *AwsProvider) Env() (map[string]string, error) {
 	creds, err := a.config.Credentials.Retrieve(context.Background())
 	if err != nil {
@@ -148,24 +166,13 @@ func (a *AwsProvider) Cancel(app string, stage string) error {
 
 const BOOTSTRAP_VERSION = 1
 
-func (a *AwsProvider) Init(app string, stage string, args map[string]interface{}) (err error) {
-	a.args = args
-
-	cfg, err := AwsResolveConfig(args)
-	if err != nil {
-		return err
-	}
-	if cfg.Region == "" {
-		cfg.Region = "us-east-1"
-	}
-	a.config = cfg
-
+func (a *AwsProvider) AsHome(app, stage string) (Home, error) {
 	bootstrap, err := a.resolveBuckets()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	a.bootstrap = bootstrap
-	defaultTags, ok := args["defaultTags"].(map[string]interface{})
+	defaultTags, ok := a.args["defaultTags"].(map[string]interface{})
 	if !ok {
 		defaultTags = map[string]interface{}{}
 	}
@@ -176,8 +183,11 @@ func (a *AwsProvider) Init(app string, stage string, args map[string]interface{}
 	}
 	tags["sst:app"] = app
 	tags["sst:stage"] = stage
-	args["defaultTags"] = defaultTags
-	return err
+	a.args["defaultTags"] = defaultTags
+	if err != nil {
+		return nil, err
+	}
+	return a, nil
 }
 
 type awsBootstrapData struct {

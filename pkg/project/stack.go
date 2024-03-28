@@ -134,10 +134,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 		return fmt.Errorf("failed to list secrets: %w", err)
 	}
 
-	env, err := s.project.home.Env()
-	if err != nil {
-		return err
-	}
+	env := s.project.Env()
 	for _, value := range os.Environ() {
 		pair := strings.SplitN(value, "=", 2)
 		if len(pair) == 2 {
@@ -482,10 +479,7 @@ func (s *stack) Import(ctx context.Context, input *ImportOptions) error {
 	if err != nil {
 		return err
 	}
-	env, err := s.project.home.Env()
-	if err != nil {
-		return err
-	}
+	env := s.project.Env()
 	env["PULUMI_CONFIG_PASSPHRASE"] = passphrase
 
 	ws, err := auto.NewLocalWorkspace(ctx,

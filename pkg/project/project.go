@@ -32,12 +32,12 @@ type App struct {
 }
 
 type Project struct {
-	version string
-	root    string
-	config  string
-	app     *App
-	home    provider.Home
-	env     map[string]string
+	version   string
+	root      string
+	config    string
+	app       *App
+	home      provider.Home
+	providers map[string]provider.Provider
 
 	Stack *stack
 }
@@ -199,29 +199,51 @@ console.log("~j" + JSON.stringify(mod.app({
 	return proj, nil
 }
 
+func (proj *Project) LoadProviders() error {
+	proj.providers = map[string]provider.Provider{}
+	for name, args := range proj.app.Providers {
+		if argsMap, ok := args.(map[string]interface{}); ok {
+			provider, err := provider.InitProvider(name, argsMap)
+			if err != nil {
+				return fmt.Errorf("Error initializing %s:\n   %w", name, err)
+			}
+			proj.providers[name] = provider
+		}
+	}
+	return nil
+}
+
 func (proj *Project) LoadHome() error {
-	var home provider.Home
-	args := proj.app.Providers[proj.app.Home]
+	homeProvider := proj.providers[proj.app.Home]
 
-	if proj.app.Home == "aws" {
-		home = &provider.AwsProvider{}
-	}
-
-	if proj.app.Home == "cloudflare" {
-		home = &provider.CloudflareProvider{}
-	}
-
-	if home == nil {
+	if homeProvider == nil {
 		return fmt.Errorf("Home provider %s is invalid", proj.app.Home)
 	}
 
-	err := home.Init(proj.app.Name, proj.app.Stage, args.(map[string]interface{}))
+	home, err := homeProvider.AsHome(proj.app.Name, proj.app.Stage)
 	if err != nil {
 		return fmt.Errorf("Error initializing %s:\n   %w", proj.app.Home, err)
 	}
 	proj.home = home
 
 	return nil
+}
+
+func (proj *Project) Env() map[string]string {
+	env := map[string]string{}
+
+	// badly merge all provider environments
+	for _, provider := range proj.providers {
+		providerEnv, err := provider.Env()
+		if err != nil {
+			slog.Error("Error getting provider environment", "error", err)
+			continue
+		}
+		for key, value := range providerEnv {
+			env[key] = value
+		}
+	}
+	return env
 }
 
 func (p *Project) getPath(path ...string) string {
