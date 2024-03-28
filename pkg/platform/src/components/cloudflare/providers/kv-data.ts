@@ -2,7 +2,7 @@ import fs from "fs";
 import { CustomResourceOptions, Input, dynamic } from "@pulumi/pulumi";
 import { cfFetch } from "../helpers/fetch.js";
 
-export interface KvDataEntry {
+interface KvDataEntry {
   source: string;
   key: string;
   hash: string;
@@ -90,6 +90,6 @@ class Provider implements dynamic.ResourceProvider {
 
 export class KvData extends dynamic.Resource {
   constructor(name: string, args: KvDataInputs, opts?: CustomResourceOptions) {
-    super(new Provider(), `${name}.sst.aws.KvPairs`, args, opts);
+    super(new Provider(), `${name}.sst.cloudflare.KvPairs`, args, opts);
   }
 }

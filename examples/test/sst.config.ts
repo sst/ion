@@ -8,5 +8,21 @@ export default $config({
       home: "aws",
     };
   },
-  async run() {},
+  async run() {
+    const fn = new sst.aws.Function("MyFunction", {
+      handler: "./src/streaming.handler",
+      streaming: true,
+      url: true,
+      timeout: "15 minutes",
+      copyFiles: [
+        {
+          from: "./package.json",
+        },
+      ],
+    });
+
+    return {
+      url: fn.url,
+    };
+  },
 });

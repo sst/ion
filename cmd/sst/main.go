@@ -170,6 +170,41 @@ var Root = Command{
 			"The CLI currently supports macOS, Linux, and WSL. Windows support is coming soon.",
 			":::",
 			"",
+			"#### With a package manager",
+			"",
+			"You can also use a package manager to install the CLI.",
+			"",
+			"- **macOS**",
+			"",
+			"  The CLI is available via a Homebrew Tap, and as downloadable binary in the [releases](https://github.com/sst/ion/releases/latest).",
+			"",
+			"  ```bash",
+			"  brew install sst/tap/sst",
+			"",
+			"  # Upgrade",
+			"  brew upgrade sst",
+			"  ```",
+			"",
+			"  You might have to run `brew upgrade sst`, before the update.",
+			"",
+			"- **Linux**",
+			"",
+			"  The CLI is available as downloadable binaries in the [releases](https://github.com/sst/ion/releases/latest). Download the `.deb` or `.rpm` and install with `sudo dpkg -i` and `sudo rpm -i`.",
+			"",
+			"  For Arch Linux, it's available in the [aur](https://aur.archlinux.org/packages/sst-bin).",
+			"",
+			"- **Windows**",
+			"",
+			"  The CLI is available via [Scoop](https://scoop.sh/), and as a downloadable binary in the [releases](https://github.com/sst/ion/releases/latest).",
+			"",
+			"  ```bash",
+			"  scoop bucket add sst https://github.com/sst/scoop-bucket.git",
+			"  scoop install sst",
+			"",
+			"  # Upgrade",
+			"  scoop update sst",
+			"  ```",
+			"",
 			"Once installed you can run the commands using.",
 			"",
 			"```bash",
@@ -200,7 +235,9 @@ var Root = Command{
 					"",
 					"1. Uses the username on the local machine.",
 					"   - If the username is `root`, `admin`, `prod`, `dev`, `production`, then it will prompt for a stage name.",
-					"2. Stores this in the `.sst/stage` file and reads from it in the future.",
+					"2. Store this in the `.sst/stage` file and reads from it in the future.",
+					"",
+					"This stored stage is called your personal stage.",
 					"",
 					":::tip",
 					"The stage that is stored in the `.sst/stage` file is called your personal stage.",
@@ -417,7 +454,10 @@ var Root = Command{
 			},
 			Run: func(cli *Cli) error {
 				pkg := cli.Positional(0)
-				fmt.Println("Adding provider", pkg+"...")
+				spin := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+				spin.Suffix = "  Adding provider..."
+				spin.Start()
+				defer spin.Stop()
 				cfgPath, err := project.Discover()
 				if err != nil {
 					return err
@@ -445,6 +485,7 @@ var Root = Command{
 				if err != nil {
 					return err
 				}
+				spin.Suffix = "  Downloading provider..."
 				p, err = project.New(&project.ProjectConfig{
 					Version: version,
 					Config:  cfgPath,
@@ -457,6 +498,8 @@ var Root = Command{
 				if err != nil {
 					return err
 				}
+				spin.Stop()
+				ui.Success(fmt.Sprintf("Added provider \"%s\"", pkg))
 				return nil
 			},
 		},
@@ -531,7 +574,11 @@ var Root = Command{
 						Long: strings.Join([]string{
 							"Set the value of the secret.",
 							"",
-							"The secrets are encrypted and stored in an S3 Bucket in your AWS account.",
+							"The secrets are encrypted and stored in an S3 Bucket in your AWS account. They are also stored in the package of the functions using the secret.",
+							"",
+							":::tip",
+							"If you are not running `sst dev`, you'll need to `sst deploy` to apply the secret.",
+							":::",
 							"",
 							"For example, set the `sst.Secret` called `StripeSecret` to `123456789`.",
 							"",
@@ -596,7 +643,7 @@ var Root = Command{
 						if err != nil {
 							return util.NewReadableError(err, "Could not set secret")
 						}
-						ui.Success(fmt.Sprintf("Set \"%s\" for stage \"%s\"", key, p.App().Stage))
+						ui.Success(fmt.Sprintf("Set \"%s\" for stage \"%s\". Run \"sst deploy\" to update.", key, p.App().Stage))
 						return nil
 					},
 				},
@@ -693,23 +740,7 @@ var Root = Command{
 							},
 						},
 					},
-					Run: func(cli *Cli) error {
-						p, err := initProject(cli)
-						if err != nil {
-							return err
-						}
-						defer p.Cleanup()
-
-						backend := p.Backend()
-						secrets, err := provider.GetSecrets(backend, p.App().Name, p.App().Stage)
-						if err != nil {
-							return util.NewReadableError(err, "Could not get secrets")
-						}
-						for key, value := range secrets {
-							fmt.Println(key, "=", value)
-						}
-						return nil
-					},
+					Run: CmdSecretList,
 				},
 			},
 		},
@@ -881,7 +912,7 @@ var Root = Command{
 					"",
 					"However, if something unexpectedly kills the `sst deploy` process, or if you manage to run `sst deploy` concurrently, the lock might not be released.",
 					"",
-					"This should not usually happen, but it can prevent you from deploying. You can run `sst cancel` to release the lock.",
+					"This should not usually happen, but it can prevent you from deploying. You can run `sst unlock` to release the lock.",
 				}, "\n"),
 			},
 			Run: func(cli *Cli) error {
@@ -935,6 +966,7 @@ var Root = Command{
 			},
 			Run: func(cli *Cli) error {
 				newVersion, err := global.Upgrade(
+					version,
 					cli.Positional(0),
 				)
 				if err != nil {
@@ -1070,7 +1102,7 @@ var Root = Command{
 				err = s.Start(cli.Context)
 				if err != nil {
 					if err == server.ErrServerAlreadyRunning {
-						return util.NewReadableError(err, "Server already running")
+						return util.NewReadableError(err, "Another instance of SST is already running")
 					}
 					return err
 				}
@@ -1090,8 +1122,15 @@ var Root = Command{
 			},
 		},
 		{
-			Name:   "refresh",
-			Hidden: true,
+			Name: "refresh",
+			Description: Description{
+				Short: "Refresh the local app state",
+				Long: strings.Join([]string{
+					"Compares your local state with the state of the resources in the cloud provider. Any changes that are found are adopted into your local state.",
+					"",
+					"This is useful for cases where you want to ensure that your local state is in sync with your cloud provider.",
+				}, "\n"),
+			},
 			Run: func(cli *Cli) error {
 				p, err := initProject(cli)
 				if err != nil {
@@ -1468,7 +1507,7 @@ func getStage(cli *Cli, cfgPath string) (string, error) {
 			stage = guessStage()
 			if stage == "" {
 				for {
-					fmt.Print("Enter a stage name for your personal stage: ")
+					fmt.Print("Enter a name for your personal stage: ")
 					_, err := fmt.Scanln(&stage)
 					if err != nil {
 						continue

@@ -212,6 +212,26 @@ Enable or disable if the worker code is minified when bundled.
 }
 ```
 </Segment>
+### domain?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+Set a custom domain for your Worker. Supports domains hosted on Cloudflare.
+
+:::tip
+You can migrate an externally hosted domain to Cloudflare by
+[following this guide](https://developers.cloudflare.com/dns/zone-setups/full-setup/setup/).
+:::
+
+```js
+{
+  domain: "domain.com"
+}
+```
+</Segment>
 ### environment?
 <Segment>
 <Section type="parameters">
@@ -238,20 +258,13 @@ They can be accessed in your function through `env.<key>`.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-Path to the handler for the worker with the format `{file}.{method}`.
-
-:::note
-You don't need to specify the file extension.
-:::
+Path to the handler file for the worker.
 
 The handler path is relative to the root your repo or the `sst.config.ts`.
 
-Here there is a file called `worker.js` (or `.ts`) in the `packages/functions/src/`
-directory with an exported method called `handler`.
-
 ```js
 {
-  handler: "packages/functions/src/worker.handler"
+  handler: "packages/functions/src/worker.ts"
 }
 ```
 </Segment>

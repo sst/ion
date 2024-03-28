@@ -5,6 +5,10 @@ description: Create and deploy a Next.js app to AWS with SST and OpenNext.
 
 We are going to create a Next.js app, add an S3 Bucket for file uploads, and deploy it to AWS using SST.
 
+:::tip[View source]
+You can [view the source](https://github.com/sst/ion/tree/dev/examples/start-nextjs) of this example in our repo.
+:::
+
 Before you get started:
 
 1. [Configure your AWS credentials](https://docs.sst.dev/advanced/iam-credentials#loading-from-a-file)
@@ -183,7 +187,7 @@ And install the npm packages.
 npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
 ```
 
-Head over to `http://localhost:3000` and try **uploading an image**, you should see it upload and then download the image.
+Head over to the local Next.js app in your browser, `http://localhost:3000` and try **uploading an image**. You should see it upload and then download the image.
 
 ---
 

@@ -5,6 +5,10 @@ description: Create and deploy a Remix app to AWS with SST.
 
 We are going to create a Remix app, add an S3 Bucket for file uploads, and deploy it to AWS using SST.
 
+:::tip[View source]
+You can [view the source](https://github.com/sst/ion/tree/dev/examples/start-remix) of this example in our repo.
+:::
+
 Before you get started:
 
 1. [Configure your AWS credentials](https://docs.sst.dev/advanced/iam-credentials#loading-from-a-file)
@@ -39,7 +43,7 @@ npm run dev
 ```
 
 :::note
-You are starting `remix dev` wrapped in `sst dev remix dev`.
+You are starting `remix vite:dev` wrapped in `sst dev remix vite:dev`.
 :::
 
 ---
@@ -140,7 +144,7 @@ And install the npm packages.
 npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
 ```
 
-Head over to `http://localhost:3000` and try **uploading an image**, you should see it upload and then download the image.
+Head over to the local Remix app in your browser, `http://localhost:5173` and try **uploading an image**. You should see it upload and then download the image.
 
 ---
 
@@ -160,8 +164,8 @@ Congrats! Your site should now be live!
 
 ## Connect the console
 
-As a next step, you can view your app and its logs in the [SST Console](/docs/console/) — [**console.sst.dev**](https://console.sst.dev)
+As a next step, you can manage your app and view issues in the [SST Console](/docs/console/).
 
-![Remix app in SST Console](../../../../assets/docs/remix-app-in-the-sst-console.png)
+![Issues in Remix app in SST Console](../../../../assets/docs/issues-in-remix-app-in-the-sst-console.png)
 
 You can [create a free account](https://console.sst.dev) and connect it to your AWS account.

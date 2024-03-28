@@ -5,48 +5,29 @@ import {
   Output,
   all,
   jsonStringify,
+  interpolate,
 } from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import * as cf from "@pulumi/cloudflare";
 import type { Loader, BuildOptions } from "esbuild";
 import { build } from "../../runtime/cloudflare.js";
-import { Component, Prettify, Transform, transform } from "../component";
-import { WorkersUrl } from "./providers/workers-url.js";
+import { Component, Transform, transform } from "../component";
+import { WorkerUrl } from "./providers/worker-url.js";
 import { Link } from "../link.js";
 import type { Input } from "../input.js";
-
-/**
- * @internal
- */
-export interface WorkerDomainArgs {
-  /**
-   * The domain to use for the worker.
-   */
-  hostname: Input<string>;
-  /**
-   * The zone id for the domain.
-   */
-  zoneId: Input<string>;
-}
+import { ZoneLookup } from "./providers/zone-lookup.js";
 
 export interface WorkerArgs {
   /**
-   * Path to the handler for the worker with the format `{file}.{method}`.
-   *
-   * :::note
-   * You don't need to specify the file extension.
-   * :::
+   * Path to the handler file for the worker.
    *
    * The handler path is relative to the root your repo or the `sst.config.ts`.
    *
    * @example
    *
-   * Here there is a file called `worker.js` (or `.ts`) in the `packages/functions/src/`
-   * directory with an exported method called `handler`.
-   *
    * ```js
    * {
-   *   handler: "packages/functions/src/worker.handler"
+   *   handler: "packages/functions/src/worker.ts"
    * }
    * ```
    */
@@ -57,9 +38,22 @@ export interface WorkerArgs {
    */
   url?: Input<boolean>;
   /**
-   * @internal
+   * Set a custom domain for your Worker. Supports domains hosted on Cloudflare.
+   *
+   * :::tip
+   * You can migrate an externally hosted domain to Cloudflare by
+   * [following this guide](https://developers.cloudflare.com/dns/zone-setups/full-setup/setup/).
+   * :::
+   *
+   * @example
+   *
+   * ```js
+   * {
+   *   domain: "domain.com"
+   * }
+   * ```
    */
-  domain?: Input<Prettify<WorkerDomainArgs>>;
+  domain?: Input<string>;
   /**
    * Configure how your function is bundled.
    *
@@ -164,6 +158,15 @@ export interface WorkerArgs {
      */
     worker?: Transform<cf.WorkerScriptArgs>;
   };
+  /**
+   * @internal
+   */
+  _ignoreCodeChanges?: boolean;
+  /**
+   * @internal
+   * Placehodler for future feature.
+   */
+  live?: boolean;
 }
 
 /**
@@ -228,7 +231,8 @@ export interface WorkerArgs {
  */
 export class Worker extends Component {
   private script: Output<cf.WorkerScript>;
-  private workersUrl: WorkersUrl;
+  private workerUrl: WorkerUrl;
+  private workerDomain?: cf.WorkerDomain;
 
   constructor(name: string, args: WorkerArgs, opts?: ComponentResourceOptions) {
     super("sst:cloudflare:Worker", name, args, opts);
@@ -241,11 +245,12 @@ export class Worker extends Component {
     const iamCredentials = createAwsCredentials();
     const handler = buildHandler();
     const script = createScript();
-    const workersUrl = createWorkersUrl();
-    createWorkersDomain();
+    const workerUrl = createWorkersUrl();
+    const workerDomain = createWorkersDomain();
 
     this.script = script;
-    this.workersUrl = workersUrl;
+    this.workerUrl = workerUrl;
+    this.workerDomain = workerDomain;
 
     function normalizeUrl() {
       return output(args.url).apply((v) => v ?? false);
@@ -353,7 +358,7 @@ export class Worker extends Component {
     }
 
     function createWorkersUrl() {
-      return new WorkersUrl(
+      return new WorkerUrl(
         `${name}Url`,
         {
           accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
@@ -367,13 +372,22 @@ export class Worker extends Component {
     function createWorkersDomain() {
       if (!args.domain) return;
 
+      const zone = new ZoneLookup(
+        `${name}ZoneLookup`,
+        {
+          accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+          domain: args.domain,
+        },
+        { parent },
+      );
+
       return new cf.WorkerDomain(
         `${name}Domain`,
         {
           accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
           service: script.name,
-          hostname: output(args.domain).apply((domain) => domain.hostname),
-          zoneId: output(args.domain).apply((domain) => domain.zoneId),
+          hostname: args.domain,
+          zoneId: zone.id,
         },
         { parent },
       );
@@ -384,7 +398,9 @@ export class Worker extends Component {
    * The Worker URL if `url` is enabled.
    */
   public get url() {
-    return this.workersUrl.url.apply((url) => (url ? `https://${url}` : url));
+    return this.workerDomain
+      ? interpolate`https://${this.workerDomain.hostname}`
+      : this.workerUrl.url.apply((url) => (url ? `https://${url}` : url));
   }
 
   /**

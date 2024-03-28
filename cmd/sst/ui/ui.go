@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -65,7 +66,7 @@ func (u *UI) Reset() {
 
 func (u *UI) Trigger(evt *project.StackEvent) {
 	if evt.ConcurrentUpdateEvent != nil {
-		u.printEvent(color.FgRed, "Locked", "A concurrent update was detected on the stack. Run `sst unlock` to delete the lock file and retry.")
+		u.printEvent(color.FgRed, "Locked", "A concurrent update was detected on the app. Run `sst unlock` to remove the lock and try again.")
 	}
 	if evt.StackCommandEvent != nil {
 		u.spinner.Disable()
@@ -428,7 +429,8 @@ func (u *UI) Event(evt *server.Event) {
 	}
 
 	if evt.FunctionErrorEvent != nil {
-		u.printEvent(u.getColor(evt.FunctionErrorEvent.WorkerID), color.New(color.FgRed).Sprintf("%-11s", "Error"), evt.FunctionErrorEvent.ErrorMessage)
+		u.printEvent(u.getColor(evt.FunctionErrorEvent.WorkerID), color.New(color.FgRed).Sprintf("%-11s", "Error"), "")
+		u.printEvent(u.getColor(evt.FunctionErrorEvent.WorkerID), "", evt.FunctionErrorEvent.ErrorMessage)
 		for _, item := range evt.FunctionErrorEvent.Trace {
 			if strings.Contains(item, "Error:") {
 				continue
@@ -456,7 +458,10 @@ func (u *UI) printEvent(barColor color.Attribute, label string, message string) 
 		defer u.spinner.Enable()
 	}
 	color.New(barColor, color.Bold).Print("|  ")
-	color.New(color.FgHiBlack).Print(fmt.Sprintf("%-11s", label), " ", strings.TrimSpace(message))
+	if label != "" {
+		color.New(color.FgHiBlack).Print(fmt.Sprintf("%-11s", label), " ")
+	}
+	color.New(color.FgHiBlack).Print(strings.TrimSpace(message))
 	fmt.Println()
 	u.hasProgress = true
 }
@@ -583,11 +588,11 @@ func (u *UI) printProgress(progress Progress) {
 }
 
 func Success(msg string) {
-	color.New(color.FgGreen, color.Bold).Print(IconCheck + "  ")
-	color.New(color.FgWhite).Println(msg)
+	os.Stderr.WriteString(color.New(color.FgGreen, color.Bold).Sprint(IconCheck + "  "))
+	os.Stderr.WriteString(color.New(color.FgWhite).Sprintln(msg))
 }
 
 func Error(msg string) {
-	color.New(color.FgRed, color.Bold).Print(IconX + "  ")
-	color.New(color.FgWhite).Println(msg)
+	os.Stderr.WriteString(color.New(color.FgRed, color.Bold).Sprint(IconX + "  "))
+	os.Stderr.WriteString(color.New(color.FgWhite).Sprintln(msg))
 }

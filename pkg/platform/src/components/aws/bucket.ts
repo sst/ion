@@ -115,7 +115,20 @@ export interface BucketArgs {
    */
   public?: Input<boolean>;
   /**
-   * The CORS configuration for the bucket.
+   * The CORS configuration for the bucket. Defaults to `true`, which is the same as:
+   *
+   * ```js
+   * {
+   *   cors: {
+   *     allowHeaders: ["*"],
+   *     allowOrigins: ["*"],
+   *     allowMethods: ["DELETE", "GET", "HEAD", "POST", "PUT"],
+   *     exposeHeaders: [],
+   *     maxAge: "0 seconds"
+   *   }
+   * }
+   * ```
+   *
    * @default `true`
    */
   cors?: Input<false | Prettify<BucketCorsArgs>>;
@@ -313,6 +326,7 @@ export class Bucket
         );
         input.bucket = randomId.dec.apply((dec) =>
           prefixName(
+            63,
             name.toLowerCase(),
             `-${hashNumberToPrettyString(parseInt(dec), 8)}`,
           ),

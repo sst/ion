@@ -725,6 +725,29 @@ export interface FunctionArgs {
     }[]
   >;
   /**
+   * Configure the function to connect to private subnets in a virtual private cloud or VPC. This allows your function to access private resources.
+   *
+   * @example
+   * ```js
+   * {
+   *   vpc: {
+   *     securityGroups: ["sg-0399348378a4c256c"],
+   *     subnets: ["subnet-0b6a2b73896dc8c4c", "subnet-021389ebee680c2f0"]
+   *   }
+   * }
+   * ```
+   */
+  vpc?: Input<{
+    /**
+     * A list of VPC security group IDs.
+     */
+    securityGroups: Input<Input<string>[]>;
+    /**
+     * A list of VPC subnet IDs.
+     */
+    subnets: Input<Input<string>[]>;
+  }>;
+  /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
    */
@@ -919,7 +942,7 @@ export class Function
       }),
     );
 
-    all([bundle, handler]).apply(([bundle, handler]) => {
+    all([args.bundle, args.handler]).apply(([bundle, handler]) => {
       Link.Receiver.register(bundle || handler, links, environment);
     });
     this.registerOutputs({
@@ -1214,6 +1237,7 @@ export class Function
             transform(args.transform?.role, {
               name: region.apply((region) =>
                 prefixName(
+                  64,
                   `${name}Role`,
                   `-${region.toLowerCase().replace(/-/g, "")}`,
                 ),
@@ -1235,6 +1259,11 @@ export class Function
               ),
               managedPolicyArns: [
                 "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                ...(args.vpc
+                  ? [
+                      "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+                    ]
+                  : []),
               ],
             }),
             { parent },
@@ -1344,7 +1373,7 @@ export class Function
       return new aws.cloudwatch.LogGroup(
         `${name}LogGroup`,
         transform(args.transform?.logGroup, {
-          name: `/aws/lambda/${prefixName(name)}Function`,
+          name: `/aws/lambda/${prefixName(64, `${name}Function`)}`,
           retentionInDays: logging.apply(
             (logging) => RETENTION[logging.retention],
           ),
@@ -1380,6 +1409,10 @@ export class Function
           loggingConfig: {
             logFormat: "Text",
             logGroup: logGroup.name,
+          },
+          vpcConfig: args.vpc && {
+            securityGroupIds: output(args.vpc).securityGroups,
+            subnetIds: output(args.vpc).subnets,
           },
         }),
         {
