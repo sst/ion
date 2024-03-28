@@ -387,6 +387,7 @@ export class SolidStart extends Component implements Link.Linkable {
           origins: {
             server: {
               server: {
+                streaming: true,
                 function: serverConfig,
               },
             },

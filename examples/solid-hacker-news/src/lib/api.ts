@@ -50,6 +50,6 @@ export const getStory = cache(async (id: string): Promise<StoryDefinition> => {
 
 export const getUser = cache(async (id: string): Promise<UserDefinition> => {
   "use server";
-  await new Promise((resolve) => setTimeout(resolve, 5000));
+  await new Promise((resolve) => setTimeout(resolve, 2000));
   return fetchAPI(`user/${id}`);
 }, "user");
