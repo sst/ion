@@ -61,6 +61,7 @@ export class Component extends ComponentResource {
           switch (args.type) {
             case "aws:cloudwatch/eventRule:EventRule":
             case "aws:iam/user:User":
+            case "aws:sfn/stateMachine:StateMachine":
             case "aws:lambda/function:Function":
               overrides = { name: prefixName(64, args.name) };
               break;
