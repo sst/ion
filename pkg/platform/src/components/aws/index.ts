@@ -14,6 +14,7 @@ export * from "./sns-topic.js";
 export * from "./solid-start.js";
 export * from "./static-site.js";
 export * from "./vector.js";
+export * from ".iot-authorizer.js";
 
 // internal components
 export * from "./cdn.js";

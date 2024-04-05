@@ -66,6 +66,7 @@ export class Component extends ComponentResource {
               break;
             case "aws:apigatewayv2/api:Api":
             case "aws:apigatewayv2/authorizer:Authorizer":
+            case "aws:iot/authorizer:Authorizer":
               overrides = { name: prefixName(128, args.name) };
               break;
             case "aws:dynamodb/table:Table":
