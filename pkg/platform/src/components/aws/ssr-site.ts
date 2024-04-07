@@ -108,6 +108,10 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs {
    */
   transform?: {
     /**
+     * Transform the function used for optimizing images.
+     */
+    imageOptimization?: Transform<FunctionArgs>;
+    /**
      * Transform the Bucket resource used for uploading the assets.
      */
     assets?: Transform<BucketArgs>;
@@ -569,7 +573,7 @@ function handler(event) {
     ) {
       const fn = new Function(
         `${name}${sanitizeToPascalCase(fnName)}`,
-        {
+        transform(args.transform?.imageOptimization, {
           timeout: "25 seconds",
           logging: {
             retention: "3 days",
@@ -585,7 +589,7 @@ function handler(event) {
           live: false,
           _ignoreCodeChanges: $dev,
           _skipMetadata: true,
-        },
+        }),
         { parent },
       );
 
