@@ -14,6 +14,7 @@ export default $config({
     };
   },
   async run() {
-    await import("./infra/index.js");
+    // TODO: Check the import
+    await import("./infra");
   },
 });

@@ -4,6 +4,7 @@ import { handle } from "hono/aws-lambda";
 
 const app = new Hono();
 
+// TODO: Use a native function instead
 app.get("/", async (c) => {
   console.log("calling Example.hello");
   return c.text(Example.hello());
