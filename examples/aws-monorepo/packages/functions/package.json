@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "dependencies": {
     "@aws-monorepo/core": "workspace:*",
-    "hono": "^4.2.2"
+    "sst": "^3.0.13"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.137"
