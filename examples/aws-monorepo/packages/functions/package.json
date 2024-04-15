@@ -2,8 +2,7 @@
   "name": "@aws-monorepo/functions",
   "version": "0.0.0",
   "dependencies": {
-    "@aws-monorepo/core": "workspace:*",
-    "sst": "^3.0.13"
+    "@aws-monorepo/core": "*"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.137"

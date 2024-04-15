@@ -4,8 +4,7 @@
  * ## AWS monorepo
  *
  * A full-stack TypeScript monorepo template that deploys a frontend, a database, and an API
- * to AWS. Uses [pnpm](https://pnpm.io/)'s [workspace protocol](https://pnpm.io/workspaces) to
- * manage references between packages.
+ * to AWS.
  *
  * While, [drop-in mode](/docs/#drop-in-mode) is great for simple projects, we recommend using
  * this template for projects that are going to have multiple packages. 
@@ -63,13 +62,7 @@
  * - `functions/`
  *
  *   This directory includes our Lambda funcitons. It imports from the `core/`
- *   package by using it as a workspace dependency.
- *
- *   ```json title="packages/functions/package.json"
- *   "dependencies": {
- *     "@aws-monorepo/core": "workspace:*"
- *   }
- *   ...
+ *   package by using it as a local dependency.
  *
  * - `frontend/`
  *
@@ -89,7 +82,7 @@
  *   `scripts/src/example.ts`, run the following from `packages/scripts/`.
  *
  *   ```bash
- *   pnpm run shell src/example.ts
+ *   npm run shell src/example.ts
  *   ```
  *   
  *  #### Infrastructure
@@ -100,7 +93,7 @@
  *  In the template, we have an `api.ts`, `database.ts`, and `frontend.ts`. These export
  *  resources that can be used in the other infrastructure files.
  *
- *  These are then re-exported in the `infra/index.ts` file.
+ *  They are also re-exported in the `infra/index.ts` file.
  *
  *  ```ts title="infra/index.ts"
  *  export * from "./api";
