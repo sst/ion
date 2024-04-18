@@ -343,8 +343,8 @@ export interface NextjsArgs extends SsrSiteArgs {
    * ```js
    * {
    *   vpc: {
-   *     subnetIds: ["subnet-12345678{f", "subnet-98765432"],
-   *     securityGroupIds: ["sg-12345678"]
+   *     subnets: ["subnet-12345678{f", "subnet-98765432"],
+   *     securityGroups: ["sg-12345678"]
    *   }
    * }
    * ```
