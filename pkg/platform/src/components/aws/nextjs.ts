@@ -5,7 +5,7 @@ import { globSync } from "glob";
 import { ComponentResourceOptions, Output, all } from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { Size } from "../size.js";
-import { Function } from "./function.js";
+import { Function, FunctionArgs } from "./function.js";
 import {
   Plan,
   SsrSiteArgs,

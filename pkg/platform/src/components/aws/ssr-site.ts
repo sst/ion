@@ -56,6 +56,21 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs {
   domain?: CdnArgs["domain"];
   permissions?: FunctionArgs["permissions"];
   warm?: Input<number>;
+  /**
+   * The VPC network to place the [server function](#nodes-server) in. This is useful if your function needs to access resources in your VPC.
+   *
+   * @example
+   *
+   * ```js
+   * {
+   *   vpc: {
+   *     securityGroups: ["mySecurityGroupId"],
+   *     subnets: ["mySubnetId"]
+   *   }
+   * }
+   * ```
+   */
+  vpc?: FunctionArgs["vpc"];
   invalidation?: Input<
     | false
     | {
@@ -542,6 +557,7 @@ function handler(event) {
             ...(props.function.link ?? []),
             ...(link ?? []),
           ]),
+          vpc: args.vpc,
           url: true,
           live: false,
           _ignoreCodeChanges: $dev,
