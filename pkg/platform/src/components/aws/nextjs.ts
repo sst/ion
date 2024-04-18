@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { globSync } from "glob";
-import { ComponentResourceOptions, Output, all } from "@pulumi/pulumi";
+import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { Size } from "../size.js";
 import { Function } from "./function.js";
@@ -716,6 +716,7 @@ export class Nextjs extends Component implements Link.Linkable {
         buildId,
         openNextOutput,
         args?.imageOptimization,
+        args.permissions,
         [bucket.arn, bucket.name],
         revalidationQueue.apply((q) => ({ url: q?.url, arn: q?.arn })),
         revalidationTable.apply((t) => ({ name: t?.name, arn: t?.arn })),
@@ -725,6 +726,7 @@ export class Nextjs extends Component implements Link.Linkable {
           buildId,
           openNextOutput,
           imageOptimization,
+          permissions,
           [bucketArn, bucketName],
           { url: revalidationQueueUrl, arn: revalidationQueueArn },
           { name: revalidationTableName, arn: revalidationTableArn },
@@ -785,6 +787,7 @@ export class Nextjs extends Component implements Link.Linkable {
                     },
                   ]
                 : []),
+              ...(permissions ?? []),
             ],
           };
 
