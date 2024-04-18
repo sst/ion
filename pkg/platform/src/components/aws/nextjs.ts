@@ -5,7 +5,7 @@ import { globSync } from "glob";
 import { ComponentResourceOptions, Output, all } from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { Size } from "../size.js";
-import { Function } from "./function.js";
+import { Function, FunctionArgs } from "./function.js";
 import {
   Plan,
   SsrSiteArgs,
@@ -335,6 +335,11 @@ export interface NextjsArgs extends SsrSiteArgs {
      * ```
      */
     memory?: Size;
+
+    /**
+     * Environment variables for the image optimization function.
+     */
+    environment?: FunctionArgs["environment"];
   };
 }
 
@@ -840,6 +845,7 @@ export class Nextjs extends Component implements Link.Linkable {
                           runtime: "nodejs20.x",
                           architecture: "arm64",
                           environment: {
+                            ...imageOptimization?.environment,
                             BUCKET_NAME: bucketName,
                             BUCKET_KEY_PREFIX: "_assets",
                           },
