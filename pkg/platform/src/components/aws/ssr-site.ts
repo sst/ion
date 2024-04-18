@@ -55,6 +55,7 @@ export type Plan = ReturnType<typeof validatePlan>;
 export interface SsrSiteArgs extends BaseSsrSiteArgs {
   domain?: CdnArgs["domain"];
   permissions?: FunctionArgs["permissions"];
+  vpc?: FunctionArgs["vpc"];
   warm?: Input<number>;
   invalidation?: Input<
     | false
@@ -521,6 +522,7 @@ function handler(event) {
         `${name}${sanitizeToPascalCase(fnName)}`,
         transform(args.transform?.server, {
           description: `${name} server`,
+          vpc: args.vpc,
           runtime: "nodejs20.x",
           timeout: "20 seconds",
           permissions: args.permissions,

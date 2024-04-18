@@ -336,6 +336,20 @@ export interface NextjsArgs extends SsrSiteArgs {
      */
     memory?: Size;
   };
+  /**
+   * Configure the subnet and security groups for the default Lambda running the Next.js app.
+   *
+   * @example
+   * ```js
+   * {
+   *   vpc: {
+   *     subnetIds: ["subnet-12345678{f", "subnet-98765432"],
+   *     securityGroupIds: ["sg-12345678"]
+   *   }
+   * }
+   * ```
+   */
+  vpc?: SsrSiteArgs["vpc"];
 }
 
 /**
@@ -782,6 +796,21 @@ export class Nextjs extends Component implements Link.Linkable {
                         revalidationTableArn,
                         `${revalidationTableArn}/*`,
                       ],
+                    },
+                  ]
+                : []),
+              // allow lambda to connect to vpc/subnets
+              ...(args.vpc
+                ? [
+                    {
+                      actions: [
+                        "ec2:DescribeNetworkInterfaces",
+                        "ec2:CreateNetworkInterface",
+                        "ec2:DeleteNetworkInterface",
+                        "ec2:DescribeInstances",
+                        "ec2:AttachNetworkInterface",
+                      ],
+                      resources: ["*"],
                     },
                   ]
                 : []),
