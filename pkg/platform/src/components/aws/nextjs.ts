@@ -26,15 +26,9 @@ import { Cache } from "./providers/cache.js";
 import { Queue } from "./queue.js";
 import { buildApp } from "../base/base-ssr-site.js";
 
-const DEFAULT_OPEN_NEXT_VERSION = "3.0.0-rc.11";
+const DEFAULT_OPEN_NEXT_VERSION = "3.0.0-rc.16";
 const DEFAULT_CACHE_POLICY_ALLOWED_HEADERS = [
-  "accept",
-  "x-prerender-revalidate",
-  "x-prerender-bypass",
-  "rsc",
-  "next-router-prefetch",
-  "next-router-state-tree",
-  "next-url",
+  "x-open-next-cache-key"
 ];
 
 type BaseFunction = {
@@ -335,6 +329,17 @@ export interface NextjsArgs extends SsrSiteArgs {
      * ```
      */
     memory?: Size;
+    /**
+     * If set to true, already computed image will return 304 Not Modified.
+     * This means that image needs to be **immutable**, the etag will be computed based on the image href, format and width and the next BUILD_ID.
+     * @default false
+     * @example
+     * ```js
+     * * imageOptimization: {
+     *  staticImageOptimization: true,
+     * }
+     */
+    staticImageOptimization?: boolean;
   };
 }
 
@@ -794,7 +799,8 @@ export class Nextjs extends Component implements Link.Linkable {
               serverCfFunction: {
                 injections: [
                   useCloudFrontFunctionHostHeaderInjection(),
-                  useCloudFrontFunctionPrerenderBypassHeaderInjection(),
+                  useCloudFrontFunctionCacheHeaderKey(),
+                  useCloudfrontGeoHeadersInjection(),
                 ],
               },
             },
@@ -842,6 +848,11 @@ export class Nextjs extends Component implements Link.Linkable {
                           environment: {
                             BUCKET_NAME: bucketName,
                             BUCKET_KEY_PREFIX: "_assets",
+                            ...(imageOptimization?.staticImageOptimization ? 
+                              {
+                                OPENNEXT_STATIC_ETAG: "true"
+                              } : {}
+                            )
                           },
                           memory: imageOptimization?.memory ?? "1536 MB",
                         },
@@ -1221,15 +1232,59 @@ export class Nextjs extends Component implements Link.Linkable {
       return _routes;
     }
 
-    function useCloudFrontFunctionPrerenderBypassHeaderInjection() {
-      // In Next.js page router preview mode (depends on the cookie __prerender_bypass),
-      // to ensure we receive the cached page instead of the preview version, we set the
-      // header "x-prerender-bypass", and add it to cache policy's allowed headers.
-      return `
-  if (request.cookies["__prerender_bypass"]) { 
-    request.headers["x-prerender-bypass"] = { value: "true" }; 
-  }`;
-    }
+    // This function is used to improve cache hit ratio by setting the cache key based on the request headers and the path
+// next/image only need the accept header, and this header is not useful for the rest of the query
+  function useCloudFrontFunctionCacheHeaderKey() {
+    return `
+function getHeader(key) {
+  var header = request.headers[key];
+  if(header) {
+      if(header.multiValue){
+          return header.multiValue.map((header) => header.value).join(",");
+      }
+      if(header.value){
+          return header.value;
+      }
+  }
+  return ""
+  }
+  var cacheKey = "";
+  if(request.uri.startsWith("/_next/image")) {
+    cacheKey = getHeader("accept");
+  }else {
+    cacheKey = getHeader("rsc") + getHeader("next-router-prefetch") + getHeader("next-router-state-tree") + getHeader("next-url") + getHeader("x-prerender-revalidate");
+  }
+  if(request.cookies["__prerender_bypass"]) {
+    cacheKey += request.cookies["__prerender_bypass"] ? request.cookies["__prerender_bypass"].value : "";
+  }
+  var crypto = require('crypto');
+  
+  var hashedKey = crypto.createHash('md5').update(cacheKey).digest('hex');
+  request.headers["x-open-next-cache-key"] = {value: hashedKey};
+  `
+  }
+
+  // Inject the CloudFront viewer country, region, latitude, and longitude headers into the request headers
+  // for OpenNext to use them
+  function useCloudfrontGeoHeadersInjection() {
+    return `
+if(request.headers["cloudfront-viewer-city"]) {
+  request.headers["x-open-next-city"] = request.headers["cloudfront-viewer-city"];
+}
+if(request.headers["cloudfront-viewer-country"]) {
+  request.headers["x-open-next-country"] = request.headers["cloudfront-viewer-country"];
+}
+if(request.headers["cloudfront-viewer-region"]) {
+  request.headers["x-open-next-region"] = request.headers["cloudfront-viewer-region"];
+}
+if(request.headers["cloudfront-viewer-latitude"]) {
+  request.headers["x-open-next-latitude"] = request.headers["cloudfront-viewer-latitude"];
+}
+if(request.headers["cloudfront-viewer-longitude"]) {
+  request.headers["x-open-next-longitude"] = request.headers["cloudfront-viewer-longitude"];
+}
+    `
+  }
 
     function handleMissingSourcemap() {
       // TODO implement
