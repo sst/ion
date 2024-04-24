@@ -123,6 +123,7 @@ case $current_shell in
     ash)
         # just print a notice for now
         print_message warning "ash does not use a config file to set PATH."
+        config_files=""
     ;;
     *)
         # Default case if none of the above matches
