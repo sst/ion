@@ -60,6 +60,10 @@ function addTransformationToRetainResourcesOnDelete() {
 function addTransformationToEnsureUniqueComponentNames() {
   const componentNames = new Set<string>();
   runtime.registerStackTransformation((args: ResourceTransformationArgs) => {
+    if (args.opts.urn?.startsWith("urn:pulumi")) {
+      return;
+    }
+
     if (args.type.startsWith("pulumi")) {
       return;
     }
