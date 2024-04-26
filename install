@@ -14,11 +14,14 @@ if [[ "$os" == "darwin" ]]; then
 fi
 arch=$(uname -m)
 
+if [[ "$arch" == "aarch64" ]]; then
+    arch="arm64"
+fi
+
 filename="$APP-$os-$arch.tar.gz"
 
 case "$filename" in
     *"-linux-"*)
-        [[ "$arch" == "aarch64" ]] && arch="arm64"
         [[ "$arch" == "x86_64" || "$arch" == "arm64" || "$arch" == "i386" ]] || exit 1
     ;;
     *"-mac-"*)
