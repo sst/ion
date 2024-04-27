@@ -370,7 +370,7 @@ export class StaticSite extends Component implements Link.Linkable {
 
     const parent = this;
 
-    const parsedArgs = parseArgs()
+    const parsedArgs = parseArgs();
 
     validateRoutes();
 
@@ -380,7 +380,7 @@ export class StaticSite extends Component implements Link.Linkable {
     const bucket = createS3Bucket();
     const bucketFile = uploadAssets();
     const router = createRouter();
-    const distribution = router.nodes.cdn
+    const distribution = router.nodes.cdn;
     createDistributionInvalidation();
     this.assets = bucket;
     this.router = router;
@@ -398,7 +398,7 @@ export class StaticSite extends Component implements Link.Linkable {
     function parseArgs() {
       if (!args.routes)
         args.routes = {};
-      return args as StaticSiteArgs & { routes: NonNullable<StaticSiteArgs['routes']> }
+      return args as StaticSiteArgs & { routes: NonNullable<StaticSiteArgs['routes']> };
     }
 
     function validateRoutes() {
@@ -621,7 +621,7 @@ export class StaticSite extends Component implements Link.Linkable {
                     },
                   ],
                 wait: !$dev,
-              }
+              };
 
               const s3Origin = {
                 originId: "s3",
@@ -630,15 +630,15 @@ export class StaticSite extends Component implements Link.Linkable {
                 s3OriginConfig: {
                   originAccessIdentity: access.cloudfrontAccessIdentityPath,
                 },
-              }
+              };
               newCdnArgs.origins = all([newCdnArgs.origins, s3Origin]).apply(([origins, s3Origin]) => {
                 // Replace the hard-coded '/*' origin at index 0 to our s3Origin
                 origins[0] = s3Origin
                 return origins
-              })
+              });
 
               // @ts-expect-error I wish TS is smarter
-              Object.entries(newCdnArgs).forEach(([key, value]) => routerCdnArgs[key] = value)
+              Object.entries(newCdnArgs).forEach(([key, value]) => routerCdnArgs[key] = value);
             },
           }
         },
