@@ -334,7 +334,7 @@ async function generateComponentsDoc() {
       outputFileContent = [
         renderHeader(
           `${title} DNS Adapter`,
-          `Reference doc for the \`sst.${dnsProvider}.dns\` functions.`
+          `Reference doc for the \`sst.${dnsProvider}.dns\` adapter.`
         ),
         renderSourceMessage(sourceFile),
         renderImports(outputFilePath),
@@ -675,27 +675,53 @@ async function generateComponentsDoc() {
 
       // Validate getSSTLink() return type
       const returnType = method.signatures![0].type as TypeDoc.ReflectionType;
-      if (returnType.declaration.children?.length !== 1) {
+      if (
+        returnType.declaration.children?.length !== 1 ||
+        returnType.declaration.children?.[0].name !== "properties"
+      ) {
         throw new Error(
           "Failed to render links b/c getSSTLink() return value does not match { properties }"
         );
       }
-      const valueType = returnType.declaration.children[0]
+      const propertiesType = returnType.declaration.children[0]
         .type as TypeDoc.ReflectionType;
-      if (!valueType.declaration.children?.length) {
+      if (!propertiesType.declaration.children?.length) {
         throw new Error(
           "Failed to render links b/c getSSTLink() returned 0 link values"
         );
       }
 
-      for (const link of valueType.declaration.children) {
+      for (const link of propertiesType.declaration.children) {
         console.debug(` - link ${link.name}`);
 
-        const type = (link.type as TypeDoc.ReferenceType).typeArguments![0];
-        if (!type || type.type !== "intrinsic") {
+        let linkType: TypeDoc.SomeType | undefined;
+
+        // Convert Output<T> => T
+        if (
+          link.type &&
+          link.type.type === "reference" &&
+          link.type.name === "Output" &&
+          (link.type.typeArguments![0].type === "intrinsic" ||
+            link.type.typeArguments![0].type === "union")
+        ) {
+          linkType = link.type.typeArguments![0];
+        }
+        // Convert Output<T> | undefined => T | undefined
+        else if (link.type && link.type.type === "union") {
+          linkType = link.type;
+          linkType.types = linkType.types.map((t) =>
+            t.type === "reference" && t.name === "Output"
+              ? t.typeArguments![0]
+              : t
+          );
+        }
+
+        if (!linkType) {
+          // @ts-expect-error
+          delete link.type._project;
           console.error(link.type);
           throw new Error(
-            `Failed to render link ${link.name} b/c link value does not match type Output<intrinsic>`
+            `Failed to render link ${link.name} b/c link value does not match type \`Output<intrinsic>\`, \`Output<intrinsic | undefined>\`, or \`Output<intrinsic> | undefined\``
           );
         }
 
@@ -712,7 +738,7 @@ async function generateComponentsDoc() {
           `<Segment>`,
           `<Section type="parameters">`,
           `<InlineSection>`,
-          `**Type** ${renderType(type)}`,
+          `**Type** ${renderType(linkType)}`,
           `</InlineSection>`,
           `</Section>`,
           ...renderDescription(getter.getSignature!),
@@ -1035,8 +1061,6 @@ async function generateComponentsDoc() {
           `<code class="symbol">: </code>`,
           renderedType,
           `<code class="symbol"> => </code>`,
-          renderedType,
-          `<code class="symbol"> | </code>`,
           `<code class="primitive">void</code>`,
           `<code class="symbol">)</code>`,
         ].join("");
@@ -1073,10 +1097,12 @@ async function generateComponentsDoc() {
         BucketArgs: "bucket",
         Cdn: "cdn",
         CdnArgs: "cdn",
+        CognitoUserPoolClient: "cognito-user-pool-client",
         Function: "function",
         FunctionArgs: "function",
         FunctionPermissionArgs: "function",
         PostgresArgs: "postgres",
+        Service: "service",
       }[type.name];
       if (externalModule) {
         const hash = type.name.endsWith("Args")
@@ -1385,10 +1411,14 @@ async function buildComponents() {
       "../pkg/platform/src/components/secret.ts",
       "../pkg/platform/src/components/aws/apigatewayv2.ts",
       "../pkg/platform/src/components/aws/bucket.ts",
+      "../pkg/platform/src/components/aws/cluster.ts",
+      "../pkg/platform/src/components/aws/cognito-identity-pool.ts",
+      "../pkg/platform/src/components/aws/cognito-user-pool.ts",
+      "../pkg/platform/src/components/aws/cognito-user-pool-client.ts",
       "../pkg/platform/src/components/aws/cron.ts",
       "../pkg/platform/src/components/aws/dynamo.ts",
-      // TODO
-      //"../pkg/platform/src/components/aws/function.ts",
+      "../pkg/platform/src/components/aws/email.ts",
+      "../pkg/platform/src/components/aws/function.ts",
       "../pkg/platform/src/components/aws/postgres.ts",
       "../pkg/platform/src/components/aws/vector.ts",
       "../pkg/platform/src/components/aws/astro.ts",
@@ -1396,9 +1426,11 @@ async function buildComponents() {
       "../pkg/platform/src/components/aws/remix.ts",
       "../pkg/platform/src/components/aws/queue.ts",
       "../pkg/platform/src/components/aws/router.ts",
+      "../pkg/platform/src/components/aws/service.ts",
       "../pkg/platform/src/components/aws/sns-topic.ts",
       "../pkg/platform/src/components/aws/solid-start.ts",
       "../pkg/platform/src/components/aws/static-site.ts",
+      "../pkg/platform/src/components/aws/vpc.ts",
       "../pkg/platform/src/components/cloudflare/worker.ts",
       "../pkg/platform/src/components/cloudflare/bucket.ts",
       "../pkg/platform/src/components/cloudflare/d1.ts",

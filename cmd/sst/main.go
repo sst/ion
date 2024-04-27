@@ -696,28 +696,39 @@ var Root = Command{
 							},
 						},
 					},
-					Run: func(cli *Cli) error {
-						key := cli.Positional(0)
-						value := cli.Positional(1)
-						p, err := initProject(cli)
-						if err != nil {
-							return err
-						}
-						defer p.Cleanup()
-						backend := p.Backend()
-						secrets, err := provider.GetSecrets(backend, p.App().Name, p.App().Stage)
-						if err != nil {
-							return util.NewReadableError(err, "Could not get secrets")
-						}
-						secrets[key] = value
-						err = provider.PutSecrets(backend, p.App().Name, p.App().Stage, secrets)
-						if err != nil {
-							return util.NewReadableError(err, "Could not set secret")
-						}
-						http.Post("http://localhost:13557/api/deploy", "application/json", strings.NewReader("{}"))
-						ui.Success(fmt.Sprintf("Set \"%s\" for stage \"%s\". Run \"sst deploy\" to update.", key, p.App().Stage))
-						return nil
+					Run: CmdSecretSet,
+				},
+				{
+					Name: "load",
+					Description: Description{
+						Short: "Set multiple secrets from file",
+						Long:  strings.Join([]string{}, "\n"),
 					},
+					Args: []Argument{
+						{
+							Name:     "file",
+							Required: true,
+							Description: Description{
+								Short: "The file to load secrets from",
+								Long:  "The file to load secrets from",
+							},
+						},
+					},
+					Examples: []Example{
+						{
+							Content: "sst secret load ./secrets.env",
+							Description: Description{
+								Short: "Loads all secrets from the file",
+							},
+						},
+						{
+							Content: "sst secret load ./prod.env --stage=production",
+							Description: Description{
+								Short: "Set secrets for production",
+							},
+						},
+					},
+					Run: CmdSecretLoad,
 				},
 				{
 					Name: "remove",
@@ -925,9 +936,13 @@ var Root = Command{
 					if err != nil {
 						return err
 					}
-
 					envVar := fmt.Sprintf("SST_RESOURCE_%s=%s", resource, jsonValue)
 					cmd.Env = append(cmd.Env, envVar)
+				}
+
+				for key, val := range p.Env() {
+					key = strings.ReplaceAll(key, "SST_", "")
+					cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, val))
 				}
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr

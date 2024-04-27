@@ -18,6 +18,7 @@ const sidebar = [
       { label: "Astro", link: "/docs/start/aws/astro/" },
       { label: "Remix", link: "/docs/start/aws/remix/" },
       { label: "Next.js", link: "/docs/start/aws/nextjs/" },
+      { label: "Container", link: "/docs/start/aws/container/" },
       {
         label: "Cloudflare",
         items: [
@@ -40,14 +41,17 @@ const sidebar = [
   {
     label: "AWS",
     items: [
+      { label: "Vpc", link: "/docs/component/aws/vpc/" },
       { label: "Cron", link: "/docs/component/aws/cron/" },
       { label: "Astro", link: "/docs/component/aws/astro/" },
+      { label: "Email", link: "/docs/component/aws/email/" },
       { label: "Remix", link: "/docs/component/aws/remix/" },
       { label: "Nextjs", link: "/docs/component/aws/nextjs/" },
       { label: "Queue", link: "/docs/component/aws/queue/" },
       { label: "Vector", link: "/docs/component/aws/vector/" },
       { label: "Bucket", link: "/docs/component/aws/bucket/" },
       { label: "Router", link: "/docs/component/aws/router/" },
+      { label: "Cluster", link: "/docs/component/aws/cluster/" },
       { label: "Dynamo", link: "/docs/component/aws/dynamo/" },
       { label: "SnsTopic", link: "/docs/component/aws/sns-topic/" },
       { label: "Function", link: "/docs/component/aws/function/" },
@@ -57,6 +61,14 @@ const sidebar = [
       {
         label: "ApiGatewayV2",
         link: "/docs/component/aws/apigatewayv2/",
+      },
+      {
+        label: "CognitoUserPool",
+        link: "/docs/component/aws/cognito-user-pool/",
+      },
+      {
+        label: "CognitoIdentityPool",
+        link: "/docs/component/aws/cognito-identity-pool/",
       },
     ],
   },
@@ -80,6 +92,14 @@ const sidebar = [
     ],
   },
   {
+    label: "How to",
+    items: [
+      // { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
+      // { label: "Import Resources", link: "/docs/import-resources/" },
+      { label: "Custom Domains", link: "/docs/custom-domains/" },
+    ],
+  },
+  {
     label: "Internal",
     collapsed: true,
     items: [
@@ -98,17 +118,14 @@ const sidebar = [
           },
         ],
       },
+      { label: "Service", link: "/docs/component/aws/service/" },
+      {
+        label: "CognitoUserPoolClient",
+        link: "/docs/component/aws/cognito-user-pool-client/",
+      },
     ],
   },
   { label: "Examples", link: "/docs/examples/" },
-  //  {
-  //    label: "How to",
-  //    items: [
-  //      { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
-  //      { label: "Import Resources", link: "/docs/import-resources/" },
-  //      { label: "Create an AWS Account", link: "/docs/create-an-aws-account/" },
-  //    ],
-  //  },
 ];
 
 if (import.meta.env.DEV) {

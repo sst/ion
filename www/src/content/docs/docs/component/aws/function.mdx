@@ -210,6 +210,16 @@ The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
 The name of the Lambda function.
 </Segment>
 
+### url
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">string</code>
+</InlineSection>
+</Section>
+The Lambda function URL if `url` is enabled.
+</Segment>
+
 ## FunctionArgs
 ### architecture?
 <Segment>
@@ -493,7 +503,7 @@ The duration the function logs are kept in CloudWatch.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="symbol">&ldquo;</code><code class="primitive">$\{number\} MB</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">$\{number\} GB</code><code class="symbol">&rdquo;</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="symbol">&ldquo;</code><code class="primitive">$\{number\} GB</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">$\{number\} MB</code><code class="symbol">&rdquo;</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 
@@ -782,11 +792,7 @@ The [IAM actions](https://docs.aws.amazon.com/service-authorization/latest/refer
 
 ```js
 {
-  permissions: [
-    {
-      actions: ["s3:*"]
-    }
-  ]
+  actions: ["s3:*"]
 }
 ```
 </Segment>
@@ -801,11 +807,7 @@ The resourcess specified using the [IAM ARN format](https://docs.aws.amazon.com/
 
 ```js
 {
-  permissions: [
-    {
-      resources: ["arn:aws:s3:::my-bucket/*"]
-    }
-  ]
+  resources: ["arn:aws:s3:::my-bucket/*"]
 }
 ```
 </Segment>
@@ -922,7 +924,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">FunctionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/function/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">FunctionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/function/#inputs)<code class="symbol"> => </code>[<code class="type">FunctionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/function/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">FunctionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/function/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">FunctionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/function/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the Lambda Function resource.
@@ -932,7 +934,7 @@ Transform the Lambda Function resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> => </code>[<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the CloudWatch LogGroup resource.
@@ -942,7 +944,7 @@ Transform the CloudWatch LogGroup resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> => </code>[<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the IAM Role resource.
