@@ -397,7 +397,7 @@ export class StaticSite extends Component implements Link.Linkable {
 
     function parseArgs() {
       if (!args.routes)
-        args.routes = {} as NonNullable<{}>
+        args.routes = {};
       return args as StaticSiteArgs & { routes: NonNullable<StaticSiteArgs['routes']> }
     }
 
