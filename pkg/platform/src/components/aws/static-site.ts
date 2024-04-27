@@ -10,6 +10,7 @@ import {
 } from "@pulumi/pulumi";
 import { Cdn, CdnArgs } from "./cdn.js";
 import { Bucket, BucketArgs } from "./bucket.js";
+import { Router, RouterArgs } from "./router.js";
 import { Component, Prettify, Transform, transform } from "../component.js";
 import { Link } from "../link.js";
 import { Input } from "../input.js";
@@ -186,6 +187,11 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
     }
   >;
   /**
+   * Refer to [Router's routes arg](/docs/components/aws/router/#routes).  
+   * Note that `/*` is reserved for the static site.
+   */
+  routes?: RouterArgs['routes']
+  /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
    */
@@ -194,6 +200,11 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
      * Transform the Bucket resource used for uploading the assets.
      */
     assets?: Transform<BucketArgs>;
+    /**
+     * Transform the Cache Policy that's attached to each CloudFront behavior.  
+     * Refer to [Router's transform cachePolicy](/docs/components/aws/router/#transform).
+     */
+    cachePolicy?: Transform<aws.cloudfront.CachePolicyArgs>;
     /**
      * Transform the CloudFront CDN resource.
      */
@@ -346,8 +357,9 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  * ```
  */
 export class StaticSite extends Component implements Link.Linkable {
-  private cdn: Cdn;
   private assets: Bucket;
+  private router: Router;
+  private cdn: Cdn;
 
   constructor(
     name: string,
@@ -357,14 +369,21 @@ export class StaticSite extends Component implements Link.Linkable {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
+
+    const parsedArgs = parseArgs()
+
+    validateRoutes();
+
     const { sitePath, environment, indexPage } = prepare(args);
     const outputPath = buildApp(name, args.build, sitePath, environment);
     const access = createCloudFrontOriginAccessIdentity();
     const bucket = createS3Bucket();
     const bucketFile = uploadAssets();
-    const distribution = createDistribution();
+    const router = createRouter();
+    const distribution = router.nodes.cdn
     createDistributionInvalidation();
     this.assets = bucket;
+    this.router = router;
     this.cdn = distribution;
 
     this.registerOutputs({
@@ -375,6 +394,30 @@ export class StaticSite extends Component implements Link.Linkable {
         url: this.url,
       },
     });
+
+    function parseArgs() {
+      if (!args.routes)
+        args.routes = {} as NonNullable<{}>
+      return args as StaticSiteArgs & { routes: NonNullable<StaticSiteArgs['routes']> }
+    }
+
+    function validateRoutes() {
+      output(parsedArgs.routes).apply((routes) => {
+        Object.keys(routes).map((path) => {
+          if (path === "/*") {
+            throw new Error(
+              `In "${name}" StaticSite's routes, "/*" is reserved for the static deploy`,
+            );
+          }
+
+          if (!path.startsWith("/")) {
+            throw new Error(
+              `In "${name}" StaticSite's routes, the route path "${path}" must start with a "/"`,
+            );
+          }
+        });
+      });
+    }
 
     function createCloudFrontOriginAccessIdentity() {
       return new aws.cloudfront.OriginAccessIdentity(
@@ -387,7 +430,7 @@ export class StaticSite extends Component implements Link.Linkable {
     function createS3Bucket() {
       return new Bucket(
         `${name}Assets`,
-        transform(args.transform?.assets, {
+        transform(parsedArgs.transform?.assets, {
           transform: {
             policy: (policyArgs) => {
               const newPolicy = aws.iam.getPolicyDocumentOutput({
@@ -420,7 +463,7 @@ export class StaticSite extends Component implements Link.Linkable {
     }
 
     function uploadAssets() {
-      return all([outputPath, args.assets]).apply(
+      return all([outputPath, parsedArgs.assets]).apply(
         async ([outputPath, assets]) => {
           const bucketFiles: BucketFile[] = [];
 
@@ -529,64 +572,82 @@ export class StaticSite extends Component implements Link.Linkable {
       return `${mime}${charset}`;
     }
 
-    function createDistribution() {
-      return new Cdn(
-        `${name}Cdn`,
-        transform(args.transform?.cdn, {
-          comment: `${name} site`,
-          origins: [
-            {
-              originId: "s3",
-              domainName: bucket.nodes.bucket.bucketRegionalDomainName,
-              originPath: "",
-              s3OriginConfig: {
-                originAccessIdentity: access.cloudfrontAccessIdentityPath,
-              },
-            },
-          ],
-          defaultRootObject: indexPage,
-          customErrorResponses: args.errorPage
-            ? [
-              {
-                errorCode: 403,
-                responsePagePath: interpolate`/${args.errorPage}`,
-              },
-              {
-                errorCode: 404,
-                responsePagePath: interpolate`/${args.errorPage}`,
-              },
-            ]
-            : [
-              {
-                errorCode: 403,
-                responsePagePath: interpolate`/${indexPage}`,
-                responseCode: 200,
-              },
-              {
-                errorCode: 404,
-                responsePagePath: interpolate`/${indexPage}`,
-                responseCode: 200,
-              },
-            ],
-          defaultCacheBehavior: {
-            targetOriginId: "s3",
-            viewerProtocolPolicy: "redirect-to-https",
-            allowedMethods: ["GET", "HEAD", "OPTIONS"],
-            cachedMethods: ["GET", "HEAD"],
-            compress: true,
-            // CloudFront's managed CachingOptimized policy
-            cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
+    function createRouter() {
+      return new Router(
+        `${name}Router`,
+        {
+          domain: parsedArgs.domain,
+          routes: {
+            '/*': 'https://will-be-replaced.dummy',
+            ...parsedArgs.routes
           },
-          domain: args.domain,
-          wait: !$dev,
-        }),
-        // create distribution after s3 upload finishes
+          transform: {
+            cachePolicy: parsedArgs.transform?.cachePolicy,
+            cdn(routerCdnArgs) {
+              const newCdnArgs: CdnArgs = {
+                ...routerCdnArgs,
+                comment: `${name} site`,
+                defaultCacheBehavior: {
+                  targetOriginId: "s3",
+                  viewerProtocolPolicy: "redirect-to-https",
+                  allowedMethods: ["GET", "HEAD", "OPTIONS"],
+                  cachedMethods: ["GET", "HEAD"],
+                  compress: true,
+                  // CloudFront's managed CachingOptimized policy
+                  cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
+                },
+                defaultRootObject: indexPage,
+                customErrorResponses: parsedArgs.errorPage
+                  ? [
+                    {
+                      errorCode: 403,
+                      responsePagePath: interpolate`/${parsedArgs.errorPage}`,
+                    },
+                    {
+                      errorCode: 404,
+                      responsePagePath: interpolate`/${parsedArgs.errorPage}`,
+                    },
+                  ]
+                  : [
+                    {
+                      errorCode: 403,
+                      responsePagePath: interpolate`/${indexPage}`,
+                      responseCode: 200,
+                    },
+                    {
+                      errorCode: 404,
+                      responsePagePath: interpolate`/${indexPage}`,
+                      responseCode: 200,
+                    },
+                  ],
+                wait: !$dev,
+              }
+
+              const s3Origin = {
+                originId: "s3",
+                domainName: bucket.nodes.bucket.bucketRegionalDomainName,
+                originPath: "",
+                s3OriginConfig: {
+                  originAccessIdentity: access.cloudfrontAccessIdentityPath,
+                },
+              }
+              newCdnArgs.origins = all([newCdnArgs.origins, s3Origin]).apply(([origins, s3Origin]) => {
+                // Replace the hard-coded '/*' origin at index 0 to our s3Origin
+                origins[0] = s3Origin
+                return origins
+              })
+
+              // @ts-expect-error I wish TS is smarter
+              Object.entries(newCdnArgs).forEach(([key, value]) => routerCdnArgs[key] = value)
+            },
+          }
+        },
         { dependsOn: bucketFile, parent },
       );
     }
 
     function createDistributionInvalidation() {
-      all([outputPath, args.invalidation]).apply(
+      all([outputPath, parsedArgs.invalidation]).apply(
         ([outputPath, invalidationRaw]) => {
           // Normalize invalidation
           if (invalidationRaw === false) return;
@@ -656,6 +717,10 @@ export class StaticSite extends Component implements Link.Linkable {
        * The Amazon S3 Bucket that stores the assets.
        */
       assets: this.assets,
+      /**
+       * SST [Router](/docs/component/aws/router).
+       */
+      router: this.router,
       /**
        * The Amazon CloudFront CDN that serves the site.
        */
