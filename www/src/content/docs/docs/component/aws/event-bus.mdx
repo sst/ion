@@ -1,0 +1,113 @@
+---
+title: EventBus
+description: Reference doc for the `sst.aws.EventBus` component.
+---
+
+{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/event-bus.ts" */}
+
+import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
+import Section from '../../../../../../src/components/tsdoc/Section.astro';
+import NestedTitle from '../../../../../../src/components/tsdoc/NestedTitle.astro';
+import InlineSection from '../../../../../../src/components/tsdoc/InlineSection.astro';
+
+<div class="tsdoc">
+
+<Section type="about">
+The `EventBus` component lets you add an [Amazon EventBridge event bus](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-event-bus.html) to your app.
+
+#### Create the event bus
+
+```ts
+const bus = new sst.aws.EventBus("MyEventBus");
+```
+</Section>
+
+---
+
+## Constructor
+
+<Segment>
+<Section type="signature">
+```ts
+new EventBus(name, args?, opts?)
+```
+</Section>
+
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">name</code> <code class="primitive">string</code></p>
+- <p><code class="key">args?</code> [<code class="type">EventBusArgs</code>](#eventbusargs)</p>
+- <p><code class="key">opts?</code> [<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)</p>
+</Section>
+</Segment>
+
+## Properties
+
+### id
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The Event Bus ID.
+</Segment>
+
+### nodes
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">eventBus</code>](#nodes-eventbus)</p>
+</Section>
+The underlying [resources](/docs/components/#nodes) this component creates.
+</Segment>
+<NestedTitle id="nodes-eventbus" Tag="h4" parent="nodes.">eventBus</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">EventBus</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventbus/)
+</InlineSection>
+</Section>
+The CloudWatch (EventBridge) Event Bus.
+</Segment>
+
+## Links
+
+The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
+
+### id
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">string</code>
+</InlineSection>
+</Section>
+The Event Bus ID.
+</Segment>
+
+## EventBusArgs
+### transform?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">eventBus?</code>](#transform-eventbus)</p>
+</Section>
+[Transform](/docs/components#transform) how this component creates its underlying
+resources.
+
+</Segment>
+<NestedTitle id="transform-eventbus" Tag="h4" parent="transform.">eventBus?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">EventBusArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventbus/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EventBusArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventbus/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+</InlineSection>
+</Section>
+Transform the EventBridge event bus resource.
+
+</Segment>
+</div>
