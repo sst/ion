@@ -173,6 +173,7 @@ export class Component extends ComponentResource {
             case "aws:cloudfront/distribution:Distribution":
             case "aws:cloudfront/function:Function":
             case "aws:cloudfront/originAccessIdentity:OriginAccessIdentity":
+            case "aws:cloudwatch/eventBus:EventBus":
             case "aws:cloudwatch/eventRule:EventRule":
             case "aws:cloudwatch/eventTarget:EventTarget":
             case "aws:cloudwatch/logGroup:LogGroup":

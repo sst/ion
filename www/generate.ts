@@ -1418,6 +1418,7 @@ async function buildComponents() {
       "../pkg/platform/src/components/aws/cron.ts",
       "../pkg/platform/src/components/aws/dynamo.ts",
       "../pkg/platform/src/components/aws/email.ts",
+      "../pkg/platform/src/components/aws/event-bus.ts",
       "../pkg/platform/src/components/aws/function.ts",
       "../pkg/platform/src/components/aws/postgres.ts",
       "../pkg/platform/src/components/aws/vector.ts",
