@@ -66,6 +66,13 @@ export interface EmailArgs {
    * ```
    */
   dns?: Input<false | (Dns & {})>;
+
+  /**
+   * The DMARC policy for the domain. If `dns` is specified and `dmarc` is not,
+   * the default value will be `v=DMARC1; p=none;`.
+   */
+  dmarc?: Input<string>;
+
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -197,7 +204,7 @@ export class Email
           {
             type: "TXT",
             name: interpolate`_dmarc.${args.sender}`,
-            value: `v=DMARC1; p=none;`,
+            value: args.dmarc ?? `v=DMARC1; p=none;`,
           },
           { parent },
         );
