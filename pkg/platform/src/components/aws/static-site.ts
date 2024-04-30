@@ -584,9 +584,23 @@ export class StaticSite extends Component implements Link.Linkable {
           transform: {
             cachePolicy: parsedArgs.transform?.cachePolicy,
             cdn(routerCdnArgs) {
-              const newCdnArgs: CdnArgs = {
+              const s3Origin = {
+                originId: "s3",
+                domainName: bucket.nodes.bucket.bucketRegionalDomainName,
+                originPath: "",
+                s3OriginConfig: {
+                  originAccessIdentity: access.cloudfrontAccessIdentityPath,
+                },
+              };
+
+              const newCdnArgs: CdnArgs = transform(parsedArgs.transform?.cdn, {
                 ...routerCdnArgs,
                 comment: `${name} site`,
+                origins: all([routerCdnArgs.origins, s3Origin]).apply(([origins, s3Origin]) => {
+                  // Replace the hard-coded '/*' origin at index 0 to our s3Origin
+                  origins[0] = s3Origin;
+                  return origins;
+                }),
                 defaultCacheBehavior: {
                   targetOriginId: "s3",
                   viewerProtocolPolicy: "redirect-to-https",
@@ -621,20 +635,6 @@ export class StaticSite extends Component implements Link.Linkable {
                     },
                   ],
                 wait: !$dev,
-              };
-
-              const s3Origin = {
-                originId: "s3",
-                domainName: bucket.nodes.bucket.bucketRegionalDomainName,
-                originPath: "",
-                s3OriginConfig: {
-                  originAccessIdentity: access.cloudfrontAccessIdentityPath,
-                },
-              };
-              newCdnArgs.origins = all([newCdnArgs.origins, s3Origin]).apply(([origins, s3Origin]) => {
-                // Replace the hard-coded '/*' origin at index 0 to our s3Origin
-                origins[0] = s3Origin
-                return origins
               });
 
               // @ts-expect-error I wish TS is smarter
