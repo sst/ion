@@ -95,7 +95,25 @@ export interface RouterArgs {
    * }
    * ```
    */
-  routes: Input<Record<string, Input<string>>>;
+  routes: Input<{
+    // I wish we could do this I couldn't find any way to exclude reserved word from string in typescript, so we're stuck with an OR type
+    // '/*': Input<string | {
+    //   origin: aws.types.input.cloudfront.DistributionOrigin
+    //   behavior: aws.types.input.cloudfront.DistributionDefaultCacheBehavior
+    // }>
+    [path: string]: Input<string | {
+      /**
+       * origin have no defaults and is required
+       */
+      origin: aws.types.input.cloudfront.DistributionOrigin
+      /**
+       * behavior defaults are same when you're using `"path: url"` input for routes
+       * 
+       * Accepts a [Transform](/docs/components#transform)
+       */
+      behavior?: Transform<aws.types.input.cloudfront.DistributionOrderedCacheBehavior | aws.types.input.cloudfront.DistributionDefaultCacheBehavior>
+    }>
+  }>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -267,11 +285,14 @@ export class Router extends Component implements Link.Linkable {
       };
 
       return output(args.routes).apply((routes) => {
-        const origins = Object.entries(routes).map(([path, url]) => ({
-          originId: path,
-          domainName: new URL(url).host,
-          ...defaultConfig,
-        }));
+        const origins = Object.entries(routes).map(([path, value]) => typeof value === 'string'
+          ? {
+            originId: path,
+            domainName: new URL(value).host,
+            ...defaultConfig,
+          }
+          : value.origin
+        );
 
         if (!routes["/*"]) {
           origins.push({
@@ -305,11 +326,18 @@ export class Router extends Component implements Link.Linkable {
       };
 
       return output(args.routes).apply((routes) => {
-        const behaviors = Object.entries(routes).map(([path]) => ({
-          ...(path === "/*" ? {} : { pathPattern: path }),
-          targetOriginId: path,
-          ...defaultConfig,
-        }));
+        const behaviors = Object.entries(routes).map(([path, value]) => typeof value === 'string'
+          ? {
+            ...(path === "/*" ? {} : { pathPattern: path }),
+            targetOriginId: path,
+            ...defaultConfig,
+          }
+          : transform(value.behavior, {
+            ...(path === "/*" ? {} : { pathPattern: path }),
+            targetOriginId: value.origin.originId,
+            ...defaultConfig
+          }) as aws.types.input.cloudfront.DistributionOrderedCacheBehavior // while it can be DefaultCacheBehavior, casting it to Ordered makes it easier to work with the types
+        );
 
         if (!routes["/*"]) {
           behaviors.push({
