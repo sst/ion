@@ -66,13 +66,18 @@ export interface EmailArgs {
    * ```
    */
   dns?: Input<false | (Dns & {})>;
-
   /**
-   * The DMARC policy for the domain. If `dns` is specified and `dmarc` is not,
-   * the default value will be `v=DMARC1; p=none;`.
+   * The DMARC policy for the domain. SST will create a DNS record with the DMARC policy.
+   * You will get an error if you specify this for email address senders.
+   * @default `"v=DMARC1; p=none;"`
+   * @example
+   * ```js
+   * {
+   *   dmarc: "v=DMARC1; p=quarantine; adkim=s; aspf=s;"
+   * }
+   * ```
    */
   dmarc?: Input<string>;
-
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -141,6 +146,7 @@ export class Email
 
     const isDomain = checkIsDomain();
     const dns = normalizeDns();
+    const dmarc = normalizeDmarc();
     const identity = createIdentity();
     isDomain.apply((isDomain) => {
       if (!isDomain) return;
@@ -158,13 +164,24 @@ export class Email
 
     function normalizeDns() {
       all([args.dns, isDomain]).apply(([dns, isDomain]) => {
-        if (dns && !isDomain)
+        if (!isDomain && dns)
           throw new Error(
             `The "dns" property is only valid when "sender" is a domain.`,
           );
       });
 
       return args.dns ?? awsDns();
+    }
+
+    function normalizeDmarc() {
+      all([args.dmarc, isDomain]).apply(([dmarc, isDomain]) => {
+        if (!isDomain && dmarc)
+          throw new Error(
+            `The "dmarc" property is only valid when "sender" is a domain.`,
+          );
+      });
+
+      return args.dmarc ?? `v=DMARC1; p=none;`;
     }
 
     function createIdentity() {
@@ -204,7 +221,7 @@ export class Email
           {
             type: "TXT",
             name: interpolate`_dmarc.${args.sender}`,
-            value: args.dmarc ?? `v=DMARC1; p=none;`,
+            value: dmarc,
           },
           { parent },
         );
