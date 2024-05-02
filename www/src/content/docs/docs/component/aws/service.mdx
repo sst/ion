@@ -236,6 +236,9 @@ The keys need to:
 </InlineSection>
 Configure the docker build command for building the image.
 
+Prior to building the image, SST will automatically add the `.sst` directory
+to the `.dockerignore` file if not already present.
+
 ```js
 {
   image: {
@@ -452,11 +455,7 @@ The [IAM actions](https://docs.aws.amazon.com/service-authorization/latest/refer
 
 ```js
 {
-  permissions: [
-    {
-      actions: ["s3:*"]
-    }
-  ]
+  actions: ["s3:*"]
 }
 ```
 </Segment>
@@ -471,11 +470,7 @@ The resourcess specified using the [IAM ARN format](https://docs.aws.amazon.com/
 
 ```js
 {
-  permissions: [
-    {
-      resources: ["arn:aws:s3:::my-bucket/*"]
-    }
-  ]
+  resources: ["arn:aws:s3:::my-bucket/*"]
 }
 ```
 </Segment>
@@ -509,6 +504,7 @@ You can also configure a custom domain for the public endpoint.
     ]
   }
 }
+```
 </Segment>
 <NestedTitle id="public-domain" Tag="h4" parent="public.">domain?</NestedTitle>
 <Segment>
@@ -517,18 +513,32 @@ You can also configure a custom domain for the public endpoint.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol"> | </code><code class="primitive">Object</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-Set a custom domain for the public endpoint. Supports domains hosted either on
-[Route 53](https://aws.amazon.com/route53/) or outside AWS.
+Set a custom domain for your public endpoint.
+
+Automatically manages domains hosted on AWS Route 53, Cloudflare, and Vercel. For other
+providers, you'll need to pass in a `cert` that validates domain ownership and add the
+DNS records.
 
 :::tip
-You can also migrate an externally hosted domain to Amazon Route 53 by
-[following this guide](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/MigratingDNS.html).
+Built-in support for AWS Route 53, Cloudflare, and Vercel. And manual setup for other
+providers.
 :::
+
+By default this assumes the domain is hosted on Route 53.
 
 ```js
 {
-  public: {
-    domain: "domain.com"
+  domain: "example.com"
+}
+```
+
+For domains hosted on Cloudflare.
+
+```js
+{
+  domain: {
+    name: "example.com",
+    dns: sst.cloudflare.dns()
   }
 }
 ```
@@ -540,13 +550,24 @@ You can also migrate an externally hosted domain to Amazon Route 53 by
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The ARN of an existing certificate in AWS Certificate Manager to use for the domain.
-By default, SST will create a certificate with the domain name.
+The ARN of an ACM (AWS Certificate Manager) certificate that proves ownership of the
+domain. By default, a certificate is created and validated automatically.
+
+:::tip
+You need to pass in a `cert` for domains that are not hosted on supported `dns` providers.
+:::
+
+To manually set up a domain on an unsupported provider, you'll need to:
+
+1. [Validate that you own the domain](https://docs.aws.amazon.com/acm/latest/userguide/domain-ownership-validation.html) by creating an ACM certificate. You can either validate it by setting a DNS record or by verifying an email sent to the domain owner.
+2. Once validated, set the certificate ARN as the `cert` and set `dns` to `false`.
+3. Add the DNS records in your provider to point to the load balancer endpoint.
 
 ```js
 {
   domain: {
-    name: "domain.com",
+    name: "example.com",
+    dns: false,
     cert: "arn:aws:acm:us-east-1:112233445566:certificate/3a958790-8878-4cdc-a396-06d95064cf63"
   }
 }
@@ -563,19 +584,20 @@ By default, SST will create a certificate with the domain name.
 <InlineSection>
 **Default** <code class="primitive">sst.aws.dns</code>
 </InlineSection>
-The DNS adapter you want to use for managing DNS records.
+The DNS provider to use for the domain. Defaults to the AWS.
 
-:::note
-If `dns` is set to `false`, you must provide a validated certificate via `cert`. And
-you have to add the DNS records manually to point to the CloudFront distribution URL.
-:::
+Takes an adapter that can create the DNS records on the provider. This can automate 
+validating the domain and setting up the DNS routing.
 
-Specify the hosted zone ID for the domain.
+Supports Route 53, Cloudflare, and Vercel adapters. For other providers, you'll need
+to set `dns` to `false` and pass in a certificate validating ownership via `cert`.
+
+Specify the hosted zone ID for the Route 53 domain.
 
 ```js
 {
   domain: {
-    name: "domain.com",
+    name: "example.com",
     dns: sst.aws.dns({
       zone: "Z2FDTNDATAQYW2"
     })
@@ -583,13 +605,24 @@ Specify the hosted zone ID for the domain.
 }
 ```
 
-Domain is hosted on Cloudflare.
+Use a domain hosted on Cloudflare, needs the Cloudflare provider.
 
 ```js
 {
   domain: {
-    name: "domain.com",
+    name: "example.com",
     dns: sst.cloudflare.dns()
+  }
+}
+```
+
+Use a domain hosted on Vercel, needs the Vercel provider.
+
+```js
+{
+  domain: {
+    name: "example.com",
+    dns: sst.vercel.dns()
   }
 }
 ```
@@ -601,12 +634,22 @@ Domain is hosted on Cloudflare.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The custom domain you want to use. Supports domains hosted on [Route 53](https://aws.amazon.com/route53/) or outside AWS.
+The custom domain you want to use.
 
 ```js
 {
   domain: {
-    name: "domain.com"
+    name: "example.com"
+  }
+}
+```
+
+Can also include subdomains based on the current stage.
+
+```js
+{
+  domain: {
+    name: `${$app.stage}.example.com`
   }
 }
 ```
@@ -836,7 +879,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">ImageArgs</code>](https://www.pulumi.com/registry/packages/docker/api-docs/image/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ImageArgs</code>](https://www.pulumi.com/registry/packages/docker/api-docs/image/#inputs)<code class="symbol"> => </code>[<code class="type">ImageArgs</code>](https://www.pulumi.com/registry/packages/docker/api-docs/image/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">ImageArgs</code>](https://www.pulumi.com/registry/packages/docker/api-docs/image/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ImageArgs</code>](https://www.pulumi.com/registry/packages/docker/api-docs/image/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the Docker Image resource.
@@ -846,7 +889,7 @@ Transform the Docker Image resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">ListenerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/listener/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ListenerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/listener/#inputs)<code class="symbol"> => </code>[<code class="type">ListenerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/listener/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">ListenerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/listener/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ListenerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/listener/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the AWS Load Balancer listener resource.
@@ -856,7 +899,7 @@ Transform the AWS Load Balancer listener resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">LoadBalancerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/loadbalancer/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">LoadBalancerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/loadbalancer/#inputs)<code class="symbol"> => </code>[<code class="type">LoadBalancerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/loadbalancer/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">LoadBalancerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/loadbalancer/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">LoadBalancerArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/loadbalancer/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the AWS Load Balancer resource.
@@ -866,7 +909,7 @@ Transform the AWS Load Balancer resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> => </code>[<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">LogGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the CloudWatch log group resource.
@@ -876,7 +919,7 @@ Transform the CloudWatch log group resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">ServiceArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/service/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ServiceArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/service/#inputs)<code class="symbol"> => </code>[<code class="type">ServiceArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/service/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">ServiceArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/service/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ServiceArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/service/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the ECS Service resource.
@@ -886,7 +929,7 @@ Transform the ECS Service resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">TargetGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/targetgroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">TargetGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/targetgroup/#inputs)<code class="symbol"> => </code>[<code class="type">TargetGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/targetgroup/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">TargetGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/targetgroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">TargetGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lb/targetgroup/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the AWS Load Balancer target group resource.
@@ -896,7 +939,7 @@ Transform the AWS Load Balancer target group resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">TaskDefinitionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/taskdefinition/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">TaskDefinitionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/taskdefinition/#inputs)<code class="symbol"> => </code>[<code class="type">TaskDefinitionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/taskdefinition/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">TaskDefinitionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/taskdefinition/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">TaskDefinitionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ecs/taskdefinition/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the ECS Task Definition resource.
@@ -906,7 +949,7 @@ Transform the ECS Task Definition resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> => </code>[<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RoleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the ECS Task IAM Role resource.

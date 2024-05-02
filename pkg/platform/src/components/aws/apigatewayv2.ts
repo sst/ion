@@ -23,12 +23,23 @@ import { Dns } from "../dns";
 
 interface DomainArgs {
   /**
-   * The custom domain you want to use. Supports domains hosted on [Route 53](https://aws.amazon.com/route53/) or outside AWS.
+   * The custom domain you want to use.
+   *
    * @example
    * ```js
    * {
    *   domain: {
-   *     name: "domain.com"
+   *     name: "example.com"
+   *   }
+   * }
+   * ```
+   *
+   * Can also include subdomains based on the current stage.
+   *
+   * ```js
+   * {
+   *   domain: {
+   *     name: `${$app.stage}.example.com`
    *   }
    * }
    * ```
@@ -44,30 +55,41 @@ interface DomainArgs {
    * ```js
    * {
    *   domain: {
-   *     name: "api.domain.com",
+   *     name: "api.example.com",
    *     path: "v1"
    *   }
    * }
    * ```
    *
-   * The full URL of the API will be `https://api.domain.com/v1/`.
+   * The full URL of the API will be `https://api.example.com/v1/`.
    *
    * :::note
    * There's an extra trailing slash when a base path is set.
    * :::
    *
-   * Be default there is no base path, so if the `name` is `api.domain.com`, the full URL will be `https://api.domain.com`.
+   * Be default there is no base path, so if the `name` is `api.example.com`, the full URL will be `https://api.example.com`.
    */
   path?: Input<string>;
   /**
-   * The ARN of an existing certificate in AWS Certificate Manager to use for the domain.
-   * By default, SST will create a certificate with the domain name.
+   * The ARN of an ACM (AWS Certificate Manager) certificate that proves ownership of the
+   * domain. By default, a certificate is created and validated automatically.
+   *
+   * :::tip
+   * You need to pass in a `cert` for domains that are not hosted on supported `dns` providers.
+   * :::
+   *
+   * To manually set up a domain on an unsupported provider, you'll need to:
+   *
+   * 1. [Validate that you own the domain](https://docs.aws.amazon.com/acm/latest/userguide/domain-ownership-validation.html) by creating an ACM certificate. You can either validate it by setting a DNS record or by verifying an email sent to the domain owner.
+   * 2. Once validated, set the certificate ARN as the `cert` and set `dns` to `false`.
+   * 3. Add the DNS records in your provider to point to the API Gateway URL.
    *
    * @example
    * ```js
    * {
    *   domain: {
-   *     name: "domain.com",
+   *     name: "example.com",
+   *     dns: false,
    *     cert: "arn:aws:acm:us-east-1:112233445566:certificate/3a958790-8878-4cdc-a396-06d95064cf63"
    *   }
    * }
@@ -75,22 +97,24 @@ interface DomainArgs {
    */
   cert?: Input<string>;
   /**
-   * The DNS adapter you want to use for managing DNS records.
+   * The DNS provider to use for the domain. Defaults to the AWS.
    *
-   * :::note
-   * If `dns` is set to `false`, you must provide a validated certificate via `cert`. And
-   * you have to add the DNS records manually to point to the CloudFront distribution URL.
-   * :::
+   * Takes an adapter that can create the DNS records on the provider. This can automate
+   * validating the domain and setting up the DNS routing.
+   *
+   * Supports Route 53, Cloudflare, and Vercel adapters. For other providers, you'll need
+   * to set `dns` to `false` and pass in a certificate validating ownership via `cert`.
    *
    * @default `sst.aws.dns`
+   *
    * @example
    *
-   * Specify the hosted zone ID for the domain.
+   * Specify the hosted zone ID for the Route 53 domain.
    *
    * ```js
    * {
    *   domain: {
-   *     name: "domain.com",
+   *     name: "example.com",
    *     dns: sst.aws.dns({
    *       zone: "Z2FDTNDATAQYW2"
    *     })
@@ -98,13 +122,24 @@ interface DomainArgs {
    * }
    * ```
    *
-   * Domain is hosted on Cloudflare.
+   * Use a domain hosted on Cloudflare, needs the Cloudflare provider.
    *
    * ```js
    * {
    *   domain: {
-   *     name: "domain.com",
+   *     name: "example.com",
    *     dns: sst.cloudflare.dns()
+   *   }
+   * }
+   * ```
+   *
+   * Use a domain hosted on Vercel, needs the Vercel provider.
+   *
+   * ```js
+   * {
+   *   domain: {
+   *     name: "example.com",
+   *     dns: sst.vercel.dns()
    *   }
    * }
    * ```
@@ -114,19 +149,35 @@ interface DomainArgs {
 
 export interface ApiGatewayV2Args {
   /**
-   * Set a custom domain for your HTTP API. Supports domains hosted either on
-   * [Route 53](https://aws.amazon.com/route53/) or outside AWS.
+   * Set a custom domain for your HTTP API.
+   *
+   * Automatically manages domains hosted on AWS Route 53, Cloudflare, and Vercel. For other
+   * providers, you'll need to pass in a `cert` that validates domain ownership and add the
+   * DNS records.
    *
    * :::tip
-   * You can also migrate an externally hosted domain to Amazon Route 53 by
-   * [following this guide](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/MigratingDNS.html).
+   * Built-in support for AWS Route 53, Cloudflare, and Vercel. And manual setup for other
+   * providers.
    * :::
    *
    * @example
    *
+   * By default this assumes the domain is hosted on Route 53.
+   *
    * ```js
    * {
-   *   domain: "api.domain.com"
+   *   domain: "example.com"
+   * }
+   * ```
+   *
+   * For domains hosted on Cloudflare.
+   *
+   * ```js
+   * {
+   *   domain: {
+   *     name: "example.com",
+   *     dns: sst.cloudflare.dns()
+   *   }
    * }
    * ```
    */
@@ -171,6 +222,36 @@ export interface ApiGatewayV2Args {
      * Transform the CloudWatch LogGroup resource used for access logs.
      */
     accessLog?: Transform<aws.cloudwatch.LogGroupArgs>;
+    /**
+     * Transform the routes. This can be used to customize the handler function and
+     * the arguments for each route.
+     *
+     * @example
+     * ```js
+     * {
+     *   transform: {
+     *     route: {
+     *       handler: {
+     *         link: [bucket, stripeKey]
+     *       },
+     *       args: {
+     *         auth: { iam: true }
+     *       }
+     *     }
+     *   }
+     * }
+     * ```
+     */
+    route?: {
+      /**
+       * Transform the handler function for the route.
+       */
+      handler?: Transform<FunctionArgs>;
+      /**
+       * Transform the arguments for the route.
+       */
+      args?: Transform<ApiGatewayV2RouteArgs>;
+    };
   };
 }
 
@@ -309,7 +390,7 @@ export interface ApiGatewayV2Route {
  *
  * ```js {2}
  * new sst.aws.ApiGatewayV2("MyApi", {
- *   domain: "api.domain.com"
+ *   domain: "api.example.com"
  * });
  * ```
  *
@@ -322,6 +403,7 @@ export interface ApiGatewayV2Route {
  */
 export class ApiGatewayV2 extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorArgs: ApiGatewayV2Args;
   private api: aws.apigatewayv2.Api;
   private apigDomain?: aws.apigatewayv2.DomainName;
   private apiMapping?: Output<aws.apigatewayv2.ApiMapping>;
@@ -350,6 +432,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     const apiMapping = createDomainMapping();
 
     this.constructorName = name;
+    this.constructorArgs = args;
     this.api = api;
     this.apigDomain = apigDomain;
     this.apiMapping = apiMapping;
@@ -565,6 +648,10 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
        * The Amazon API Gateway HTTP API
        */
       api: this.api,
+      /**
+       * The CloudWatch LogGroup for the access logs.
+       */
+      logGroup: this.logGroup,
     };
   }
 
@@ -657,8 +744,8 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     handler: string | FunctionArgs,
     args: ApiGatewayV2RouteArgs = {},
   ): ApiGatewayV2Route {
-    const source = this;
-    const sourceName = this.constructorName;
+    const self = this;
+    const selfName = this.constructorName;
     const routeKey = parseRoute();
 
     // Build route name
@@ -666,11 +753,18 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
       hashStringToPrettyString([this.api.id, routeKey].join(""), 4),
     );
 
-    const fn = Function.fromDefinition(`${sourceName}Handler${id}`, handler, {
-      description: `${sourceName} route ${routeKey}`,
-    });
+    args = transform(this.constructorArgs.transform?.route?.args, args);
+
+    const fn = Function.fromDefinition(
+      `${selfName}Handler${id}`,
+      handler,
+      {
+        description: `${selfName} route ${routeKey}`,
+      },
+      this.constructorArgs.transform?.route?.handler,
+    );
     const permission = new aws.lambda.Permission(
-      `${sourceName}Handler${id}Permissions`,
+      `${selfName}Handler${id}Permissions`,
       {
         action: "lambda:InvokeFunction",
         function: fn.arn,
@@ -679,7 +773,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
       },
     );
     const integration = new aws.apigatewayv2.Integration(
-      `${sourceName}Integration${id}`,
+      `${selfName}Integration${id}`,
       transform(args.transform?.integration, {
         apiId: this.api.id,
         integrationType: "AWS_PROXY",
@@ -693,7 +787,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     const apiRoute = authArgs.apply(
       (authArgs) =>
         new aws.apigatewayv2.Route(
-          `${sourceName}Route${id}`,
+          `${selfName}Route${id}`,
           transform(args.transform?.route, {
             apiId: this.api.id,
             routeKey,
@@ -754,11 +848,11 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
           );
 
           const authorizer =
-            source.authorizers[id] ??
+            self.authorizers[id] ??
             new aws.apigatewayv2.Authorizer(
-              `${sourceName}Authorizer${id}`,
+              `${selfName}Authorizer${id}`,
               transform(args.transform?.authorizer, {
-                apiId: source.api.id,
+                apiId: self.api.id,
                 authorizerType: "JWT",
                 identitySources: [
                   auth.jwt.identitySource ?? "$request.header.Authorization",
@@ -769,7 +863,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
                 },
               }),
             );
-          source.authorizers[id] = authorizer;
+          self.authorizers[id] = authorizer;
 
           return {
             authorizationType: "JWT",

@@ -98,6 +98,7 @@ export class Service extends Component implements Link.Linkable {
       return;
     }
 
+    const executionRole = createExecutionRole();
     const image = createImage();
     const logGroup = createLogGroup();
     const taskDefinition = createTaskDefinition();
@@ -117,7 +118,7 @@ export class Service extends Component implements Link.Linkable {
       ? undefined
       : all([self.domain, self.loadBalancer?.dnsName]).apply(
           ([domain, loadBalancer]) =>
-            domain ? `https://${domain}/` : `https://${loadBalancer}`,
+            domain ? `https://${domain}/` : `http://${loadBalancer}`,
         );
 
     registerHint();
@@ -446,49 +447,46 @@ export class Service extends Component implements Link.Linkable {
       );
 
       return new aws.iam.Role(
-        `${name}Role`,
+        `${name}TaskRole`,
         transform(args.transform?.taskRole, {
           assumeRolePolicy: !$dev
             ? aws.iam.assumeRolePolicyForPrincipal({
                 Service: "ecs-tasks.amazonaws.com",
               })
-            : aws.iam.getPolicyDocumentOutput({
-                statements: [
-                  {
-                    actions: ["sts:AssumeRole"],
-                    principals: [
-                      {
-                        type: "Service",
-                        identifiers: ["lambda.amazonaws.com"],
-                      },
-                      {
-                        type: "AWS",
-                        identifiers: [
-                          interpolate`arn:aws:iam::${
-                            aws.getCallerIdentityOutput().accountId
-                          }:root`,
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              }).json,
+            : aws.iam.assumeRolePolicyForPrincipal({
+                AWS: interpolate`arn:aws:iam::${
+                  aws.getCallerIdentityOutput().accountId
+                }:root`,
+              }),
           inlinePolicies: policy.apply(({ statements }) =>
             statements ? [{ name: "inline", policy: policy.json }] : [],
           ),
-          managedPolicyArns: [
-            "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
-          ],
         }),
         { parent: self },
       );
     }
 
+    function createExecutionRole() {
+      return new aws.iam.Role(
+        `${name}ExecutionRole`,
+        {
+          assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
+            Service: "ecs-tasks.amazonaws.com",
+          }),
+          managedPolicyArns: [
+            "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+          ],
+        },
+        { parent: self },
+      );
+    }
+
     function createTaskDefinition() {
+      const taskName = prefixName(255, name);
       return new aws.ecs.TaskDefinition(
         `${name}Task`,
         transform(args.transform?.taskDefinition, {
-          family: name,
+          family: taskName,
           trackLatest: true,
           cpu: cpu.apply((v) => toNumber(v).toString()),
           memory: memory.apply((v) => toMBs(v).toString()),
@@ -501,11 +499,13 @@ export class Service extends Component implements Link.Linkable {
             cpuArchitecture: architecture.apply((v) => v.toUpperCase()),
             operatingSystemFamily: "LINUX",
           },
-          executionRoleArn: taskRole.arn,
+          executionRoleArn: executionRole.arn,
+          taskRoleArn: taskRole.arn,
           containerDefinitions: $jsonStringify([
             {
-              name,
+              name: taskName,
               image: image.repoDigest,
+              pseudoTerminal: true,
               portMappings: pub?.ports.apply((ports) =>
                 ports
                   .map((port) => port.forwardPort)
@@ -544,6 +544,7 @@ export class Service extends Component implements Link.Linkable {
       return new aws.ecs.Service(
         `${name}Service`,
         transform(args.transform?.service, {
+          name,
           cluster: cluster.arn,
           taskDefinition: taskDefinition.arn,
           desiredCount: 1,
@@ -562,7 +563,7 @@ export class Service extends Component implements Link.Linkable {
             targets.apply((targets) =>
               Object.values(targets).map((target) => ({
                 targetGroupArn: target.arn,
-                containerName: name,
+                containerName: taskDefinition.family,
                 containerPort: target.port.apply((port) => port!),
               })),
             ),
@@ -659,7 +660,9 @@ export class Service extends Component implements Link.Linkable {
           directory: imageArgs.context,
           links: linkData.apply((input) => input.map((item) => item.name)),
           environment: args.environment,
-          awsRole: taskRole.arn,
+          aws: {
+            role: taskRole.arn,
+          },
         })),
       });
     }

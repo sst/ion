@@ -230,7 +230,10 @@ export interface WorkerArgs {
  * });
  * ```
  */
-export class Worker extends Component implements Link.Cloudflare.Linkable {
+export class Worker
+  extends Component
+  implements Link.Cloudflare.Linkable, Link.Linkable
+{
   private script: Output<cf.WorkerScript>;
   private workerUrl: WorkerUrl;
   private workerDomain?: cf.WorkerDomain;
@@ -254,6 +257,17 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
     this.workerDomain = workerDomain;
 
     this.registerOutputs({
+      _receiver: {
+        directory: args.handler,
+        links: all([bindings]).apply(([links]) =>
+          Object.values(links)
+            .flat()
+            .map((l) => l.name),
+        ),
+        environment: args.environment,
+        cloudflare: {},
+      },
+
       _live: all([name, args.handler, args.build]).apply(
         ([name, handler, build]) => ({
           functionID: name,
@@ -294,6 +308,7 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
               name,
               ...binding.properties,
             });
+            continue;
           }
           if (Link.isLinkable(link)) {
             const name = output(link.urn).apply(
@@ -371,17 +386,17 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
               accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
               content: (await fs.readFile(handler)).toString(),
               module: true,
-              compatibilityDate: "2024-01-01",
+              compatibilityDate: "2024-04-04",
               compatibilityFlags: ["nodejs_compat"],
               ...bindings,
               plainTextBindings: [
                 ...(iamCredentials
                   ? [
-                    {
-                      name: "AWS_ACCESS_KEY_ID",
-                      text: iamCredentials.id,
-                    },
-                  ]
+                      {
+                        name: "AWS_ACCESS_KEY_ID",
+                        text: iamCredentials.id,
+                      },
+                    ]
                   : []),
                 ...Object.entries(environment ?? {}).map(([key, value]) => ({
                   name: key,
@@ -392,11 +407,11 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
               secretTextBindings: [
                 ...(iamCredentials
                   ? [
-                    {
-                      name: "AWS_SECRET_ACCESS_KEY",
-                      text: iamCredentials.secret,
-                    },
-                  ]
+                      {
+                        name: "AWS_SECRET_ACCESS_KEY",
+                        text: iamCredentials.secret,
+                      },
+                    ]
                   : []),
                 ...(bindings.secretTextBindings || []),
               ],
@@ -472,6 +487,17 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
       type: "serviceBindings",
       properties: {
         service: this.script.id,
+      },
+    };
+  }
+
+  /**
+   * @internal
+   */
+  public getSSTLink() {
+    return {
+      properties: {
+        url: this.url,
       },
     };
   }

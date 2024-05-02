@@ -309,7 +309,7 @@ var Root = Command{
 				Long: strings.Join([]string{
 					"Initialize a new project in the current directory. This will create a `sst.config.ts` and `sst install` your providers.",
 					"",
-					"If this is run in a Next.js, Remix, or Astro project, it'll init SST in drop-in mode.",
+					"If this is run in a Next.js, Remix, Astro, or SvelteKit project, it'll init SST in drop-in mode.",
 				}, "\n"),
 			},
 			Run: CmdInit,
@@ -368,6 +368,16 @@ var Root = Command{
 					"",
 					"This is different from SST v2, in that you needed to run `sst dev` and `sst bind` for your frontend.",
 				}, "\n"),
+			},
+			Flags: []Flag{
+				{
+					Name: "silent",
+					Type: "bool",
+					Description: Description{
+						Short: "Do not output function invocation logs",
+						Long:  "Do not output function invocation logs",
+					},
+				},
 			},
 			Args: []Argument{
 				{
@@ -696,28 +706,60 @@ var Root = Command{
 							},
 						},
 					},
-					Run: func(cli *Cli) error {
-						key := cli.Positional(0)
-						value := cli.Positional(1)
-						p, err := initProject(cli)
-						if err != nil {
-							return err
-						}
-						defer p.Cleanup()
-						backend := p.Backend()
-						secrets, err := provider.GetSecrets(backend, p.App().Name, p.App().Stage)
-						if err != nil {
-							return util.NewReadableError(err, "Could not get secrets")
-						}
-						secrets[key] = value
-						err = provider.PutSecrets(backend, p.App().Name, p.App().Stage, secrets)
-						if err != nil {
-							return util.NewReadableError(err, "Could not set secret")
-						}
-						http.Post("http://localhost:13557/api/deploy", "application/json", strings.NewReader("{}"))
-						ui.Success(fmt.Sprintf("Set \"%s\" for stage \"%s\". Run \"sst deploy\" to update.", key, p.App().Stage))
-						return nil
+					Run: CmdSecretSet,
+				},
+				{
+					Name: "load",
+					Description: Description{
+						Short: "Set multiple secrets from file",
+						Long: strings.Join([]string{
+							"Load all the secrets from a file and set them.",
+							"",
+							"```bash frame=\"none\"",
+							"sst secret load ./secrets.env",
+							"```",
+							"",
+							"The file needs to be in the _dotenv_ or bash format of key-value pairs.",
+							"",
+							"```sh title=\"secrets.env\"",
+							"KEY_1=VALUE1",
+							"KEY_2=VALUE2",
+							"```",
+							"",
+							"Optionally, set the secrets in a specific stage.",
+							"",
+							"```bash frame=\"none\"",
+							"sst secret load ./prod.env --stage=production",
+							"```",
+							"",
+							"",
+						}, "\n"),
 					},
+					Args: []Argument{
+						{
+							Name:     "file",
+							Required: true,
+							Description: Description{
+								Short: "The file to load secrets from",
+								Long:  "The file to load the secrets from.",
+							},
+						},
+					},
+					Examples: []Example{
+						{
+							Content: "sst secret load ./secrets.env",
+							Description: Description{
+								Short: "Loads all secrets from the file",
+							},
+						},
+						{
+							Content: "sst secret load ./prod.env --stage=production",
+							Description: Description{
+								Short: "Set secrets for production",
+							},
+						},
+					},
+					Run: CmdSecretLoad,
 				},
 				{
 					Name: "remove",

@@ -108,7 +108,7 @@ export const handler = awsLambdaRequestHandler({
 
 We are creating a simple method called `greet` that takes a _string_ as an input.
 
-Add the relevant imports.
+Add the imports.
 
 ```ts title="index.ts"
 import { z } from "zod";
@@ -123,7 +123,7 @@ import { initTRPC } from "@trpc/server";
 And install the npm packages.
 
 ```bash
-npm install zod @trpc/server
+npm install zod @trpc/server@next
 ```
 
 ---
@@ -164,7 +164,7 @@ import { createTRPCClient, httpBatchLink } from "@trpc/client";
 Install the client npm package.
 
 ```bash
-npm install @trpc/client
+npm install @trpc/client@next
 ```
 
 ---
@@ -195,6 +195,6 @@ sst deploy
 
 As a next step, you can manage your app and view issues in the [SST Console](/docs/console/).
 
-![Issues in tRPC app in SST Console](../../../../../assets/docs/issues-in-trpc-app-in-the-sst-console.png)
+![Issues in tRPC app in SST Console](../../../../../assets/docs/start/issues-in-trpc-app-in-the-sst-console.png)
 
 You can [create a free account](https://console.sst.dev) and connect it to your AWS account.

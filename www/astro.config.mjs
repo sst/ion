@@ -16,11 +16,14 @@ const sidebar = [
       { label: "tRPC", link: "/docs/start/aws/trpc/" },
       { label: "Hono", link: "/docs/start/aws/hono/" },
       { label: "Astro", link: "/docs/start/aws/astro/" },
+      { label: "Email", link: "/docs/start/aws/email/" },
       { label: "Remix", link: "/docs/start/aws/remix/" },
       { label: "Next.js", link: "/docs/start/aws/nextjs/" },
+      { label: "Container", link: "/docs/start/aws/container/" },
       {
         label: "Cloudflare",
         items: [
+          { label: "tRPC", link: "/docs/start/cloudflare/trpc/" },
           { label: "Hono", link: "/docs/start/cloudflare/hono/" },
           { label: "Worker", link: "/docs/start/cloudflare/worker/" },
         ],
@@ -43,6 +46,7 @@ const sidebar = [
       { label: "Vpc", link: "/docs/component/aws/vpc/" },
       { label: "Cron", link: "/docs/component/aws/cron/" },
       { label: "Astro", link: "/docs/component/aws/astro/" },
+      { label: "Email", link: "/docs/component/aws/email/" },
       { label: "Remix", link: "/docs/component/aws/remix/" },
       { label: "Nextjs", link: "/docs/component/aws/nextjs/" },
       { label: "Queue", link: "/docs/component/aws/queue/" },
@@ -54,11 +58,20 @@ const sidebar = [
       { label: "SnsTopic", link: "/docs/component/aws/sns-topic/" },
       { label: "Function", link: "/docs/component/aws/function/" },
       { label: "Postgres", link: "/docs/component/aws/postgres/" },
+      { label: "SvelteKit", link: "/docs/component/aws/svelte-kit/" },
       { label: "StaticSite", link: "/docs/component/aws/static-site/" },
       { label: "SolidStart", link: "/docs/component/aws/solid-start/" },
       {
         label: "ApiGatewayV2",
         link: "/docs/component/aws/apigatewayv2/",
+      },
+      {
+        label: "CognitoUserPool",
+        link: "/docs/component/aws/cognito-user-pool/",
+      },
+      {
+        label: "CognitoIdentityPool",
+        link: "/docs/component/aws/cognito-identity-pool/",
       },
     ],
   },
@@ -82,6 +95,14 @@ const sidebar = [
     ],
   },
   {
+    label: "How to",
+    items: [
+      // { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
+      // { label: "Import Resources", link: "/docs/import-resources/" },
+      { label: "Custom Domains", link: "/docs/custom-domains/" },
+    ],
+  },
+  {
     label: "Internal",
     collapsed: true,
     items: [
@@ -101,17 +122,13 @@ const sidebar = [
         ],
       },
       { label: "Service", link: "/docs/component/aws/service/" },
+      {
+        label: "CognitoUserPoolClient",
+        link: "/docs/component/aws/cognito-user-pool-client/",
+      },
     ],
   },
   { label: "Examples", link: "/docs/examples/" },
-  //  {
-  //    label: "How to",
-  //    items: [
-  //      { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
-  //      { label: "Import Resources", link: "/docs/import-resources/" },
-  //      { label: "Create an AWS Account", link: "/docs/create-an-aws-account/" },
-  //    ],
-  //  },
 ];
 
 if (import.meta.env.DEV) {
@@ -131,6 +148,9 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
   },
+  devToolbar: {
+    enabled: false,
+  }, 
   redirects: {
     "/install": "https://raw.githubusercontent.com/sst/ion/dev/install",
   },

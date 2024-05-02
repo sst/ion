@@ -1,8 +1,13 @@
 package project
 
 import (
+	"sort"
 	"strings"
 )
+
+type literal struct {
+	value string
+}
 
 func inferTypes(input map[string]interface{}, indentArgs ...string) string {
 	indent := ""
@@ -12,14 +17,22 @@ func inferTypes(input map[string]interface{}, indentArgs ...string) string {
 	var builder strings.Builder
 	builder.WriteString("{")
 	builder.WriteString("\n")
-	for key, value := range input {
+	keys := make([]string, 0, len(input))
+	for key := range input {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := input[key]
 		builder.WriteString(indent + "  " + key + ": ")
 		if key == "type" && len(indentArgs) == 1 {
 			builder.WriteString("\"")
 			builder.WriteString(value.(string))
 			builder.WriteString("\"")
 		} else {
-			switch value.(type) {
+			switch v := value.(type) {
+			case literal:
+				builder.WriteString(v.value)
 			case string:
 				builder.WriteString("string")
 			case int:

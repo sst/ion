@@ -7,14 +7,35 @@ import { Cdn, CdnArgs } from "./cdn";
 
 export interface RouterArgs {
   /**
-   * Set a custom domain for your Router. Supports domains hosted either on
-   * [Route 53](https://aws.amazon.com/route53/) or outside AWS.
+   * Set a custom domain for your Router.
+   *
+   * Automatically manages domains hosted on AWS Route 53, Cloudflare, and Vercel. For other
+   * providers, you'll need to pass in a `cert` that validates domain ownership and add the
+   * DNS records.
+   *
+   * :::tip
+   * Built-in support for AWS Route 53, Cloudflare, and Vercel. And manual setup for other
+   * providers.
+   * :::
    *
    * @example
    *
+   * By default this assumes the domain is hosted on Route 53.
+   *
    * ```js
    * {
-   *   domain: "domain.com"
+   *   domain: "example.com"
+   * }
+   * ```
+   *
+   * For domains hosted on Cloudflare.
+   *
+   * ```js
+   * {
+   *   domain: {
+   *     name: "example.com",
+   *     dns: sst.cloudflare.dns()
+   *   }
    * }
    * ```
    *
@@ -167,6 +188,10 @@ export class Router extends Component implements Link.Linkable {
     this.cachePolicy = cachePolicy;
     this.cdn = cdn;
 
+    this.registerOutputs({
+      _hint: this.url,
+    });
+
     function validateRoutes() {
       output(args.routes).apply((routes) => {
         Object.keys(routes).map((path) => {
@@ -274,8 +299,8 @@ export class Router extends Component implements Link.Linkable {
         cachedMethods: ["GET", "HEAD"],
         defaultTtl: 0,
         compress: true,
-        // CloudFront's Managed-AllViewerExceptHostHeader policy
         cachePolicyId: cachePolicy.id,
+        // CloudFront's Managed-AllViewerExceptHostHeader policy
         originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac",
       };
 

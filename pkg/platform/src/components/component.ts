@@ -5,6 +5,7 @@ import {
   runtime,
   output,
 } from "@pulumi/pulumi";
+import * as aws from "@pulumi/aws";
 import { prefixName } from "./naming.js";
 import { VisibleError } from "./error.js";
 
@@ -15,15 +16,15 @@ export type Prettify<T> = {
   [K in keyof T]: T[K];
 } & {};
 
-export type Transform<T> = T | ((args: T) => void | T);
+export type Transform<T> = Partial<T> | ((args: T) => void);
 export function transform<T extends object>(
   transform: Transform<T> | undefined,
   args: T,
 ) {
   // Case: transform is a function
   if (typeof transform === "function") {
-    const ret = transform(args);
-    return ret ?? args;
+    transform(args);
+    return args;
   }
 
   // Case: no transform
@@ -90,14 +91,27 @@ export class Component extends ComponentResource {
                 ),
               };
               break;
+            case "aws:iam/role:Role":
+              overrides = {
+                name: aws
+                  .getRegionOutput(undefined, { provider: args.opts.provider })
+                  .name.apply((region) =>
+                    prefixName(
+                      64,
+                      args.name,
+                      `-${region.toLowerCase().replace(/-/g, "")}`,
+                    ),
+                  ),
+              };
+              break;
             case "aws:apigatewayv2/api:Api":
             case "aws:apigatewayv2/authorizer:Authorizer":
+            case "aws:cognito/userPool:UserPool":
               overrides = { name: prefixName(128, args.name) };
               break;
             case "aws:appautoscaling/policy:Policy":
             case "aws:dynamodb/table:Table":
             case "aws:ecs/cluster:Cluster":
-            case "aws:ecs/service:Service":
               overrides = { name: prefixName(255, args.name) };
               break;
             case "aws:ec2/eip:Eip":
@@ -134,8 +148,10 @@ export class Component extends ComponentResource {
                 title: prefixName(64, args.name).toLowerCase(),
               };
               break;
-            // resources prefixed manually
-            case "aws:iam/role:Role":
+            // resources manually named
+            case "aws:cognito/identityPool:IdentityPool":
+            case "aws:ecs/service:Service":
+            case "aws:ecs/taskDefinition:TaskDefinition":
             case "aws:lb/targetGroup:TargetGroup":
             case "aws:s3/bucketV2:BucketV2":
               break;
@@ -149,7 +165,6 @@ export class Component extends ComponentResource {
             case "aws:acm/certificate:Certificate":
             case "aws:acm/certificateValidation:CertificateValidation":
             case "aws:ec2/routeTableAssociation:RouteTableAssociation":
-            case "aws:ecs/taskDefinition:TaskDefinition":
             case "aws:iam/accessKey:AccessKey":
             case "aws:iam/policy:Policy":
             case "aws:iam/rolePolicyAttachment:RolePolicyAttachment":
@@ -161,6 +176,8 @@ export class Component extends ComponentResource {
             case "aws:cloudwatch/eventRule:EventRule":
             case "aws:cloudwatch/eventTarget:EventTarget":
             case "aws:cloudwatch/logGroup:LogGroup":
+            case "aws:cognito/identityPoolRoleAttachment:IdentityPoolRoleAttachment":
+            case "aws:cognito/userPoolClient:UserPoolClient":
             case "aws:lambda/eventSourceMapping:EventSourceMapping":
             case "aws:lambda/functionUrl:FunctionUrl":
             case "aws:lambda/invocation:Invocation":
@@ -174,7 +191,10 @@ export class Component extends ComponentResource {
             case "aws:s3/bucketPolicy:BucketPolicy":
             case "aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock":
             case "aws:s3/bucketWebsiteConfigurationV2:BucketWebsiteConfigurationV2":
+            case "aws:ses/domainIdentityVerification:DomainIdentityVerification":
+            case "aws:sesv2/emailIdentity:EmailIdentity":
             case "aws:sns/topicSubscription:TopicSubscription":
+            case "cloudflare:index/record:Record":
             case "cloudflare:index/workerDomain:WorkerDomain":
             case "docker:index/image:Image":
             case "vercel:index/dnsRecord:DnsRecord":

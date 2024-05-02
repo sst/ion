@@ -102,6 +102,7 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs {
         paths?: Input<"all" | "versioned" | string[]>;
       }
   >;
+  vpc?: FunctionArgs["vpc"];
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -445,7 +446,9 @@ function handler(event) {
                 ...(link ?? []),
               ]),
               transform: {
-                function: (args) => ({ ...args, publish: true }),
+                function: (args) => {
+                  args.publish = true;
+                },
               },
               live: false,
               _ignoreCodeChanges: $dev,
@@ -523,8 +526,8 @@ function handler(event) {
           description: `${name} server`,
           runtime: "nodejs20.x",
           timeout: "20 seconds",
-          permissions: args.permissions,
           memory: "1024 MB",
+          vpc: args.vpc,
           ...props.function,
           nodejs: {
             format: "esm" as const,
@@ -534,6 +537,10 @@ function handler(event) {
             ...environment,
             ...props.function.environment,
           })),
+          permissions: output(args.permissions).apply((permissions) => [
+            ...(permissions ?? []),
+            ...(props.function.permissions ?? []),
+          ]),
           streaming: props.streaming,
           injections: args.warm
             ? [useServerFunctionWarmingInjection(props.streaming)]
@@ -821,8 +828,8 @@ function handler(event) {
             _skipMetadata: true,
           },
           transform: {
-            target: (targetArgs) => {
-              targetArgs.retryPolicy = {
+            target: (args) => {
+              args.retryPolicy = {
                 maximumRetryAttempts: 0,
                 maximumEventAgeInSeconds: 60,
               };

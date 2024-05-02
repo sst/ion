@@ -391,21 +391,37 @@ If you want to use a custom `build` script from your `package.json`.
 - <p>[<code class="key">name</code>](#domain-name)</p>
 - <p>[<code class="key">redirects?</code>](#domain-redirects)</p>
 </Section>
-Set a custom domain for your Next.js app. Supports domains hosted either on
-[Route 53](https://aws.amazon.com/route53/) or outside AWS.
+Set a custom domain for your Next.js app.
+
+Automatically manages domains hosted on AWS Route 53, Cloudflare, and Vercel. For other
+providers, you'll need to pass in a `cert` that validates domain ownership and add the
+DNS records.
 
 :::tip
-You can also migrate an externally hosted domain to Amazon Route 53 by
-[following this guide](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/MigratingDNS.html).
+Built-in support for AWS Route 53, Cloudflare, and Vercel. And manual setup for other
+providers.
 :::
+
+By default this assumes the domain is hosted on Route 53.
 
 ```js
 {
-  domain: "domain.com"
+  domain: "example.com"
 }
 ```
 
-Specify the Route 53 hosted zone and a `www.` version of the custom domain.
+For domains hosted on Cloudflare.
+
+```js
+{
+  domain: {
+    name: "example.com",
+    dns: sst.cloudflare.dns()
+  }
+}
+```
+
+Specify a `www.` version of the custom domain.
 
 ```js
 {
@@ -444,19 +460,27 @@ browser.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The ARN of an existing certificate in the `us-east-1` region in AWS Certificate Manager
-to use for the domain. By default, SST will create a certificate with the domain name.
-The certificate will be created in the `us-east-1`(N. Virginia) region as required by
-AWS CloudFront.
+The ARN of an ACM (AWS Certificate Manager) certificate that proves ownership of the
+domain. By default, a certificate is created and validated automatically.
 
-:::note
-If `dns` is set to `false`, you must provide a validated certificate. And you have to add the DNS records manually to point to the CloudFront distribution URL.
+The certificate will be created in the `us-east-1` region as required by AWS CloudFront.
+If you are creating your own certificate, you must also create it in `us-east-1`.
+
+:::tip
+You need to pass in a `cert` for domains that are not hosted on supported `dns` providers.
 :::
+
+To manually set up a domain on an unsupported provider, you'll need to:
+
+1. [Validate that you own the domain](https://docs.aws.amazon.com/acm/latest/userguide/domain-ownership-validation.html) by creating an ACM certificate. You can either validate it by setting a DNS record or by verifying an email sent to the domain owner.
+2. Once validated, set the certificate ARN as the `cert` and set `dns` to `false`.
+3. Add the DNS records in your provider to point to the CloudFront distribution URL.
 
 ```js
 {
   domain: {
     name: "domain.com",
+    dns: false,
     cert: "arn:aws:acm:us-east-1:112233445566:certificate/3a958790-8878-4cdc-a396-06d95064cf63"
   }
 }
@@ -473,19 +497,20 @@ If `dns` is set to `false`, you must provide a validated certificate. And you ha
 <InlineSection>
 **Default** <code class="primitive">sst.aws.dns</code>
 </InlineSection>
-The DNS adapter you want to use for managing DNS records.
+The DNS provider to use for the domain. Defaults to the AWS.
 
-:::note
-If your domain is hosted on a platform that isn't supported by our adapters, you'll need to
-set `dns` to `false`. And pass in a validated `cert`.
-:::
+Takes an adapter that can create the DNS records on the provider. This can automate 
+validating the domain and setting up the DNS routing.
 
-Specify the hosted zone ID for the domain.
+Supports Route 53, Cloudflare, and Vercel adapters. For other providers, you'll need
+to set `dns` to `false` and pass in a certificate validating ownership via `cert`.
+
+Specify the hosted zone ID for the Route 53 domain.
 
 ```js
 {
   domain: {
-    name: "domain.com",
+    name: "example.com",
     dns: sst.aws.dns({
       zone: "Z2FDTNDATAQYW2"
     })
@@ -493,13 +518,24 @@ Specify the hosted zone ID for the domain.
 }
 ```
 
-Domain is hosted on Cloudflare.
+Use a domain hosted on Cloudflare, needs the Cloudflare provider.
 
 ```js
 {
   domain: {
-    name: "domain.com",
+    name: "example.com",
     dns: sst.cloudflare.dns()
+  }
+}
+```
+
+Use a domain hosted on Vercel, needs the Vercel provider.
+
+```js
+{
+  domain: {
+    name: "example.com",
+    dns: sst.vercel.dns()
   }
 }
 ```
@@ -511,11 +547,23 @@ Domain is hosted on Cloudflare.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The custom domain you want to use. Supports domains hosted on [Route 53](https://aws.amazon.com/route53/) or outside AWS.
+The custom domain you want to use.
 
 ```js
 {
-  domain: "domain.com"
+  domain: {
+    name: "example.com"
+  }
+}
+```
+
+Can also include subdomains based on the current stage.
+
+```js
+{
+  domain: {
+    name: `${$app.stage}.example.com`
+  }
 }
 ```
 </Segment>
@@ -578,6 +626,7 @@ Recall that in Next.js, you need to prefix your environment variables with `NEXT
 **Type** <code class="primitive">Object</code>
 </InlineSection>
 - <p>[<code class="key">memory?</code>](#imageoptimization-memory)</p>
+- <p>[<code class="key">staticEtag?</code>](#imageoptimization-staticetag)</p>
 </Section>
 
 <InlineSection>
@@ -607,6 +656,28 @@ Takes values between 128 MB and 10240 MB in 1 MB increments.
   }
 }
 ```
+</Segment>
+<NestedTitle id="imageoptimization-staticetag" Tag="h4" parent="imageOptimization.">staticEtag?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">boolean</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** false
+</InlineSection>
+If set to true, already computed image will return 304 Not Modified.
+This means that image needs to be **immutable**, the etag will be computed
+based on the image href, format and width and the next BUILD_ID.
+
+```js
+{
+  imageOptimization: {
+    staticEtag: true,
+  }
+}
 </Segment>
 ### invalidation?
 <Segment>
@@ -832,11 +903,7 @@ The [IAM actions](https://docs.aws.amazon.com/service-authorization/latest/refer
 
 ```js
 {
-  permissions: [
-    {
-      actions: ["s3:*"]
-    }
-  ]
+  actions: ["s3:*"]
 }
 ```
 </Segment>
@@ -851,11 +918,7 @@ The resourcess specified using the [IAM ARN format](https://docs.aws.amazon.com/
 
 ```js
 {
-  permissions: [
-    {
-      resources: ["arn:aws:s3:::my-bucket/*"]
-    }
-  ]
+  resources: ["arn:aws:s3:::my-bucket/*"]
 }
 ```
 </Segment>
@@ -877,7 +940,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> => </code>[<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the Bucket resource used for uploading the assets.
@@ -887,7 +950,7 @@ Transform the Bucket resource used for uploading the assets.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> => </code>[<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the CloudFront CDN resource.
@@ -897,10 +960,52 @@ Transform the CloudFront CDN resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> => </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the server Function resource.
+
+</Segment>
+### vpc?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">Object</code><code class="symbol">&gt;</code>
+</InlineSection>
+- <p>[<code class="key">securityGroups</code>](#vpc-securitygroups)</p>
+- <p>[<code class="key">subnets</code>](#vpc-subnets)</p>
+</Section>
+Configure the [server function](#nodes-server) in your Next.js app to connect
+to private subnets in a virtual private cloud or VPC. This allows your app to
+access private resources.
+
+```js
+{
+  vpc: {
+    securityGroups: ["sg-0399348378a4c256c"],
+    subnets: ["subnet-0b6a2b73896dc8c4c", "subnet-021389ebee680c2f0"]
+  }
+}
+```
+</Segment>
+<NestedTitle id="vpc-securitygroups" Tag="h4" parent="vpc.">securityGroups</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code><code class="symbol">[]</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+A list of VPC security group IDs.
+
+</Segment>
+<NestedTitle id="vpc-subnets" Tag="h4" parent="vpc.">subnets</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code><code class="symbol">[]</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+A list of VPC subnet IDs.
 
 </Segment>
 ### warm?
