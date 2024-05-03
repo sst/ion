@@ -16,12 +16,15 @@ const sidebar = [
       { label: "tRPC", link: "/docs/start/aws/trpc/" },
       { label: "Hono", link: "/docs/start/aws/hono/" },
       { label: "Astro", link: "/docs/start/aws/astro/" },
+      { label: "Email", link: "/docs/start/aws/email/" },
       { label: "Remix", link: "/docs/start/aws/remix/" },
+      { label: "Svelte", link: "/docs/start/aws/svelte/" },
       { label: "Next.js", link: "/docs/start/aws/nextjs/" },
       { label: "Container", link: "/docs/start/aws/container/" },
       {
         label: "Cloudflare",
         items: [
+          { label: "tRPC", link: "/docs/start/cloudflare/trpc/" },
           { label: "Hono", link: "/docs/start/cloudflare/hono/" },
           { label: "Worker", link: "/docs/start/cloudflare/worker/" },
         ],
@@ -55,6 +58,7 @@ const sidebar = [
       { label: "Dynamo", link: "/docs/component/aws/dynamo/" },
       { label: "SnsTopic", link: "/docs/component/aws/sns-topic/" },
       { label: "Function", link: "/docs/component/aws/function/" },
+      { label: "AppSync", link: "/docs/component/aws/app-sync/" },
       { label: "Postgres", link: "/docs/component/aws/postgres/" },
       { label: "SvelteKit", link: "/docs/component/aws/svelte-kit/" },
       { label: "StaticSite", link: "/docs/component/aws/static-site/" },
@@ -121,6 +125,18 @@ const sidebar = [
       },
       { label: "Service", link: "/docs/component/aws/service/" },
       {
+        label: "AppSyncFunction",
+        link: "/docs/component/aws/app-sync-function/",
+      },
+      {
+        label: "AppSyncResolver",
+        link: "/docs/component/aws/app-sync-resolver/",
+      },
+      {
+        label: "AppSyncDataSource",
+        link: "/docs/component/aws/app-sync-data-source/",
+      },
+      {
         label: "CognitoUserPoolClient",
         link: "/docs/component/aws/cognito-user-pool-client/",
       },
@@ -145,6 +161,9 @@ export default defineConfig({
   adapter: sst(),
   server: {
     host: "0.0.0.0",
+  },
+  devToolbar: {
+    enabled: false,
   },
   redirects: {
     "/install": "https://raw.githubusercontent.com/sst/ion/dev/install",

@@ -24,6 +24,7 @@ func getProviderPackage(name string) string {
 func cleanProviderName(name string) string {
 	result := regexp.MustCompile("[^a-zA-Z0-9]+").ReplaceAllString(name, "")
 	result = strings.ReplaceAll(result, "pulumi", "")
+	result = strings.ReplaceAll(result, "sstprovider", "")
 	return result
 }
 
@@ -117,7 +118,7 @@ func (p *Project) writeTypes() error {
 	defer file.Close()
 
 	file.WriteString(`import "./src/global.d.ts"` + "\n")
-	file.WriteString(`import "../sst-env"` + "\n")
+	file.WriteString(`import "../types.generated"` + "\n")
 	file.WriteString(`import { AppInput, App, Config } from "./src/config"` + "\n")
 
 	for raw := range p.app.Providers {
