@@ -88,6 +88,7 @@ export class HttpsRedirect extends Component {
         viewerCertificate: {
           acmCertificateArn: certificate.arn,
           sslSupportMethod: "sni-only",
+          minimumProtocolVersion: "TLSv1.2_2021",
         },
         defaultCacheBehavior: {
           allowedMethods: ["GET", "HEAD", "OPTIONS"],
