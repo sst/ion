@@ -138,7 +138,7 @@ for file in $config_files; do
 done
 
 if [[ -z $config_file ]]; then
-    print_message warning "No config file found for $current_shell. Checked files: ${config_files[@]}"
+    print_message error "No config file found for $current_shell. Checked files: ${config_files[@]}"
     exit 1
 fi
 
