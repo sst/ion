@@ -64,14 +64,15 @@ export interface VpcArgs {
  * The `Vpc` component lets you add a VPC to your app. It uses [Amazon VPC](https://docs.aws.amazon.com/vpc/). This is useful for services like RDS and Fargate that need to be hosted inside
  * a VPC.
  *
- * This creates a VPC with 2 Availability Zones by default. It also created The following
+ * This creates a VPC with 2 Availability Zones by default. It also creates the following 
  * resources:
- * 5. A security group.
+ * 
  * 1. A public subnet in each AZ.
  * 2. A private subnet in each AZ.
  * 3. An Internet Gateway, all the traffic from the public subnets are routed through it.
  * 4. A NAT Gateway in each AZ. All the traffic from the private subnets are routed to the
  *    NAT Gateway in the same AZ.
+ * 5. A security group.
  *
  * :::note
  * By default, this creates two NAT Gateways, one in each AZ. And it roughly costs $33 per
