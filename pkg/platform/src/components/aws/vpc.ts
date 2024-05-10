@@ -67,12 +67,12 @@ export interface VpcArgs {
  * This creates a VPC with 2 Availability Zones by default. It also creates the following 
  * resources:
  * 
- * 1. A public subnet in each AZ.
- * 2. A private subnet in each AZ.
- * 3. An Internet Gateway, all the traffic from the public subnets are routed through it.
- * 4. A NAT Gateway in each AZ. All the traffic from the private subnets are routed to the
+ * 1. A security group.
+ * 2. A public subnet in each AZ.
+ * 3. A private subnet in each AZ.
+ * 4. An Internet Gateway, all the traffic from the public subnets are routed through it.
+ * 5. A NAT Gateway in each AZ. All the traffic from the private subnets are routed to the
  *    NAT Gateway in the same AZ.
- * 5. A security group.
  *
  * :::note
  * By default, this creates two NAT Gateways, one in each AZ. And it roughly costs $33 per
