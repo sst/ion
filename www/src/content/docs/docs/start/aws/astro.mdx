@@ -148,6 +148,12 @@ Add some styles, replace the `<style />` tag with:
 
 ## 4. Generate a pre-signed URL
 
+Install the npm packages.
+
+```bash
+npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner
+```
+
 When our app loads, we'll generate a pre-signed URL for the file upload and use it in the form.
 
 ```astro title="src/pages/index.astro" {9}
