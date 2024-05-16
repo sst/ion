@@ -271,10 +271,17 @@ export class Service extends Component implements Link.Linkable {
       );
     }
 
+    function resolveImageContext(context: string) {
+      if (context && path.isAbsolute(context)) {
+        return context;
+      }
+      return path.join($cli.paths.root, context);
+    }
+
     function createImage() {
       // Edit .dockerignore file
       const imageArgsNew = imageArgs.apply((imageArgs) => {
-        const context = path.join($cli.paths.root, imageArgs.context);
+        const context = resolveImageContext(imageArgs.context);
         const dockerfile = imageArgs.dockerfile ?? "Dockerfile";
 
         // get .dockerignore file
@@ -285,13 +292,13 @@ export class Service extends Component implements Link.Linkable {
           if (fs.existsSync(filePath)) return filePath;
         })();
 
-        // add .sst to .dockerignore if not exist
+        // add **/.sst to .dockerignore if not exist
         const content = file ? fs.readFileSync(file).toString() : "";
         const lines = content.split("\n");
-        if (!lines.find((line) => line === ".sst")) {
+        if (!lines.find((line) => line === "**/.sst")) {
           fs.writeFileSync(
             file ?? path.join(context, ".dockerignore"),
-            [...lines, "", "# sst", ".sst"].join("\n"),
+            [...lines, "", "# sst", "**/.sst"].join("\n"),
           );
         }
         return imageArgs;
@@ -310,7 +317,7 @@ export class Service extends Component implements Link.Linkable {
         `${name}Image`,
         transform(args.transform?.image, {
           build: imageArgsNew.apply((imageArgs) => ({
-            context: path.join($cli.paths.root, imageArgs.context),
+            context: resolveImageContext(imageArgs.context),
             dockerfile: imageArgs.dockerfile,
             args: imageArgs.args,
             platform: imageArgs.platform,
