@@ -168,6 +168,8 @@ func (r *NodeRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOutpu
 		options.Target = esbuild.ESNext
 	}
 
+	mergeEsbuildOverrides(&options, &properties.ESBuild)
+
 	buildContext, ok := r.contexts[input.Warp.FunctionID]
 	if !ok {
 		buildContext, _ = esbuild.Context(options)

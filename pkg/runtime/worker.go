@@ -112,6 +112,8 @@ func (w *WorkerRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOut
 		MainFields:        []string{"module", "main"},
 	}
 
+	mergeEsbuildOverrides(&options, &properties.Build.ESBuild)
+
 	buildContext, ok := w.contexts[input.Warp.FunctionID]
 	if !ok {
 		buildContext, _ = esbuild.Context(options)
