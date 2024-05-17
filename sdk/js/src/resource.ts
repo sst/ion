@@ -24,7 +24,8 @@ export function fromCloudflareEnv(input: any) {
         value = JSON.parse(value);
       } catch {}
     }
-    raw[key] = value;
+    const envKey = key.startsWith('SST_RESOURCE_') ? key.slice("SST_RESOURCE_".length) : key
+    raw[envKey] = value;
   }
 }
 
