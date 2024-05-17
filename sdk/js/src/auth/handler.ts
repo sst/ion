@@ -8,6 +8,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 
 interface OnSuccessResponder<T extends { type: any; properties: any }> {
   session(input: T & JWTPayload): Promise<Response>;
+  redirect_uri?: string;
+  response_type?: string;
 }
 
 export class UnknownProviderError extends Error {
@@ -147,8 +149,10 @@ export function AuthHandler<
     },
     algorithm: "RS512",
     async success(ctx: Context, properties: any) {
-      const redirect_uri = getCookie(ctx, "redirect_uri");
-      const response_type = getCookie(ctx, "response_type");
+      const redirect_uri =
+        ctx.req.query("redirect_uri") || getCookie(ctx, "redirect_uri");
+      const response_type =
+        ctx.req.query("response_type") || getCookie(ctx, "response_type");
       if (!redirect_uri) {
         return options.forward(
           ctx,
@@ -201,6 +205,8 @@ export function AuthHandler<
             ctx.status(400);
             return ctx.text(`Unsupported response_type: ${response_type}`);
           },
+          redirect_uri,
+          response_type
         },
         {
           provider: ctx.get("provider"),
