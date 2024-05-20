@@ -212,7 +212,7 @@ export class CognitoUserPool
                 description: `Subscribed to ${trigger} from ${name}`,
               }
             );
-            return [trigger, fn];
+            return [trigger, fn.arn];
           })
         )
       );
