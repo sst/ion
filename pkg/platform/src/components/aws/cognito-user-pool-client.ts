@@ -90,6 +90,16 @@ export class CognitoUserPoolClient extends Component {
       client: this.client,
     };
   }
+
+  /** @internal */
+  public getSSTLink() {
+    return {
+      properties: {
+        id: this.id,
+        clientSecret: this.client.clientSecret,
+      }
+    }
+  }
 }
 
 const __pulumiType = "sst:aws:CognitoUserPoolClient";
