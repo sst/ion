@@ -186,6 +186,7 @@ export class CognitoUserPool
     normalizeAliasesAndUsernames();
     const triggers = createTriggers();
     const userPool = createUserPool();
+    createPermissions();
 
     this.userPool = userPool;
 
@@ -278,6 +279,25 @@ export class CognitoUserPool
         }),
         { parent }
       );
+    }
+    
+    function createPermissions() {
+      if (!triggers) return;
+
+      triggers.apply((triggers) => {
+        Object.entries(triggers).forEach(([trigger, triggerArn]) => {
+          new aws.lambda.Permission(
+            `${name}InvokePermission${trigger}`,
+            {
+              action: "lambda:InvokeFunction",
+              function: triggerArn,
+              principal: "cognito-idp.amazonaws.com",
+              sourceArn: userPool.arn,
+            },
+            { parent },
+          );
+        });
+      });
     }
   }
 
