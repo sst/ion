@@ -348,4 +348,22 @@ This will display the following in the CLI.
 bucket: bucket-jOaikGu4rla
 ```
 </Segment>
+### $app
+<Segment>
+
+A global variable that can be used in config in order to get access to the name of the app, the stage or the removal settings or the resources.
+
+
+```ts
+async run() {
+  new sst.aws.Nextjs("MyWeb", {
+    domain:
+      $app.stage === "production"
+        ? "example.com"
+        : `${$app.stage}-${$app.name}.example.com`,
+  });
+}
+```
+
+</Segment>
 </div>
