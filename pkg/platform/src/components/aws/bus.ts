@@ -4,7 +4,11 @@ import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
 import { FunctionArgs } from "./function";
-import { hashStringToPrettyString, sanitizeToPascalCase } from "../naming";
+import {
+  hashStringToPrettyString,
+  prefixName,
+  sanitizeToPascalCase,
+} from "../naming";
 import { parseEventBusArn } from "./helpers/arn";
 import { BusLambdaSubscriber } from "./bus-lambda-subscriber";
 
@@ -69,7 +73,7 @@ export interface BusSubscriberArgs {
      * }
      * ```
      */
-    source?: string[];
+    source?: (string | any)[];
     /**
      * A JSON object of "detail" values to match against. "detail" contains the actual
      * data or information associated with the event.
@@ -97,7 +101,7 @@ export interface BusSubscriberArgs {
      * }
      * ```
      */
-    detailType?: string[];
+    detailType?: (string | any)[];
   }>;
   /**
    * [Transform](/docs/components#transform) how this subscription creates its underlying
@@ -182,7 +186,9 @@ export class Bus extends Component implements Link.Linkable, Link.AWS.Linkable {
     function createBus() {
       return new aws.cloudwatch.EventBus(
         `${name}Bus`,
-        transform(args.transform?.bus, {}),
+        transform(args.transform?.bus, {
+          name: prefixName(256, name),
+        }),
         { parent },
       );
     }
@@ -244,7 +250,7 @@ export class Bus extends Component implements Link.Linkable, Link.AWS.Linkable {
     args: BusSubscriberArgs = {},
   ) {
     return Bus._subscribeFunction(
-      this.constructorName,
+      this.nodes.bus.name,
       this.nodes.bus.arn,
       subscriber,
       args,
