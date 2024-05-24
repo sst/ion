@@ -123,8 +123,8 @@ const createApigHandler = (build) => {
       await streamToNodeStream(response.body.getReader(), responseStream);
     } else {
       writer.write(" ");
-      writer.end();
     }
+      writer.end();
   });
 };
 
