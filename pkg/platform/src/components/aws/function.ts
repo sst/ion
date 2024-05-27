@@ -414,13 +414,15 @@ export interface FunctionArgs {
    * }
    * ```
    */
-  logging?: Input<{
-    /**
-     * The duration the function logs are kept in CloudWatch.
-     * @default `forever`
-     */
-    retention?: Input<keyof typeof RETENTION>;
-  }>;
+  logging?:
+    | Input<{
+        /**
+         * The duration the function logs are kept in CloudWatch.
+         * @default `forever`
+         */
+        retention?: Input<keyof typeof RETENTION>;
+      }>
+    | false;
   /**
    * The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
    * of the Lambda function.
@@ -1018,6 +1020,7 @@ export class Function
     }
 
     function normalizeLogging() {
+      if (args.logging === false) return;
       return output(args.logging).apply((logging) => ({
         ...logging,
         retention: logging?.retention ?? "forever",
@@ -1391,6 +1394,7 @@ export class Function
     }
 
     function createLogGroup() {
+      if (!logging) return;
       return new aws.cloudwatch.LogGroup(
         `${name}LogGroup`,
         transform(args.transform?.logGroup, {
@@ -1424,7 +1428,8 @@ export class Function
           variables: environment,
         },
         architectures,
-        loggingConfig: {
+
+        loggingConfig: logging && {
           logFormat: "Text",
           logGroup: logGroup.name,
         },
