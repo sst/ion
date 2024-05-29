@@ -116,7 +116,7 @@ export interface AstroArgs extends SsrSiteArgs {
    * :::tip
    * You get 1000 free invalidations per month. After that you pay $0.005 per invalidation path. [Read more here](https://aws.amazon.com/cloudfront/pricing/).
    * :::
-   * @default `&lcub;paths: "all", wait: false&rcub;`
+   * @default `{paths: "all", wait: false}`
    * @example
    * Wait for all paths to be invalidated.
    * ```js
@@ -154,29 +154,44 @@ export interface AstroArgs extends SsrSiteArgs {
    */
   environment?: SsrSiteArgs["environment"];
   /**
-   * Set a custom domain for your Astro site. Supports domains hosted either on
-   * [Route 53](https://aws.amazon.com/route53/) or outside AWS.
+   * Set a custom domain for your Astro site.
+   *
+   * Automatically manages domains hosted on AWS Route 53, Cloudflare, and Vercel. For other
+   * providers, you'll need to pass in a `cert` that validates domain ownership and add the
+   * DNS records.
    *
    * :::tip
-   * You can also migrate an externally hosted domain to Amazon Route 53 by
-   * [following this guide](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/MigratingDNS.html).
+   * Built-in support for AWS Route 53, Cloudflare, and Vercel. And manual setup for other
+   * providers.
    * :::
    *
    * @example
    *
+   * By default this assumes the domain is hosted on Route 53.
+   *
    * ```js
    * {
-   *   domain: "domain.com"
+   *   domain: "example.com"
    * }
    * ```
    *
-   * Specify the Route 53 hosted zone and a `www.` version of the custom domain.
+   * For domains hosted on Cloudflare.
    *
    * ```js
    * {
    *   domain: {
-   *     domainName: "domain.com",
-   *     hostedZone: "domain.com",
+   *     name: "example.com",
+   *     dns: sst.cloudflare.dns()
+   *   }
+   * }
+   * ```
+   *
+   * Specify a `www.` version of the custom domain.
+   *
+   * ```js
+   * {
+   *   domain: {
+   *     name: "domain.com",
    *     redirects: ["www.domain.com"]
    *   }
    * }
@@ -213,6 +228,22 @@ export interface AstroArgs extends SsrSiteArgs {
    * ```
    */
   assets?: SsrSiteArgs["assets"];
+  /**
+   * Configure the [server function](#nodes-server) in your Astro site to connect
+   * to private subnets in a virtual private cloud or VPC. This allows your site to
+   * access private resources.
+   *
+   * @example
+   * ```js
+   * {
+   *   vpc: {
+   *     securityGroups: ["sg-0399348378a4c256c"],
+   *     subnets: ["subnet-0b6a2b73896dc8c4c", "subnet-021389ebee680c2f0"]
+   *   }
+   * }
+   * ```
+   */
+  vpc?: SsrSiteArgs["vpc"];
 }
 
 const BUILD_META_FILE_NAME: BuildMetaFileName = "sst.buildMeta.json";
@@ -257,7 +288,7 @@ const BUILD_META_FILE_NAME: BuildMetaFileName = "sst.buildMeta.json";
  * ```js {4}
  * new sst.aws.Astro("MyWeb", {
  *   domain: {
- *     domainName: "my-app.com",
+ *     name: "my-app.com",
  *     redirects: ["www.my-app.com"]
  *   }
  * });
@@ -400,6 +431,7 @@ export class Astro extends Component implements Link.Linkable {
         const edge = buildMeta.deploymentStrategy === "edge";
         const serverConfig = {
           handler: path.join(outputPath, "dist", "server", "entry.handler"),
+          streaming: buildMeta.responseMode === "stream",
         };
         const plan: Plan = {
           edge,
@@ -483,7 +515,6 @@ export class Astro extends Component implements Link.Linkable {
             plan.origins.regionalServer = {
               server: {
                 function: serverConfig,
-                streaming: buildMeta.responseMode === "stream",
               },
             };
 

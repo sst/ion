@@ -5,6 +5,7 @@ export default $config({
     return {
       name: "aws-hono",
       home: "aws",
+      removal: input?.stage === "production" ? "retain" : "remove",
     };
   },
   async run() {
@@ -15,6 +16,9 @@ export default $config({
       url: true,
       link: [bucket],
       handler: "index.handler",
+      environment: {
+        FOO: "bar",
+      },
     });
 
     return {

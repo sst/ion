@@ -1,0 +1,27 @@
+{
+  "steps": [
+    {
+      "type": "copy"
+    },
+    {
+      "type": "npm",
+      "properties": {
+        "file": "package.json",
+        "package": "sst",
+        "version": "ion"
+      }
+    },
+    {
+      "type": "patch",
+      "properties": {
+        "file": "package.json",
+        "regex": [
+          {
+            "find": "\"dev\":\\s*\"([^\"]+)\"",
+            "replace": "\"dev\": \"sst dev $1\""
+          }
+        ]
+      }
+    }
+  ]
+}

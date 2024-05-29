@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/charmbracelet/huh"
+	"github.com/nrednav/cuid2"
 	flag "github.com/spf13/pflag"
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
 	"github.com/joho/godotenv"
 	"github.com/sst/ion/cmd/sst/ui"
+	"github.com/sst/ion/cmd/sst/ui/screen"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
 	"github.com/sst/ion/pkg/project"
@@ -308,10 +310,18 @@ var Root = Command{
 				Long: strings.Join([]string{
 					"Initialize a new project in the current directory. This will create a `sst.config.ts` and `sst install` your providers.",
 					"",
-					"If this is run in a Next.js, Remix, or Astro project, it'll init SST in drop-in mode.",
+					"If this is run in a Next.js, Remix, Astro, or SvelteKit project, it'll init SST in drop-in mode.",
 				}, "\n"),
 			},
 			Run: CmdInit,
+		},
+		{
+			Name:   "screen",
+			Hidden: true,
+			Run: func(cli *Cli) error {
+				slog.Info("Running dev2")
+				return screen.Start()
+			},
 		},
 		{
 			Name: "dev",
@@ -360,6 +370,16 @@ var Root = Command{
 					"This is different from SST v2, in that you needed to run `sst dev` and `sst bind` for your frontend.",
 				}, "\n"),
 			},
+			Flags: []Flag{
+				{
+					Name: "silent",
+					Type: "bool",
+					Description: Description{
+						Short: "Do not output function invocation logs",
+						Long:  "Do not output function invocation logs",
+					},
+				},
+			},
 			Args: []Argument{
 				{
 					Name: "command",
@@ -404,6 +424,15 @@ var Root = Command{
 					"```",
 				}, "\n"),
 			},
+			Flags: []Flag{
+				{
+					Name: "target",
+					Description: Description{
+						Short: "Comma seperated list of target URNs",
+						Long:  "Comma seperated list of target URNs.",
+					},
+				},
+			},
 			Examples: []Example{
 				{
 					Content: "sst deploy --stage=production",
@@ -422,9 +451,14 @@ var Root = Command{
 				ui := ui.New(ui.ProgressModeDeploy)
 				defer ui.Destroy()
 				ui.Header(version, p.App().Name, p.App().Stage)
+				target := []string{}
+				if cli.String("target") != "" {
+					target = strings.Split(cli.String("target"), ",")
+				}
 				err = p.Stack.Run(cli.Context, &project.StackInput{
-					Command: "up",
+					Command: "deploy",
 					OnEvent: ui.StackEvent,
+					Target:  target,
 				})
 				if err != nil {
 					return err
@@ -687,28 +721,60 @@ var Root = Command{
 							},
 						},
 					},
-					Run: func(cli *Cli) error {
-						key := cli.Positional(0)
-						value := cli.Positional(1)
-						p, err := initProject(cli)
-						if err != nil {
-							return err
-						}
-						defer p.Cleanup()
-						backend := p.Backend()
-						secrets, err := provider.GetSecrets(backend, p.App().Name, p.App().Stage)
-						if err != nil {
-							return util.NewReadableError(err, "Could not get secrets")
-						}
-						secrets[key] = value
-						err = provider.PutSecrets(backend, p.App().Name, p.App().Stage, secrets)
-						if err != nil {
-							return util.NewReadableError(err, "Could not set secret")
-						}
-						http.Post("http://localhost:13557/api/deploy", "application/json", strings.NewReader("{}"))
-						ui.Success(fmt.Sprintf("Set \"%s\" for stage \"%s\". Run \"sst deploy\" to update.", key, p.App().Stage))
-						return nil
+					Run: CmdSecretSet,
+				},
+				{
+					Name: "load",
+					Description: Description{
+						Short: "Set multiple secrets from file",
+						Long: strings.Join([]string{
+							"Load all the secrets from a file and set them.",
+							"",
+							"```bash frame=\"none\"",
+							"sst secret load ./secrets.env",
+							"```",
+							"",
+							"The file needs to be in the _dotenv_ or bash format of key-value pairs.",
+							"",
+							"```sh title=\"secrets.env\"",
+							"KEY_1=VALUE1",
+							"KEY_2=VALUE2",
+							"```",
+							"",
+							"Optionally, set the secrets in a specific stage.",
+							"",
+							"```bash frame=\"none\"",
+							"sst secret load ./prod.env --stage=production",
+							"```",
+							"",
+							"",
+						}, "\n"),
 					},
+					Args: []Argument{
+						{
+							Name:     "file",
+							Required: true,
+							Description: Description{
+								Short: "The file to load secrets from",
+								Long:  "The file to load the secrets from.",
+							},
+						},
+					},
+					Examples: []Example{
+						{
+							Content: "sst secret load ./secrets.env",
+							Description: Description{
+								Short: "Loads all secrets from the file",
+							},
+						},
+						{
+							Content: "sst secret load ./prod.env --stage=production",
+							Description: Description{
+								Short: "Set secrets for production",
+							},
+						},
+					},
+					Run: CmdSecretLoad,
 				},
 				{
 					Name: "remove",
@@ -904,8 +970,18 @@ var Root = Command{
 					args[0],
 					args[1:]...,
 				)
+				// Get the environment variables
+				envs := os.Environ()
+
+				// Filter the environment variables to exclude AWS_PROFILE
+				filteredEnvs := make([]string, 0, len(envs))
+				for _, val := range envs {
+					if !strings.HasPrefix(val, "AWS_PROFILE=") {
+						filteredEnvs = append(filteredEnvs, val)
+					}
+				}
 				cmd.Env = append(cmd.Env,
-					os.Environ()...,
+					filteredEnvs...,
 				)
 				cmd.Env = append(cmd.Env,
 					fmt.Sprintf("PS1=%s/%s> ", p.App().Name, p.App().Stage),
@@ -916,9 +992,14 @@ var Root = Command{
 					if err != nil {
 						return err
 					}
-
 					envVar := fmt.Sprintf("SST_RESOURCE_%s=%s", resource, jsonValue)
 					cmd.Env = append(cmd.Env, envVar)
+				}
+				cmd.Env = append(cmd.Env, fmt.Sprintf(`SST_RESOURCE_App={"name": "%s", "stage": "%s" }`, p.App().Name, p.App().Stage))
+
+				for key, val := range p.Env() {
+					key = strings.ReplaceAll(key, "SST_", "")
+					cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, val))
 				}
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
@@ -941,12 +1022,24 @@ var Root = Command{
 					"The resources in your app are removed based on the `removal` setting in your `sst.config.ts`.",
 					":::",
 					"",
+					"This does not remove the SST _state_ and _bootstrap_ resources in your account as these might still be in use by other apps. You can remove them manually if you want to reset your account, [learn more](docs/providers/#state).",
+					"",
 					"Optionally, remove your app from a specific stage.",
 					"",
 					"```bash frame=\"none\" frame=\"none\"",
 					"sst remove --stage=production",
 					"```",
 				}, "\n"),
+			},
+			Flags: []Flag{
+				{
+					Name: "target",
+					Type: "string",
+					Description: Description{
+						Short: "Comma seperated list of target URNs",
+						Long:  "Comma seperated list of target URNs.",
+					},
+				},
 			},
 			Run: func(cli *Cli) error {
 				p, err := initProject(cli)
@@ -957,9 +1050,14 @@ var Root = Command{
 				ui := ui.New(ui.ProgressModeRemove)
 				defer ui.Destroy()
 				ui.Header(version, p.App().Name, p.App().Stage)
+				target := []string{}
+				if cli.String("target") != "" {
+					target = strings.Split(cli.String("target"), ",")
+				}
 				err = p.Stack.Run(cli.Context, &project.StackInput{
-					Command: "destroy",
+					Command: "remove",
 					OnEvent: ui.StackEvent,
+					Target:  target,
 				})
 				if err != nil {
 					return err
@@ -1190,10 +1288,29 @@ var Root = Command{
 			Description: Description{
 				Short: "Refresh the local app state",
 				Long: strings.Join([]string{
-					"Compares your local state with the state of the resources in the cloud provider. Any changes that are found are adopted into your local state.",
+					"Compares your local state with the state of the resources in the cloud provider. Any changes that are found are adopted into your local state. It will:",
 					"",
-					"This is useful for cases where you want to ensure that your local state is in sync with your cloud provider.",
+					"1. Go through every single resource in your state.",
+					"2. Make a call to the cloud provider to check the resource.",
+					"   - If the configs are different, it'll **update the state** to reflect the change.",
+					"   - If the resource doesn't exist anymore, it'll **remove it from the state**.",
+					"",
+					":::note",
+					"The `sst refresh` does not make changes to the resources in the cloud provider.",
+					":::",
+					"",
+					"This is useful for cases where you want to ensure that your local state is in sync with your cloud provider. [Learn more about how state works](/docs/providers/#how-state-works).",
 				}, "\n"),
+			},
+			Flags: []Flag{
+				{
+					Name: "target",
+					Type: "string",
+					Description: Description{
+						Short: "Comma seperated list of target URNs",
+						Long:  "Comma seperated list of target URNs.",
+					},
+				},
 			},
 			Run: func(cli *Cli) error {
 				p, err := initProject(cli)
@@ -1204,9 +1321,14 @@ var Root = Command{
 				ui := ui.New(ui.ProgressModeRefresh)
 				defer ui.Destroy()
 				ui.Header(version, p.App().Name, p.App().Stage)
+				target := []string{}
+				if cli.String("target") != "" {
+					target = strings.Split(cli.String("target"), ",")
+				}
 				err = p.Stack.Run(cli.Context, &project.StackInput{
 					Command: "refresh",
 					OnEvent: ui.StackEvent,
+					Target:  target,
 				})
 				if err != nil {
 					return err
@@ -1233,11 +1355,19 @@ var Root = Command{
 						}
 						defer p.Cleanup()
 
-						err = p.Stack.Lock()
+						var parsed provider.Summary
+						parsed.Version = version
+						parsed.UpdateID = cuid2.Generate()
+						parsed.TimeStarted = time.Now().UTC().Format(time.RFC3339)
+						err = p.Stack.Lock(parsed.UpdateID, "edit")
 						if err != nil {
 							return util.NewReadableError(err, "Could not lock state")
 						}
 						defer p.Stack.Unlock()
+						defer func() {
+							parsed.TimeCompleted = time.Now().UTC().Format(time.RFC3339)
+							provider.PutSummary(p.Backend(), p.App().Name, p.App().Stage, parsed.UpdateID, parsed)
+						}()
 
 						path, err := p.Stack.PullState()
 						if err != nil {
@@ -1257,7 +1387,8 @@ var Root = Command{
 						if err := cmd.Wait(); err != nil {
 							return util.NewReadableError(err, "Editor exited with error")
 						}
-						return p.Stack.PushState()
+
+						return p.Stack.PushState(parsed.UpdateID)
 					},
 				},
 			},
@@ -1267,6 +1398,9 @@ var Root = Command{
 
 func (c *Command) registerFlags(parsed map[string]interface{}) {
 	for _, f := range c.Flags {
+		if parsed[f.Name] != nil {
+			continue
+		}
 		if f.Type == "string" {
 			parsed[f.Name] = flag.String(f.Name, "", "")
 		}

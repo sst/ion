@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"text/template"
 
 	"github.com/kkqy/gokvpairs"
+	"github.com/sst/ion/pkg/npm"
 	"github.com/sst/ion/pkg/platform"
 	"github.com/tailscale/hujson"
 )
@@ -40,6 +40,12 @@ type patchStep struct {
 		Find    string `json:"find"`
 		Replace string `json:"replace"`
 	} `json:"regex"`
+}
+
+type jsonPatch struct {
+	Op    string      `json:"op"`
+	Path  string      `json:"path"`
+	Value interface{} `json:"value"`
 }
 
 type gitignoreStep struct {
@@ -128,17 +134,7 @@ func Create(templateName string, home string) error {
 			version := npmStep.Version
 			if version == "" {
 				slog.Info("fetching latest version", "package", npmStep.Package)
-				url := "https://registry.npmjs.org/" + npmStep.Package + "/latest"
-				resp, err := http.Get(url)
-				if err != nil {
-					return err
-				}
-				defer resp.Body.Close()
-
-				var data struct {
-					Version string `json:"version"`
-				}
-				err = json.NewDecoder(resp.Body).Decode(&data)
+				data, err := npm.Get(npmStep.Package, "latest")
 				if err != nil {
 					return err
 				}
@@ -170,6 +166,27 @@ func Create(templateName string, home string) error {
 			}
 
 			if string(patchStep.Patch) != "" {
+				var patches []jsonPatch
+				err := json.Unmarshal(patchStep.Patch, &patches)
+				if err != nil {
+					return err
+				}
+				for _, patch := range patches {
+					if patch.Op == "add" {
+						splits := strings.Split(patch.Path, "/")
+						for i := range splits {
+							path := strings.Join(splits[:i], "/")
+							match := value.Find(path)
+							if match == nil {
+								fill := `[{"op":"add","path":"` + path + `","value":{}}]`
+								err := value.Patch([]byte(fill))
+								if err != nil {
+									return err
+								}
+							}
+						}
+					}
+				}
 				err = value.Patch(patchStep.Patch)
 				if err != nil {
 					return err
@@ -187,7 +204,10 @@ func Create(templateName string, home string) error {
 				return err
 			}
 			defer file.Close()
-			file.WriteString(packed)
+			_, err = file.WriteString(packed)
+			if err != nil {
+				return err
+			}
 
 			break
 

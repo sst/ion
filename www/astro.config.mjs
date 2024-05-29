@@ -13,13 +13,21 @@ const sidebar = [
     label: "Get Started",
     items: [
       { label: "API", link: "/docs/start/aws/api/" },
+      { label: "Solid", link: "/docs/start/aws/solid/" },
+      { label: "tRPC", link: "/docs/start/aws/trpc/" },
       { label: "Hono", link: "/docs/start/aws/hono/" },
       { label: "Astro", link: "/docs/start/aws/astro/" },
+      { label: "Email", link: "/docs/start/aws/email/" },
       { label: "Remix", link: "/docs/start/aws/remix/" },
+      { label: "Svelte", link: "/docs/start/aws/svelte/" },
+      { label: "Drizzle", link: "/docs/start/aws/drizzle/" },
       { label: "Next.js", link: "/docs/start/aws/nextjs/" },
+      { label: "Realtime", link: "/docs/start/aws/realtime/" },
+      { label: "Container", link: "/docs/start/aws/container/" },
       {
         label: "Cloudflare",
         items: [
+          { label: "tRPC", link: "/docs/start/cloudflare/trpc/" },
           { label: "Hono", link: "/docs/start/cloudflare/hono/" },
           { label: "Worker", link: "/docs/start/cloudflare/worker/" },
         ],
@@ -37,22 +45,27 @@ const sidebar = [
     ],
   },
   {
-    label: "Components",
+    label: "AWS",
     items: [
+      { label: "Vpc", link: "/docs/component/aws/vpc/" },
       { label: "Cron", link: "/docs/component/aws/cron/" },
+      { label: "Nuxt", link: "/docs/component/aws/nuxt/" },
       { label: "Astro", link: "/docs/component/aws/astro/" },
+      { label: "Email", link: "/docs/component/aws/email/" },
       { label: "Remix", link: "/docs/component/aws/remix/" },
       { label: "Nextjs", link: "/docs/component/aws/nextjs/" },
       { label: "Queue", link: "/docs/component/aws/queue/" },
       { label: "Vector", link: "/docs/component/aws/vector/" },
-      { label: "Secret", link: "/docs/component/secret/" },
-      { label: "Worker", link: "/docs/component/cloudflare/worker/" },
       { label: "Bucket", link: "/docs/component/aws/bucket/" },
       { label: "Router", link: "/docs/component/aws/router/" },
+      { label: "Cluster", link: "/docs/component/aws/cluster/" },
       { label: "Dynamo", link: "/docs/component/aws/dynamo/" },
+      { label: "Realtime", link: "/docs/component/aws/realtime/" },
       { label: "SnsTopic", link: "/docs/component/aws/sns-topic/" },
       { label: "Function", link: "/docs/component/aws/function/" },
       { label: "Postgres", link: "/docs/component/aws/postgres/" },
+      { label: "AppSync", link: "/docs/component/aws/app-sync/" },
+      { label: "SvelteKit", link: "/docs/component/aws/svelte-kit/" },
       { label: "StaticSite", link: "/docs/component/aws/static-site/" },
       { label: "SolidStart", link: "/docs/component/aws/solid-start/" },
       {
@@ -60,10 +73,26 @@ const sidebar = [
         link: "/docs/component/aws/apigatewayv2/",
       },
       {
-        label: "Internal",
-        items: [{ label: "Cdn", link: "/docs/component/aws/cdn/" }],
-        collapsed: true,
+        label: "CognitoUserPool",
+        link: "/docs/component/aws/cognito-user-pool/",
       },
+      {
+        label: "CognitoIdentityPool",
+        link: "/docs/component/aws/cognito-identity-pool/",
+      },
+      {
+        label: "ApiGatewayWebSocket",
+        link: "/docs/component/aws/apigateway-websocket/",
+      },
+    ],
+  },
+  {
+    label: "Cloudflare",
+    items: [
+      { label: "D1", link: "/docs/component/cloudflare/d1/" },
+      { label: "KV", link: "/docs/component/cloudflare/kv/" },
+      { label: "Worker", link: "/docs/component/cloudflare/worker/" },
+      { label: "Bucket", link: "/docs/component/cloudflare/bucket/" },
     ],
   },
   {
@@ -73,17 +102,88 @@ const sidebar = [
       { label: "SDK", link: "/docs/reference/sdk/" },
       { label: "Global", link: "/docs/reference/global/" },
       { label: "Config", link: "/docs/reference/config/" },
+      { label: "Secret", link: "/docs/component/secret/" },
+    ],
+  },
+  {
+    label: "How to",
+    items: [
+      // { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
+      // { label: "Import Resources", link: "/docs/import-resources/" },
+      { label: "Custom Domains", link: "/docs/custom-domains/" },
+    ],
+  },
+  {
+    label: "Internal",
+    collapsed: true,
+    items: [
+      {
+        label: "Dns",
+        items: [
+          { label: "AWS", link: "/docs/component/aws/dns/" },
+          {
+            label: "Vercel",
+            link: "/docs/component/vercel/dns/",
+          },
+          {
+            label: "Cloudflare",
+            link: "/docs/component/cloudflare/dns/",
+          },
+        ],
+      },
+      { label: "Cdn", link: "/docs/component/aws/cdn/" },
+      { label: "Service", link: "/docs/component/aws/service/" },
+      {
+        label: "AppSyncResolver",
+        link: "/docs/component/aws/app-sync-resolver/",
+      },
+      {
+        label: "AppSyncFunction",
+        link: "/docs/component/aws/app-sync-function/",
+      },
+      {
+        label: "AppSyncDataSource",
+        link: "/docs/component/aws/app-sync-data-source/",
+      },
+      {
+        label: "CognitoUserPoolClient",
+        link: "/docs/component/aws/cognito-user-pool-client/",
+      },
+      {
+        label: "QueueLambdaSubscriber",
+        link: "/docs/component/aws/queue-lambda-subscriber/",
+      },
+      {
+        label: "BucketLambdaSubscriber",
+        link: "/docs/component/aws/bucket-lambda-subscriber/",
+      },
+      {
+        label: "SnsTopicQueueSubscriber",
+        link: "/docs/component/aws/sns-topic-queue-subscriber/",
+      },
+      {
+        label: "DynamoLambdaSubscriber",
+        link: "/docs/component/aws/dynamo-lambda-subscriber/",
+      },
+      {
+        label: "RealtimeLambdaSubscriber",
+        link: "/docs/component/aws/realtime-lambda-subscriber/",
+      },
+      {
+        label: "SnsTopicLambdaSubscriber",
+        link: "/docs/component/aws/sns-topic-lambda-subscriber/",
+      },
+      {
+        label: "ApiGatewayV2LambdaRoute",
+        link: "/docs/component/aws/apigatewayv2-lambda-route/",
+      },
+      {
+        label: "ApiGatewayWebSocketRoute",
+        link: "/docs/component/aws/apigateway-websocket-route/",
+      },
     ],
   },
   { label: "Examples", link: "/docs/examples/" },
-  //  {
-  //    label: "How to",
-  //    items: [
-  //      { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
-  //      { label: "Import Resources", link: "/docs/import-resources/" },
-  //      { label: "Create an AWS Account", link: "/docs/create-an-aws-account/" },
-  //    ],
-  //  },
 ];
 
 if (import.meta.env.DEV) {
@@ -102,6 +202,9 @@ export default defineConfig({
   adapter: sst(),
   server: {
     host: "0.0.0.0",
+  },
+  devToolbar: {
+    enabled: false,
   },
   redirects: {
     "/install": "https://raw.githubusercontent.com/sst/ion/dev/install",

@@ -59,48 +59,6 @@ new Cron(name, args, opts?)
 </Section>
 </Segment>
 
-## Properties
-
-### nodes
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Object</code>
-</InlineSection>
-- <p>[<code class="key">job</code>](#nodes-job)</p>
-- <p>[<code class="key">rule</code>](#nodes-rule)</p>
-- <p>[<code class="key">target</code>](#nodes-target)</p>
-</Section>
-The underlying [resources](/docs/components/#nodes) this component creates.
-</Segment>
-<NestedTitle id="nodes-job" Tag="h4" parent="nodes.">job</NestedTitle>
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">Function</code>](/docs/component/aws/function/)<code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The AWS Lambda Function that's invoked when the cron job runs.
-</Segment>
-<NestedTitle id="nodes-rule" Tag="h4" parent="nodes.">rule</NestedTitle>
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** [<code class="type">EventRule</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventrule/)
-</InlineSection>
-</Section>
-The EventBridge Rule resource.
-</Segment>
-<NestedTitle id="nodes-target" Tag="h4" parent="nodes.">target</NestedTitle>
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** [<code class="type">EventTarget</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventtarget/)
-</InlineSection>
-</Section>
-The EventBridge Target resource.
-</Segment>
-
 ## CronArgs
 ### job
 <Segment>
@@ -178,7 +136,7 @@ Or a [cron expression](https://docs.aws.amazon.com/eventbridge/latest/userguide/
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">EventRuleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventrule/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EventRuleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventrule/#inputs)<code class="symbol"> => </code>[<code class="type">EventRuleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventrule/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">EventRuleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventrule/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EventRuleArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventrule/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the EventBridge Rule resource.
@@ -188,10 +146,52 @@ Transform the EventBridge Rule resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">EventTargetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventtarget/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EventTargetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventtarget/#inputs)<code class="symbol"> => </code>[<code class="type">EventTargetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventtarget/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">EventTargetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventtarget/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EventTargetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventtarget/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the EventBridge Target resource.
 
+</Segment>
+
+## Properties
+
+### nodes
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">job</code>](#nodes-job)</p>
+- <p>[<code class="key">rule</code>](#nodes-rule)</p>
+- <p>[<code class="key">target</code>](#nodes-target)</p>
+</Section>
+The underlying [resources](/docs/components/#nodes) this component creates.
+</Segment>
+<NestedTitle id="nodes-job" Tag="h4" parent="nodes.">job</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">Function</code>](/docs/component/aws/function/)<code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The AWS Lambda Function that's invoked when the cron job runs.
+</Segment>
+<NestedTitle id="nodes-rule" Tag="h4" parent="nodes.">rule</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">EventRule</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventrule/)
+</InlineSection>
+</Section>
+The EventBridge Rule resource.
+</Segment>
+<NestedTitle id="nodes-target" Tag="h4" parent="nodes.">target</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">EventTarget</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/eventtarget/)
+</InlineSection>
+</Section>
+The EventBridge Target resource.
 </Segment>
 </div>

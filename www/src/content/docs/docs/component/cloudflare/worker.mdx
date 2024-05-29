@@ -90,38 +90,6 @@ new Worker(name, args, opts?)
 </Section>
 </Segment>
 
-## Properties
-
-### nodes
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Object</code>
-</InlineSection>
-- <p>[<code class="key">worker</code>](#nodes-worker)</p>
-</Section>
-The underlying [resources](/docs/components/#nodes) this component creates.
-</Segment>
-<NestedTitle id="nodes-worker" Tag="h4" parent="nodes.">worker</NestedTitle>
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">WorkerScript</code>](https://www.pulumi.com/registry/packages/cloudflare/api-docs/workerscript/)<code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The Cloudflare Worker script.
-</Segment>
-
-### url
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">string</code><code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The Worker URL if `url` is enabled.
-</Segment>
-
 ## WorkerArgs
 ### build?
 <Segment>
@@ -296,7 +264,7 @@ Takes a list of components to link to the function.
 </InlineSection>
 - <p>[<code class="key">worker?</code>](#transform-worker)</p>
 </Section>
-[Transform](/docs/components#transform/) how this component creates its underlying
+[Transform](/docs/components/#transform) how this component creates its underlying
 resources.
 
 </Segment>
@@ -304,7 +272,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">WorkerScriptArgs</code>](https://www.pulumi.com/registry/packages/cloudflare/api-docs/workerscript/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">WorkerScriptArgs</code>](https://www.pulumi.com/registry/packages/cloudflare/api-docs/workerscript/#inputs)<code class="symbol"> => </code>[<code class="type">WorkerScriptArgs</code>](https://www.pulumi.com/registry/packages/cloudflare/api-docs/workerscript/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">WorkerScriptArgs</code>](https://www.pulumi.com/registry/packages/cloudflare/api-docs/workerscript/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">WorkerScriptArgs</code>](https://www.pulumi.com/registry/packages/cloudflare/api-docs/workerscript/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the Worker resource.
@@ -323,5 +291,64 @@ Transform the Worker resource.
 </InlineSection>
 Enable a dedicated endpoint for your Worker.
 
+</Segment>
+
+## Properties
+
+### nodes
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">worker</code>](#nodes-worker)</p>
+</Section>
+The underlying [resources](/docs/components/#nodes) this component creates.
+</Segment>
+<NestedTitle id="nodes-worker" Tag="h4" parent="nodes.">worker</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">WorkerScript</code>](https://www.pulumi.com/registry/packages/cloudflare/api-docs/workerscript/)<code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The Cloudflare Worker script.
+</Segment>
+
+### url
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The Worker URL if `url` is enabled.
+</Segment>
+
+## SDK
+
+The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
+
+### Links
+<Segment>
+<Section type="parameters">
+- <p><code class="key">url</code> <code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">string</code></p>
+The Worker URL if `url` is enabled.
+</Section>
+</Segment>
+
+### Bindings
+<Segment>
+When you link a worker (WorkerA) to another worker (WorkerB), it automatically creates
+a service binding between the workers. It allows WorkerA to call WorkerB without going
+through a publicly-accessible URL.
+
+```ts title="index.ts" {3}
+import { Resource } from "sst";
+
+await Resource.WorkerB.fetch(request);
+```
+
+[Learn more about binding Workers.](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/)
 </Segment>
 </div>

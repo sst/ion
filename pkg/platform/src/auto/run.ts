@@ -6,6 +6,7 @@ import {
   mergeOptions,
   runtime,
   automation,
+  output,
 } from "@pulumi/pulumi";
 
 import aws from "@pulumi/aws";
@@ -64,12 +65,19 @@ function addTransformationToEnsureUniqueComponentNames() {
       return;
     }
 
-    if (componentNames.has(args.name)) {
+    const lcName = args.name.toLowerCase();
+    if (lcName === "app") {
+      throw new VisibleError(
+        `Component name "${args.name}" is reserved. Please choose a different name for your "${args.type}" component.`,
+      );
+    }
+
+    if (componentNames.has(lcName)) {
       throw new VisibleError(
         `Invalid component name "${args.name}". Component names must be unique.`,
       );
     }
-    componentNames.add(args.name);
+    componentNames.add(lcName);
 
     if (!args.name.match(/^[A-Z][a-zA-Z0-9]*$/)) {
       throw new VisibleError(
@@ -86,7 +94,7 @@ function addTransformationToCheckBucketsHaveMultiplePolicies() {
   runtime.registerStackTransformation((args: ResourceTransformationArgs) => {
     if (args.type !== "aws:s3/bucketPolicy:BucketPolicy") return;
 
-    args.props.bucket.apply((bucket: string) => {
+    output(args.props.bucket).apply((bucket: string) => {
       if (bucketsWithPolicy[bucket])
         throw new VisibleError(
           `Cannot add bucket policy "${args.name}" to the AWS S3 Bucket "${bucket}". The bucket already has a policy attached "${bucketsWithPolicy[bucket]}".`,

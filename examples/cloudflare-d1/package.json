@@ -1,9 +1,7 @@
 {
-  "name": "base-ts",
+  "name": "cloudflare-d1",
   "version": "0.0.0",
   "dependencies": {
-    "drizzle-kit": "^0.20.14",
-    "drizzle-orm": "^0.30.7",
     "sst": "^3.0.4"
   },
   "devDependencies": {

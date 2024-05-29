@@ -9,9 +9,7 @@ export default $config({
   app(input) {
     return {
       name: "aws-router",
-      providers: {
-        aws: {},
-      },
+      home: "aws",
       removal: input?.stage === "production" ? "retain" : "remove",
     };
   },
@@ -21,10 +19,12 @@ export default $config({
       url: true,
     });
     const router = new sst.aws.Router("MyRouter", {
+      domain: "router.ion.dev.sst.dev",
       routes: {
         "/*": api.url,
       },
     });
+
     return {
       router: router.url,
     };

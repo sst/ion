@@ -1,146 +1,59 @@
-import {
-  ComponentResourceOptions,
-  Output,
-  all,
-  interpolate,
-  output,
-} from "@pulumi/pulumi";
+import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { Component, Prettify, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { Function, FunctionArgs } from "./function";
+import { FunctionArgs } from "./function";
 import {
   hashStringToPrettyString,
   prefixName,
   sanitizeToPascalCase,
 } from "../naming";
 import { VisibleError } from "../error";
-import { HostedZoneLookup } from "./providers/hosted-zone-lookup";
 import { DnsValidatedCertificate } from "./dns-validated-certificate";
-import { Hint } from "../hint";
 import { RETENTION } from "./logging";
-
-interface DomainArgs {
-  /**
-   * The custom domain you want to use. Supports domains hosted on [Route 53](https://aws.amazon.com/route53/) or outside AWS.
-   * @example
-   * ```js
-   * {
-   *   domain: "domain.com"
-   * }
-   * ```
-   */
-  domainName: Input<string>;
-  /**
-   * Name of the [Route 53 hosted zone](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/hosted-zones-working-with.html) that contains the `domainName`. You can find the hosted zone name in the Route 53 part of the AWS Console.
-
-   *
-   * Usually your domain name is in a hosted zone with the same name. For example,
-   * `domain.com` might be in a hosted zone also called `domain.com`. So by default, SST will
-   * look for a hosted zone that matches the `domainName`.
-   *
-   * There are cases where these might not be the same. For example, if you use a subdomain,
-   * `api.domain.com`, the hosted zone might be `domain.com`. So you'll need to pass in the
-   * hosted zone name.
-   *
-   * :::note
-   * If both the `hostedZone` and `hostedZoneId` are set, `hostedZoneId` will take precedence.
-   * :::
-   *
-   * @default Same as the `domainName`
-   * @example
-   * ```js {4}
-   * {
-   *   domain: {
-   *     domainName: "api.domain.com",
-   *     hostedZone: "domain.com"
-   *   }
-   * }
-   * ```
-   */
-  hostedZone?: Input<string>;
-  /**
-   * The 14 letter ID of the [Route 53 hosted zone](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/hosted-zones-working-with.html) that contains the `domainName`. You can find the hosted zone ID in the Route 53 part of the AWS Console.
-   *
-   * This option is useful for cases where you have multiple hosted zones that have the same
-   * domain.
-   *
-   * :::note
-   * If both the `hostedZone` and `hostedZoneId` are set, `hostedZoneId` will take precedence.
-   * :::
-   *
-   * @example
-   * ```js {4}
-   * {
-   *   domain: {
-   *     domainName: "api.domain.com",
-   *     hostedZoneId: "Z2FDTNDATAQYW2"
-   *   }
-   * }
-   * ```
-   */
-  hostedZoneId?: Input<string>;
-  /**
-   * The base mapping for the custom domain. This adds a suffix to the URL of the API.
-   *
-   * @example
-   *
-   * Given the following base path and domain name.
-   *
-   * ```js
-   * {
-   *   domain: {
-   *     domainName: "api.domain.com",
-   *     path: "v1"
-   *   }
-   * }
-   * ```
-   *
-   * The full URL of the API will be `https://api.domain.com/v1/`.
-   *
-   * :::note
-   * There's an extra trailing slash when a base path is set.
-   * :::
-   *
-   * Be default there is no base path, so if the `domainName` is `api.domain.com`, the full URL will be `https://api.domain.com`.
-   */
-  path?: string;
-}
+import { dns as awsDns } from "./dns.js";
+import { ApiGatewayV2DomainArgs } from "./helpers/apigatewayv2-domain";
+import { ApiGatewayV2LambdaRoute } from "./apigatewayv2-lambda-route";
 
 export interface ApiGatewayV2Args {
   /**
-   * Set a custom domain for your HTTP API. Supports domains hosted either on
-   * [Route 53](https://aws.amazon.com/route53/) or outside AWS.
+   * Set a custom domain for your HTTP API.
+   *
+   * Automatically manages domains hosted on AWS Route 53, Cloudflare, and Vercel. For other
+   * providers, you'll need to pass in a `cert` that validates domain ownership and add the
+   * DNS records.
    *
    * :::tip
-   * You can also migrate an externally hosted domain to Amazon Route 53 by
-   * [following this guide](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/MigratingDNS.html).
+   * Built-in support for AWS Route 53, Cloudflare, and Vercel. And manual setup for other
+   * providers.
    * :::
    *
    * @example
    *
+   * By default this assumes the domain is hosted on Route 53.
+   *
    * ```js
    * {
-   *   domain: "api.domain.com"
+   *   domain: "example.com"
    * }
    * ```
    *
-   * Specify the Route 53 hosted zone.
+   * For domains hosted on Cloudflare.
    *
    * ```js
    * {
    *   domain: {
-   *     domainName: "api.domain.com",
-   *     hostedZone: "domain.com"
+   *     name: "example.com",
+   *     dns: sst.cloudflare.dns()
    *   }
    * }
    * ```
    */
-  domain?: Input<string | Prettify<DomainArgs>>;
+  domain?: Input<string | Prettify<ApiGatewayV2DomainArgs>>;
   /**
    * Configure the [API Gateway logs](https://docs.aws.amazon.com/apigateway/latest/developerguide/view-cloudwatch-log-events-in-cloudwatch-console.html) in CloudWatch. By default, access logs are enabled and kept forever.
-   * @default `&lcub;retention: "forever"&rcub;`
+   * @default `{retention: "forever"}`
    * @example
    * ```js
    * {
@@ -178,6 +91,57 @@ export interface ApiGatewayV2Args {
      * Transform the CloudWatch LogGroup resource used for access logs.
      */
     accessLog?: Transform<aws.cloudwatch.LogGroupArgs>;
+    /**
+     * Transform the routes. This is called for every route that is added.
+     *
+     * :::note
+     * This is applied right before the resource is created. So it overrides the
+     * props set by the route.
+     * :::
+     *
+     * You can use this to set any common props for all the routes and their handler function.
+     * Like the other transforms, you can either pass in an object or a callback.
+     *
+     * @example
+     *
+     * Here we are ensuring that all handler functions of our routes have a memory of `2048 MB`.
+     *
+     * ```js
+     * {
+     *   transform: {
+     *     route: {
+     *       handler: {
+     *         memory: "2048 MB"
+     *       },
+     *     }
+     *   }
+     * }
+     * ```
+     *
+     * Enable IAM auth for all our routes.
+     *
+     * ```js
+     * {
+     *   transform: {
+     *     route: {
+     *       args: (props) => {
+     *         props.auth = { iam: true };
+     *       }
+     *     }
+     *   }
+     * }
+     * ```
+     */
+    route?: {
+      /**
+       * Transform the handler function of the route.
+       */
+      handler?: Transform<FunctionArgs>;
+      /**
+       * Transform the arguments for the route.
+       */
+      args?: Transform<ApiGatewayV2RouteArgs>;
+    };
   };
 }
 
@@ -282,25 +246,6 @@ export interface ApiGatewayV2RouteArgs {
   };
 }
 
-export interface ApiGatewayV2Route {
-  /**
-   * The Lambda function.
-   */
-  function: Output<Function>;
-  /**
-   * The Lambda permission.
-   */
-  permission: aws.lambda.Permission;
-  /**
-   * The API Gateway HTTP API integration.
-   */
-  integration: aws.apigatewayv2.Integration;
-  /**
-   * The API Gateway HTTP API route.
-   */
-  route: Output<aws.apigatewayv2.Route>;
-}
-
 /**
  * The `ApiGatewayV2` component lets you add an [Amazon API Gateway HTTP API](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api.html) to your app.
  *
@@ -316,7 +261,7 @@ export interface ApiGatewayV2Route {
  *
  * ```js {2}
  * new sst.aws.ApiGatewayV2("MyApi", {
- *   domain: "api.domain.com"
+ *   domain: "api.example.com"
  * });
  * ```
  *
@@ -326,13 +271,49 @@ export interface ApiGatewayV2Route {
  * api.route("GET /", "src/get.handler");
  * api.route("POST /", "src/post.handler");
  * ```
+ *
+ * #### Configure the routes
+ *
+ * You can configure the route and its handler function.
+ *
+ * ```ts
+ * api.route("GET /", "src/get.handler", { auth: { iam: true } });
+ * api.route("POST /", { handler: "src/post.handler", memory: "2048 MB" });
+ * ```
+ *
+ * #### Set defaults for all routes
+ *
+ * You can use the `transform` to set some defaults for all your routes. For example,
+ * instead of setting the `memory` for each route.
+ *
+ * ```ts
+ * api.route("GET /", { handler: "src/get.handler", memory: "2048 MB" });
+ * api.route("POST /", { handler: "src/post.handler", memory: "2048 MB" });
+ * ```
+ *
+ * You can set it through the `transform`.
+ *
+ * ```ts {5}
+ * new sst.aws.ApiGatewayV2("MyApi", {
+ *   transform: {
+ *     route: {
+ *       handler: {
+ *         memory: "2048 MB"
+ *       }
+ *     }
+ *   }
+ * });
+ *
+ * api.route("GET /", "src/get.handler");
+ * api.route("POST /", "src/post.handler");
+ * ```
  */
 export class ApiGatewayV2 extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorArgs: ApiGatewayV2Args;
   private api: aws.apigatewayv2.Api;
   private apigDomain?: aws.apigatewayv2.DomainName;
   private apiMapping?: Output<aws.apigatewayv2.ApiMapping>;
-  private authorizers: Record<string, aws.apigatewayv2.Authorizer> = {};
   private logGroup: aws.cloudwatch.LogGroup;
 
   constructor(
@@ -351,13 +332,13 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     const logGroup = createLogGroup();
     createStage();
 
-    const zoneId = lookupHostedZoneId();
-    const certificate = createSsl();
+    const certificateArn = createSsl();
     const apigDomain = createDomainName();
-    createRoute53Records();
+    createDnsRecords();
     const apiMapping = createDomainMapping();
 
     this.constructorName = name;
+    this.constructorArgs = args;
     this.api = api;
     this.apigDomain = apigDomain;
     this.apiMapping = apiMapping;
@@ -377,18 +358,25 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     function normalizeDomain() {
       if (!args.domain) return;
 
-      return output(args.domain).apply((domain) => {
-        if (typeof domain === "string") {
-          return { domainName: domain };
-        }
+      // validate
+      output(args.domain).apply((domain) => {
+        if (typeof domain === "string") return;
 
-        if (!domain.domainName) {
-          throw new Error(`Missing "domainName" for domain.`);
-        }
-        if (domain.hostedZone && domain.hostedZoneId) {
-          throw new Error(`Do not set both "hostedZone" and "hostedZoneId".`);
-        }
-        return domain;
+        if (!domain.name) throw new Error(`Missing "name" for domain.`);
+        if (domain.dns === false && !domain.cert)
+          throw new Error(`No "cert" provided for domain with disabled DNS.`);
+      });
+
+      // normalize
+      return output(args.domain).apply((domain) => {
+        const norm = typeof domain === "string" ? { name: domain } : domain;
+
+        return {
+          name: norm.name,
+          path: norm.path,
+          dns: norm.dns === false ? undefined : norm.dns ?? awsDns(),
+          cert: norm.cert,
+        };
       });
     }
 
@@ -455,44 +443,32 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
       );
     }
 
-    function lookupHostedZoneId() {
+    function createSsl() {
       if (!domain) return;
 
       return domain.apply((domain) => {
-        if (domain.hostedZoneId) return output(domain.hostedZoneId);
+        if (domain.cert) return output(domain.cert);
 
-        return new HostedZoneLookup(
-          `${name}HostedZoneLookup`,
+        return new DnsValidatedCertificate(
+          `${name}Ssl`,
           {
-            domain: domain.hostedZone ?? domain.domainName,
+            domainName: domain.name,
+            dns: domain.dns!,
           },
           { parent },
-        ).zoneId;
+        ).arn;
       });
     }
 
-    function createSsl() {
-      if (!domain || !zoneId) return;
-
-      return new DnsValidatedCertificate(
-        `${name}Ssl`,
-        {
-          domainName: domain.domainName,
-          zoneId,
-        },
-        { parent },
-      );
-    }
-
     function createDomainName() {
-      if (!domain || !certificate) return;
+      if (!domain || !certificateArn) return;
 
       return new aws.apigatewayv2.DomainName(
         `${name}DomainName`,
         transform(args.transform?.domainName, {
-          domainName: domain?.domainName,
+          domainName: domain?.name,
           domainNameConfiguration: {
-            certificateArn: certificate.arn,
+            certificateArn,
             endpointType: "REGIONAL",
             securityPolicy: "TLS_1_2",
           },
@@ -501,26 +477,31 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
       );
     }
 
-    function createRoute53Records(): void {
-      if (!domain || !zoneId || !apigDomain) {
+    function createDnsRecords(): void {
+      if (!domain || !apigDomain) {
         return;
       }
 
-      domain.domainName.apply((domainName) => {
-        for (const type of ["A", "AAAA"]) {
-          new aws.route53.Record(
-            `${name}${type}Record${sanitizeToPascalCase(domainName)}`,
+      domain.dns.apply((dns) => {
+        if (!dns) return;
+
+        if (dns.provider === "aws") {
+          dns.createAliasRecords(
+            name,
             {
-              name: domain.domainName,
-              zoneId,
-              type,
-              aliases: [
-                {
-                  name: apigDomain.domainNameConfiguration.targetDomainName,
-                  zoneId: apigDomain.domainNameConfiguration.hostedZoneId,
-                  evaluateTargetHealth: true,
-                },
-              ],
+              name: domain.name,
+              aliasName: apigDomain.domainNameConfiguration.targetDomainName,
+              aliasZone: apigDomain.domainNameConfiguration.hostedZoneId,
+            },
+            { parent },
+          );
+        } else {
+          dns.createRecord(
+            name,
+            {
+              type: "CNAME",
+              name: domain.name,
+              value: apigDomain.domainNameConfiguration.targetDomainName,
             },
             { parent },
           );
@@ -558,9 +539,9 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     //       trailing slash, the API fails with the error {"message":"Not Found"}
     return this.apigDomain && this.apiMapping
       ? all([this.apigDomain.domainName, this.apiMapping.apiMappingKey]).apply(
-          ([domain, key]) =>
-            key ? `https://${domain}/${key}/` : `https://${domain}`,
-        )
+        ([domain, key]) =>
+          key ? `https://${domain}/${key}/` : `https://${domain}`,
+      )
       : this.api.apiEndpoint;
   }
 
@@ -573,6 +554,10 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
        * The Amazon API Gateway HTTP API
        */
       api: this.api,
+      /**
+       * The CloudWatch LogGroup for the access logs.
+       */
+      logGroup: this.logGroup,
     };
   }
 
@@ -664,53 +649,24 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     route: string,
     handler: string | FunctionArgs,
     args: ApiGatewayV2RouteArgs = {},
-  ): ApiGatewayV2Route {
-    const source = this;
-    const sourceName = this.constructorName;
-    const routeKey = parseRoute();
-
-    // Build route name
-    const id = sanitizeToPascalCase(
-      hashStringToPrettyString([this.api.id, routeKey].join(""), 4),
+  ) {
+    const routeNormalized = parseRoute();
+    const prefix = this.constructorName;
+    const suffix = sanitizeToPascalCase(
+      hashStringToPrettyString([this.api.id, routeNormalized].join(""), 6),
     );
 
-    const fn = Function.fromDefinition(`${sourceName}Handler${id}`, handler, {
-      description: `${sourceName} route ${routeKey}`,
-    });
-    const permission = new aws.lambda.Permission(
-      `${sourceName}Handler${id}Permissions`,
-      {
-        action: "lambda:InvokeFunction",
-        function: fn.arn,
-        principal: "apigateway.amazonaws.com",
-        sourceArn: interpolate`${this.nodes.api.executionArn}/*`,
+    return new ApiGatewayV2LambdaRoute(`${prefix}Route${suffix}`, {
+      api: {
+        name: prefix,
+        id: this.api.id,
+        executionArn: this.api.executionArn,
       },
-    );
-    const integration = new aws.apigatewayv2.Integration(
-      `${sourceName}Integration${id}`,
-      transform(args.transform?.integration, {
-        apiId: this.api.id,
-        integrationType: "AWS_PROXY",
-        integrationUri: fn.arn,
-        payloadFormatVersion: "2.0",
-      }),
-      { dependsOn: [permission] },
-    );
-    const authArgs = createAuthorizer();
-
-    const apiRoute = authArgs.apply(
-      (authArgs) =>
-        new aws.apigatewayv2.Route(
-          `${sourceName}Route${id}`,
-          transform(args.transform?.route, {
-            apiId: this.api.id,
-            routeKey,
-            target: interpolate`integrations/${integration.id}`,
-            ...authArgs,
-          }),
-        ),
-    );
-    return { function: fn, permission, integration, route: apiRoute };
+      route: routeNormalized,
+      handler,
+      handlerTransform: this.constructorArgs.transform?.route?.handler,
+      ...transform(this.constructorArgs.transform?.route?.args, args),
+    });
 
     function parseRoute() {
       if (route.toLowerCase() === "$default") return "$default";
@@ -743,52 +699,6 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
         );
 
       return `${method} ${path}`;
-    }
-
-    function createAuthorizer() {
-      return output(args.auth).apply((auth) => {
-        if (auth?.iam) return { authorizationType: "AWS_IAM" };
-        if (auth?.jwt) {
-          // Build authorizer name
-          const id = sanitizeToPascalCase(
-            hashStringToPrettyString(
-              [
-                auth.jwt.issuer,
-                ...auth.jwt.audiences.sort(),
-                auth.jwt.identitySource ?? "",
-              ].join(""),
-              4,
-            ),
-          );
-
-          const authorizer =
-            source.authorizers[id] ??
-            new aws.apigatewayv2.Authorizer(
-              `${sourceName}Authorizer${id}`,
-              transform(args.transform?.authorizer, {
-                apiId: source.api.id,
-                authorizerType: "JWT",
-                identitySources: [
-                  auth.jwt.identitySource ?? "$request.header.Authorization",
-                ],
-                jwtConfiguration: {
-                  audiences: auth.jwt.audiences,
-                  issuer: auth.jwt.issuer,
-                },
-              }),
-            );
-          source.authorizers[id] = authorizer;
-
-          return {
-            authorizationType: "JWT",
-            authorizationScopes: auth.jwt.scopes,
-            authorizerId: authorizer.id,
-          };
-        }
-        return {
-          authorizationType: "NONE",
-        };
-      });
     }
   }
 

@@ -1,4 +1,5 @@
 import { Resource } from "sst";
+import {} from "sst";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   S3Client,
@@ -13,6 +14,7 @@ const s3 = new S3Client({});
 
 const app = new Hono()
   .get("/", async (c) => {
+    console.log(Resource.App);
     const command = new PutObjectCommand({
       Key: crypto.randomUUID(),
       Bucket: Resource.MyBucket.name,

@@ -78,7 +78,7 @@ func (w *WorkerRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOut
 			ResolveDir: filepath.Dir(abs),
 			Loader:     esbuild.LoaderTS,
 		},
-		External:   []string{"node:*"},
+		External:   []string{"node:*", "cloudflare:workers"},
 		Conditions: []string{"worker"},
 		Sourcemap:  esbuild.SourceMapNone,
 		Loader:     loader,
@@ -119,7 +119,9 @@ func (w *WorkerRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOut
 	}
 
 	result := buildContext.Rebuild()
-	w.results[input.Warp.FunctionID] = result
+	if len(result.Errors) == 0 {
+		w.results[input.Warp.FunctionID] = result
+	}
 	errors := []string{}
 	for _, error := range result.Errors {
 		errors = append(errors, error.Text)

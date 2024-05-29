@@ -5,7 +5,7 @@ import { Link } from "../link";
 
 export interface KvArgs {
   /**
-   * [Transform](/docs/components#transform/) how this component creates its underlying
+   * [Transform](/docs/components/#transform) how this component creates its underlying
    * resources.
    */
   transform?: {
@@ -26,6 +26,26 @@ export interface KvArgs {
  *
  * ```ts
  * const storage = new sst.cloudflare.Kv("MyStorage");
+ * ```
+ *
+ * #### Link to a worker
+ *
+ * You can link KV to a worker.
+ *
+ * ```ts {3}
+ * new sst.cloudflare.Worker("MyWorker", {
+ *   handler: "./index.ts",
+ *   link: [storage],
+ *   url: true
+ * });
+ * ```
+ *
+ * Once linked, you can use the SDK to interact with the bucket.
+ *
+ * ```ts title="index.ts" {3}
+ * import { Resource } from "sst";
+ *
+ * await Resource.MyStorage.get("someKey");
  * ```
  */
 export class Kv extends Component implements Link.Cloudflare.Linkable {
@@ -52,6 +72,19 @@ export class Kv extends Component implements Link.Cloudflare.Linkable {
     }
   }
 
+  /**
+   * when you link a KV storage, the storage will be available to the worker and you can
+   * interact with it using the [API methods documented here](https://developers.cloudflare.com/kv/api/).
+   *
+   * @example
+   * ```ts title="index.ts" {3}
+   * import { Resource } from "sst";
+   *
+   * await Resource.MyStorage.get("someKey");
+   * ```
+   *
+   * @internal
+   */
   getCloudflareBinding(): Link.Cloudflare.Binding {
     return {
       type: "kvNamespaceBindings",

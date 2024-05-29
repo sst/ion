@@ -12,9 +12,9 @@
     "protobufjs"
   ],
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "3.478.0",
     "@aws-sdk/client-cloudfront": "3.478.0",
     "@aws-sdk/client-cloudwatch-logs": "3.478.0",
+    "@aws-sdk/client-ecr": "3.478.0",
     "@aws-sdk/client-lambda": "3.478.0",
     "@aws-sdk/client-rds-data": "3.478.0",
     "@aws-sdk/client-route-53": "3.478.0",
@@ -24,6 +24,7 @@
     "@aws-sdk/middleware-retry": "3.374.0",
     "@pulumi/aws": "6.28.1",
     "@pulumi/cloudflare": "5.24.1",
+    "@pulumi/docker": "4.5.3",
     "@pulumi/pulumi": "3.112.0",
     "@pulumi/random": "4.15.0",
     "@pulumi/tls": "5.0.1",
@@ -33,7 +34,7 @@
     "acorn-walk": "8.3.2",
     "archiver": "6.0.1",
     "astro-sst": "2.40.1",
-    "esbuild": "0.19.10",
+    "esbuild": "0.20.2",
     "glob": "10.3.10",
     "path-to-regexp": "6.2.1",
     "prettier": "3.1.1",
@@ -41,10 +42,10 @@
   },
   "devDependencies": {
     "@aws-sdk/client-iot": "3.501.0",
+    "@pulumiverse/vercel": "1.3.0",
     "@tsconfig/node18": "18.2.2",
     "@types/archiver": "6.0.2",
     "@types/aws-lambda": "^8.10.133",
-    "openai": "4.29.2",
     "vitest": "^1.2.2"
   },
   "overrides": {

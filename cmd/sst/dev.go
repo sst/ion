@@ -72,6 +72,9 @@ func CmdDev(cli *Cli) error {
 				args[0],
 				args[1:]...,
 			)
+			cmd.Env = append(cmd.Env,
+				os.Environ()...,
+			)
 
 			for dir, receiver := range complete.Receivers {
 				abs := filepath.Join(cfgPath, "..", dir)
@@ -108,14 +111,16 @@ func CmdDev(cli *Cli) error {
 				}
 
 			}
-			cmd.Env = append(cmd.Env,
-				os.Environ()...,
-			)
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			processExit := make(chan interface{})
-			cmd.Start()
+			err := cmd.Start()
+			if err != nil {
+				fmt.Println(err)
+				cli.Cancel()
+				return
+			}
 			go func() {
 				cmd.Wait()
 				processExit <- true
@@ -158,12 +163,13 @@ func CmdDev(cli *Cli) error {
 	// fmt.Print("\033[H\033[2J")
 	u := ui.New(ui.ProgressModeDev)
 	defer u.Destroy()
+	silent := cli.Bool("silent")
 	err = server.Connect(cli.Context, server.ConnectInput{
 		CfgPath: cfgPath,
 		Stage:   stage,
 		Verbose: cli.Bool("verbose"),
 		OnEvent: func(event server.Event) {
-			if !hasTarget || !runOnce || true {
+			if !silent || !runOnce {
 				defer u.StackEvent(&event.StackEvent)
 				defer u.Event(&event)
 				if event.StackEvent.PreludeEvent != nil {

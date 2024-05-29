@@ -23,7 +23,9 @@ export function createSessionBuilder<
     async verify(token: string): Promise<SessionValue> {
       const auth = Object.values(Resource).find((value) => value.publicKey);
       if (!auth) {
-        throw new Error("No auth resource found");
+        throw new Error(
+          "No auth resource found. Make sure to link the auth resource to this function.",
+        );
       }
       const publicKey = auth.publicKey;
       const result = await jwtVerify(
@@ -34,6 +36,7 @@ export function createSessionBuilder<
     },
     async create(session: SessionValue) {
       const privateKey = await importPKCS8(
+        // @ts-expect-error
         process.env.AUTH_PRIVATE_KEY || Resource.AUTH_PRIVATE_KEY,
         "RS512",
       );

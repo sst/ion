@@ -26,16 +26,19 @@ func Start(ctx context.Context, root string) (util.CleanupFunc, error) {
 	if err != nil {
 		return nil, err
 	}
-	ignoreSubstrings := []string{".sst", "node_modules"}
+	ignoreSubstrings := []string{"node_modules"}
 
 	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info.IsDir() {
+			if strings.HasPrefix(info.Name(), ".") {
+				return filepath.SkipDir
+			}
 			for _, substring := range ignoreSubstrings {
 				if strings.Contains(path, substring) {
-					return nil
+					return filepath.SkipDir
 				}
 			}
 			slog.Info("watching", "path", path)
@@ -59,7 +62,7 @@ func Start(ctx context.Context, root string) (util.CleanupFunc, error) {
 					return
 				}
 				slog.Info("file event", "path", event.Name, "op", event.Op)
-				if (event.Op.Has(fsnotify.Write) || event.Op.Has(fsnotify.Create)) && time.Since(limiter[event.Name]) > 500*time.Millisecond {
+				if time.Since(limiter[event.Name]) > 500*time.Millisecond {
 					limiter[event.Name] = time.Now()
 					bus.Publish(&FileChangedEvent{Path: event.Name})
 				}

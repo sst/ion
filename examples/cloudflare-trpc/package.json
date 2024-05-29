@@ -1,0 +1,21 @@
+{
+  "name": "trpc",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@trpc/client": "^11.0.0-rc.359",
+    "@trpc/server": "^11.0.0-rc.359",
+    "sst": "ion",
+    "zod": "^3.23.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240405.0"
+  }
+}

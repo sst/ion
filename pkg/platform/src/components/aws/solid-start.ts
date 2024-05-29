@@ -114,7 +114,7 @@ export interface SolidStartArgs extends SsrSiteArgs {
    * :::tip
    * You get 1000 free invalidations per month. After that you pay $0.005 per invalidation path. [Read more here](https://aws.amazon.com/cloudfront/pricing/).
    * :::
-   * @default `&lcub;paths: "all", wait: false&rcub;`
+   * @default `{paths: "all", wait: false}`
    * @example
    * Wait for all paths to be invalidated.
    * ```js
@@ -149,29 +149,44 @@ export interface SolidStartArgs extends SsrSiteArgs {
    */
   environment?: SsrSiteArgs["environment"];
   /**
-   * Set a custom domain for your SolidStart app. Supports domains hosted either on
-   * [Route 53](https://aws.amazon.com/route53/) or outside AWS.
+   * Set a custom domain for your SolidStart app.
+   *
+   * Automatically manages domains hosted on AWS Route 53, Cloudflare, and Vercel. For other
+   * providers, you'll need to pass in a `cert` that validates domain ownership and add the
+   * DNS records.
    *
    * :::tip
-   * You can also migrate an externally hosted domain to Amazon Route 53 by
-   * [following this guide](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/MigratingDNS.html).
+   * Built-in support for AWS Route 53, Cloudflare, and Vercel. And manual setup for other
+   * providers.
    * :::
    *
    * @example
    *
+   * By default this assumes the domain is hosted on Route 53.
+   *
    * ```js
    * {
-   *   domain: "domain.com"
+   *   domain: "example.com"
    * }
    * ```
    *
-   * Specify the Route 53 hosted zone and a `www.` version of the custom domain.
+   * For domains hosted on Cloudflare.
    *
    * ```js
    * {
    *   domain: {
-   *     domainName: "domain.com",
-   *     hostedZone: "domain.com",
+   *     name: "example.com",
+   *     dns: sst.cloudflare.dns()
+   *   }
+   * }
+   * ```
+   *
+   * Specify a `www.` version of the custom domain.
+   *
+   * ```js
+   * {
+   *   domain: {
+   *     name: "domain.com",
    *     redirects: ["www.domain.com"]
    *   }
    * }
@@ -208,6 +223,22 @@ export interface SolidStartArgs extends SsrSiteArgs {
    * ```
    */
   assets?: SsrSiteArgs["assets"];
+  /**
+   * Configure the [server function](#nodes-server) in your SolidStart app to connect
+   * to private subnets in a virtual private cloud or VPC. This allows your app to
+   * access private resources.
+   *
+   * @example
+   * ```js
+   * {
+   *   vpc: {
+   *     securityGroups: ["sg-0399348378a4c256c"],
+   *     subnets: ["subnet-0b6a2b73896dc8c4c", "subnet-021389ebee680c2f0"]
+   *   }
+   * }
+   * ```
+   */
+  vpc?: SsrSiteArgs["vpc"];
 }
 
 /**
@@ -250,7 +281,7 @@ export interface SolidStartArgs extends SsrSiteArgs {
  * ```js {4}
  * new sst.aws.SolidStart("MyWeb", {
  *   domain: {
- *     domainName: "my-app.com",
+ *     name: "my-app.com",
  *     redirects: ["www.my-app.com"]
  *   }
  * });
@@ -315,8 +346,8 @@ export class SolidStart extends Component implements Link.Linkable {
       _hint: $dev
         ? undefined
         : all([this.cdn.domainUrl, this.cdn.url]).apply(
-          ([domainUrl, url]) => domainUrl ?? url,
-        ),
+            ([domainUrl, url]) => domainUrl ?? url,
+          ),
       _metadata: {
         mode: $dev ? "placeholder" : "deployed",
         path: sitePath,
@@ -371,7 +402,9 @@ export class SolidStart extends Component implements Link.Linkable {
       return all([outputPath, buildMeta]).apply(([outputPath, buildMeta]) => {
         const serverConfig = {
           description: "Server handler for Solid",
-          handler: path.join(outputPath, ".output", "server", "index.handler"),
+          handler: "index.handler",
+          bundle: path.join(outputPath, ".output", "server"),
+          streaming: true,
         };
 
         return validatePlan({

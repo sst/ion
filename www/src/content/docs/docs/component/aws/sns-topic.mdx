@@ -85,6 +85,107 @@ new SnsTopic(name, args?, opts?)
 </Section>
 </Segment>
 
+## SnsTopicArgs
+### fifo?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">false</code>
+</InlineSection>
+FIFO (First-In-First-Out) topics are designed to provide strict message ordering.
+
+:::caution
+Changing a standard topic to a FIFO topic or the other way around will result in the destruction and recreation of the topic.
+:::
+
+```js
+{
+  fifo: true
+}
+```
+</Segment>
+### transform?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">topic?</code>](#transform-topic)</p>
+</Section>
+[Transform](/docs/components#transform) how this component creates its underlying
+resources.
+
+</Segment>
+<NestedTitle id="transform-topic" Tag="h4" parent="transform.">topic?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">TopicArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topic/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">TopicArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topic/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+</InlineSection>
+</Section>
+Transform the SNS topic resource.
+
+</Segment>
+
+## Properties
+
+### arn
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The ARN of the SNS topic.
+</Segment>
+
+### name
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The name of the SNS topic.
+</Segment>
+
+### nodes
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">topic</code>](#nodes-topic)</p>
+</Section>
+The underlying [resources](/docs/components/#nodes) this component creates.
+</Segment>
+<NestedTitle id="nodes-topic" Tag="h4" parent="nodes.">topic</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">Topic</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topic/)
+</InlineSection>
+</Section>
+The Amazon SNS topic.
+</Segment>
+
+## SDK
+
+The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
+
+### Links
+<Segment>
+<Section type="parameters">
+- <p><code class="key">arn</code> <code class="primitive">string</code></p>
+The ARN of the SNS topic.
+</Section>
+</Segment>
+
 ## Methods
 
 ### subscribe
@@ -99,12 +200,12 @@ subscribe(subscriber, args?)
 #### Parameters
 - <p><code class="key">subscriber</code> <code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)</p>
 The function that'll be notified.
-- <p><code class="key">args?</code> [<code class="type">SnsTopicSubscribeArgs</code>](#snstopicsubscribeargs)</p>
+- <p><code class="key">args?</code> [<code class="type">SnsTopicSubscriberArgs</code>](#snstopicsubscriberargs)</p>
 Configure the subscription.
 </Section>
 
 <InlineSection>
-**Returns** [<code class="type">SnsTopicFunctionSubscriber</code>](#snstopicfunctionsubscriber)
+**Returns** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">SnsTopicLambdaSubscriber</code>](/docs/component/aws/sns-topic-lambda-subscriber/)<code class="symbol">&gt;</code>
 </InlineSection>
 Subscribe to this SNS topic.
 
@@ -144,12 +245,12 @@ subscribeQueue(queueArn, args?)
 #### Parameters
 - <p><code class="key">queueArn</code> <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
 The ARN of the queue that'll be notified.
-- <p><code class="key">args?</code> [<code class="type">SnsTopicSubscribeArgs</code>](#snstopicsubscribeargs)</p>
+- <p><code class="key">args?</code> [<code class="type">SnsTopicSubscriberArgs</code>](#snstopicsubscriberargs)</p>
 Configure the subscription.
 </Section>
 
 <InlineSection>
-**Returns** [<code class="type">SnsTopicQueueSubscriber</code>](#snstopicqueuesubscriber)
+**Returns** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">SnsTopicQueueSubscriber</code>](/docs/component/aws/sns-topic-queue-subscriber/)<code class="symbol">&gt;</code>
 </InlineSection>
 Subscribe to this SNS topic with an SQS queue.
 
@@ -190,12 +291,12 @@ SnsTopic.subscribe(topicArn, subscriber, args?)
 The ARN of the SNS topic to subscribe to.
 - <p><code class="key">subscriber</code> <code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)</p>
 The function that'll be notified.
-- <p><code class="key">args?</code> [<code class="type">SnsTopicSubscribeArgs</code>](#snstopicsubscribeargs)</p>
+- <p><code class="key">args?</code> [<code class="type">SnsTopicSubscriberArgs</code>](#snstopicsubscriberargs)</p>
 Configure the subscription.
 </Section>
 
 <InlineSection>
-**Returns** [<code class="type">SnsTopicFunctionSubscriber</code>](#snstopicfunctionsubscriber)
+**Returns** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">SnsTopicLambdaSubscriber</code>](/docs/component/aws/sns-topic-lambda-subscriber/)<code class="symbol">&gt;</code>
 </InlineSection>
 Subscribe to an SNS topic that was not created in your app.
 
@@ -245,12 +346,12 @@ SnsTopic.subscribeQueue(topicArn, queueArn, args?)
 The ARN of the SNS topic to subscribe to.
 - <p><code class="key">queueArn</code> <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
 The ARN of the queue that'll be notified.
-- <p><code class="key">args?</code> [<code class="type">SnsTopicSubscribeArgs</code>](#snstopicsubscribeargs)</p>
+- <p><code class="key">args?</code> [<code class="type">SnsTopicSubscriberArgs</code>](#snstopicsubscriberargs)</p>
 Configure the subscription.
 </Section>
 
 <InlineSection>
-**Returns** [<code class="type">SnsTopicQueueSubscriber</code>](#snstopicqueuesubscriber)
+**Returns** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">SnsTopicQueueSubscriber</code>](/docs/component/aws/sns-topic-queue-subscriber/)<code class="symbol">&gt;</code>
 </InlineSection>
 Subscribe to an existing SNS topic with a previously created SQS queue.
 
@@ -278,164 +379,7 @@ sst.aws.SnsTopic.subscribeQueue(topicArn, queueArn, {
 ```
 </Segment>
 
-## Properties
-
-### arn
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The ARN of the SNS topic.
-</Segment>
-
-### name
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The name of the SNS topic.
-</Segment>
-
-### nodes
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Object</code>
-</InlineSection>
-- <p>[<code class="key">topic</code>](#nodes-topic)</p>
-</Section>
-The underlying [resources](/docs/components/#nodes) this component creates.
-</Segment>
-<NestedTitle id="nodes-topic" Tag="h4" parent="nodes.">topic</NestedTitle>
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** [<code class="type">Topic</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topic/)
-</InlineSection>
-</Section>
-The Amazon SNS topic.
-</Segment>
-
-## Links
-
-The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
-
-### arn
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">string</code>
-</InlineSection>
-</Section>
-The ARN of the SNS topic.
-</Segment>
-
-## SnsTopicArgs
-### fifo?
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-
-<InlineSection>
-**Default** <code class="primitive">false</code>
-</InlineSection>
-FIFO (First-In-First-Out) topics are designed to provide strict message ordering.
-
-:::caution
-Changing a standard topic to a FIFO topic or the other way around will result in the destruction and recreation of the topic.
-:::
-
-```js
-{
-  fifo: true
-}
-```
-</Segment>
-### transform?
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Object</code>
-</InlineSection>
-- <p>[<code class="key">topic?</code>](#transform-topic)</p>
-</Section>
-[Transform](/docs/components#transform) how this component creates its underlying
-resources.
-
-</Segment>
-<NestedTitle id="transform-topic" Tag="h4" parent="transform.">topic?</NestedTitle>
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** [<code class="type">TopicArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topic/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">TopicArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topic/#inputs)<code class="symbol"> => </code>[<code class="type">TopicArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topic/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
-</InlineSection>
-</Section>
-Transform the SNS topic resource.
-
-</Segment>
-
-## SnsTopicFunctionSubscriber
-### function
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">Function</code>](/docs/component/aws/function/)<code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The Lambda function that'll be notified.
-
-</Segment>
-### permission
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">Permission</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/permission/)<code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The Lambda permission.
-
-</Segment>
-### subscription
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">TopicSubscription</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topicsubscription/)<code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The SNS topic subscription.
-
-</Segment>
-
-## SnsTopicQueueSubscriber
-### policy
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">QueuePolicy</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sqs/queuepolicy/)<code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The SNS topic policy.
-
-</Segment>
-### subscription
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">TopicSubscription</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topicsubscription/)<code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The SNS topic subscription.
-
-</Segment>
-
-## SnsTopicSubscribeArgs
+## SnsTopicSubscriberArgs
 ### filter?
 <Segment>
 <Section type="parameters">
@@ -499,7 +443,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">TopicSubscriptionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topicsubscription/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">TopicSubscriptionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topicsubscription/#inputs)<code class="symbol"> => </code>[<code class="type">TopicSubscriptionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topicsubscription/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">TopicSubscriptionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topicsubscription/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">TopicSubscriptionArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sns/topicsubscription/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the SNS topic Subscription resource.

@@ -54,7 +54,7 @@ export interface PostgresArgs {
    * Each ACU is roughly equivalent to 2 GB of memory. So pick the minimum and maximum
    * based on the baseline and peak memory usage of your app.
    *
-   * @default `&lcub;min: "0.5 ACU", max: "4 ACU"&rcub;`
+   * @default `{min: "0.5 ACU", max: "4 ACU"}`
    */
   scaling?: Input<{
     /**
@@ -94,10 +94,62 @@ export interface PostgresArgs {
     max?: Input<ACU>;
   }>;
   /**
+   * The VPC to use for the database cluster.
+   *
+   * :::note
+   * The default VPC does not have a private subnet and is not recommended for production.
+   * :::
+   *
+   * By default, your account has a VPC in each account.
+   * This comes with a public subnet. If you don't specify a VPC, it'll use the default one.
+   * This is not recommended for production.
+   *
+   * @default The default VPC in your account.
+   *
+   * @example
+   * ```js
+   * {
+   *   vpc: {
+   *     privateSubnets: ["subnet-0db7376a7ad4db5fd ", "subnet-06fc7ee8319b2c0ce"],
+   *     securityGroups: ["sg-0399348378a4c256c"],
+   *   }
+   * }
+   * ```
+   *
+   * Or create a `Vpc` component.
+   *
+   * ```js
+   * const myVpc = new sst.aws.Vpc("MyVpc");
+   * ```
+   *
+   * And pass it in.
+   *
+   * ```js
+   * {
+   *   vpc: myVpc
+   * }
+   * ```
+   */
+  vpc?: Input<{
+    /**
+     * A list of private subnet IDs in the VPC. The database will be placed in the private
+     * subnets.
+     */
+    privateSubnets: Input<Input<string>[]>;
+    /**
+     * A list of VPC security group IDs.
+     */
+    securityGroups: Input<Input<string>[]>;
+  }>;
+  /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
    */
   transform?: {
+    /**
+     * Transform the RDS subnet group.
+     */
+    subnetGroup?: Transform<aws.rds.SubnetGroupArgs>;
     /**
      * Transform the RDS Cluster.
      */
@@ -113,12 +165,28 @@ export interface PostgresArgs {
  * The `Postgres` component lets you add a Postgres database to your app using
  * [Amazon Aurora Serverless v2](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-serverless-v2.html).
  *
+ * :::note
+ * Data API for Aurora Postgres Serverless v2 is still being [rolled out in all regions](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/Concepts.Aurora_Fea_Regions_DB-eng.Feature.ServerlessV2.html#Concepts.Aurora_Fea_Regions_DB-eng.Feature.ServerlessV2.apg).
+ * :::
+ *
+ * To connect to your database from your Lambda functions, you can use the
+ * [AWS Data API](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/data-api.html). It
+ * does not need a persistent connection, and works over HTTP. You also don't need a VPN to
+ * connect to it locally.
+ *
  * @example
  *
  * #### Create the database
  *
  * ```js
  * const database = new sst.aws.Postgres("MyDatabase");
+ * ```
+ *
+ * #### Use a VPC
+ *
+ * ```js
+ * const vpc = new sst.aws.Vpc("MyVpc");
+ * const database = new sst.aws.Postgres("MyDatabase", { vpc });
  * ```
  *
  * #### Change the scaling config
@@ -158,8 +226,7 @@ export interface PostgresArgs {
  */
 export class Postgres
   extends Component
-  implements Link.Linkable, Link.AWS.Linkable
-{
+  implements Link.Linkable, Link.AWS.Linkable {
   private cluster: aws.rds.Cluster;
   private instance: aws.rds.ClusterInstance;
   private databaseName: Output<string>;
@@ -176,6 +243,7 @@ export class Postgres
     const version = normalizeVersion();
     const databaseName = normalizeDatabaseName();
 
+    const subnetGroup = createSubnetGroup();
     const cluster = createCluster();
     const instance = createInstance();
 
@@ -200,6 +268,18 @@ export class Postgres
       );
     }
 
+    function createSubnetGroup() {
+      if (!args?.vpc) return;
+
+      return new aws.rds.SubnetGroup(
+        `${name}SubnetGroup`,
+        transform(args?.transform?.subnetGroup, {
+          subnetIds: output(args.vpc).privateSubnets,
+        }),
+        { parent },
+      );
+    }
+
     function createCluster() {
       return new aws.rds.Cluster(
         `${name}Cluster`,
@@ -213,10 +293,10 @@ export class Postgres
           serverlessv2ScalingConfiguration: scaling,
           skipFinalSnapshot: true,
           enableHttpEndpoint: true,
+          dbSubnetGroupName: subnetGroup?.name,
+          vpcSecurityGroupIds: args?.vpc && output(args.vpc).securityGroups,
         }),
-        {
-          parent,
-        },
+        { parent },
       );
     }
 
@@ -228,10 +308,9 @@ export class Postgres
           instanceClass: "db.serverless",
           engine: aws.rds.EngineType.AuroraPostgresql,
           engineVersion: cluster.engineVersion,
+          dbSubnetGroupName: subnetGroup?.name,
         }),
-        {
-          parent,
-        },
+        { parent },
       );
     }
   }

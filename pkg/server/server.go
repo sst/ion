@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"sync/atomic"
+	"syscall"
 	"time"
 
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/project/provider"
@@ -113,70 +115,80 @@ func (s *Server) Start(parentContext context.Context) error {
 		slog.Info("subscribed", "addr", r.RemoteAddr)
 		flusher, _ := w.(http.Flusher)
 		ctx := r.Context()
-		publish := func(event *Event) {
-			data, _ := json.Marshal(event)
-			w.Write(data)
-			w.Write([]byte("\n"))
-			flusher.Flush()
-		}
-		publish(&Event{
+		publish := make(chan *Event, 100)
+
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case event := <-publish:
+					data, _ := json.Marshal(event)
+					w.Write(data)
+					w.Write([]byte("\n"))
+					flusher.Flush()
+				}
+			}
+		}()
+
+		publish <- &Event{
 			StateEvent: &StateEvent{
 				State: s.state,
 			},
-		})
-		publish(&Event{
+		}
+		publish <- &Event{
 			StackEvent: project.StackEvent{
 				CompleteEvent: s.complete,
 			},
-		})
+		}
 		bus.Subscribe(ctx, func(event *aws.FunctionInvokedEvent) {
-			publish(&Event{
+			publish <- &Event{
 				FunctionInvokedEvent: event,
-			})
+			}
 		})
 		bus.Subscribe(ctx, func(event *aws.FunctionResponseEvent) {
-			publish(&Event{
+			publish <- &Event{
 				FunctionResponseEvent: event,
-			})
+			}
 		})
 		bus.Subscribe(ctx, func(event *aws.FunctionErrorEvent) {
-			publish(&Event{
+			publish <- &Event{
 				FunctionErrorEvent: event,
-			})
+			}
 		})
 
 		bus.Subscribe(ctx, func(event *aws.FunctionLogEvent) {
-			publish(&Event{
+			publish <- &Event{
 				FunctionLogEvent: event,
-			})
+			}
 		})
 
 		bus.Subscribe(ctx, func(event *project.StackEvent) {
-			publish(&Event{
+			publish <- &Event{
 				StackEvent: *event,
-			})
+			}
 		})
 
 		bus.Subscribe(ctx, func(event *aws.FunctionBuildEvent) {
-			publish(&Event{
+			publish <- &Event{
 				FunctionBuildEvent: event,
-			})
+			}
 		})
 
 		bus.Subscribe(ctx, func(event *cloudflare.WorkerBuildEvent) {
-			publish(&Event{
+			publish <- &Event{
 				WorkerBuildEvent: event,
-			})
+			}
 		})
 		bus.Subscribe(ctx, func(event *cloudflare.WorkerUpdatedEvent) {
-			publish(&Event{
+			publish <- &Event{
 				WorkerUpdatedEvent: event,
-			})
+			}
 		})
 		bus.Subscribe(ctx, func(event *cloudflare.WorkerInvokedEvent) {
-			publish(&Event{
+			publish <- &Event{
 				WorkerInvokedEvent: event,
-			})
+			}
 		})
 		<-ctx.Done()
 		slog.Info("done", "addr", r.RemoteAddr)
@@ -210,6 +222,7 @@ func (s *Server) Start(parentContext context.Context) error {
 		result, err := stsClient.AssumeRole(r.Context(), &sts.AssumeRoleInput{
 			RoleArn:         &receiver.AwsRole,
 			RoleSessionName: &sessionName,
+			DurationSeconds: awssdk.Int32(43200),
 		})
 		if err != nil {
 			slog.Info("error assuming role", "err", err.Error())
@@ -241,7 +254,7 @@ func (s *Server) Start(parentContext context.Context) error {
 
 	port, err := findAvailablePort()
 	if err != nil {
-		return ErrServerAlreadyRunning
+		return err
 	}
 	s.server.Addr = fmt.Sprintf("0.0.0.0:%d", port)
 	slog.Info("server", "addr", s.server.Addr)
@@ -322,6 +335,13 @@ func (s *Server) broadcast(event *Event) {
 func findAvailablePort() (int, error) {
 	listener, err := net.Listen("tcp", "localhost:13557")
 	if err != nil {
+		if opError, ok := err.(*net.OpError); ok && opError.Op == "listen" {
+			if syscallErr, ok := opError.Err.(*os.SyscallError); ok && syscallErr.Syscall == "bind" {
+				if errno, ok := syscallErr.Err.(syscall.Errno); ok && errno == syscall.EADDRINUSE {
+					return 0, ErrServerAlreadyRunning
+				}
+			}
+		}
 		return 0, err
 	}
 	defer listener.Close()

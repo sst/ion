@@ -5,14 +5,14 @@ import { Link } from "../link";
 
 export interface D1Args {
   /**
-   * [Transform](/docs/components#transform/) how this component creates its underlying
+   * [Transform](/docs/components/#transform) how this component creates its underlying
    * resources.
    */
   transform?: {
     /**
      * Transform the D1 resource.
      */
-    namespace?: Transform<cloudflare.D1DatabaseArgs>;
+    database?: Transform<cloudflare.D1DatabaseArgs>;
   };
 }
 
@@ -27,6 +27,28 @@ export interface D1Args {
  * ```ts
  * const db = new sst.cloudflare.D1("MyDatabase");
  * ```
+ *
+ * #### Link to a worker
+ *
+ * You can link the db to a worker.
+ *
+ * ```ts {3}
+ * new sst.cloudflare.Worker("MyWorker", {
+ *   handler: "./index.ts",
+ *   link: [db],
+ *   url: true
+ * });
+ * ```
+ *
+ * Once linked, you can use the SDK to interact with the db.
+ *
+ * ```ts title="index.ts" {3}
+ * import { Resource } from "sst";
+ *
+ * await Resource.MyDatabase.prepare(
+ *   "SELECT id FROM todo ORDER BY id DESC LIMIT 1",
+ * ).first();
+ * ```
  */
 export class D1 extends Component implements Link.Cloudflare.Linkable {
   private database: cloudflare.D1Database;
@@ -36,14 +58,14 @@ export class D1 extends Component implements Link.Cloudflare.Linkable {
 
     const parent = this;
 
-    const namespace = createDB();
+    const db = createDB();
 
-    this.database = namespace;
+    this.database = db;
 
     function createDB() {
       return new cloudflare.D1Database(
         `${name}Database`,
-        transform(args?.transform?.namespace, {
+        transform(args?.transform?.database, {
           name,
           accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
         }),
@@ -52,6 +74,21 @@ export class D1 extends Component implements Link.Cloudflare.Linkable {
     }
   }
 
+  /**
+   * when you link a D1 database, the database will be available to the worker and you can
+   * query it using the [API methods documented here](https://developers.cloudflare.com/d1/build-with-d1/d1-client-api/).
+   *
+   * @example
+   * ```ts title="index.ts" {3}
+   * import { Resource } from "sst";
+   *
+   * await Resource.MyDatabase.prepare(
+   *   "SELECT id FROM todo ORDER BY id DESC LIMIT 1",
+   * ).first();
+   * ```
+   *
+   * @internal
+   */
   getCloudflareBinding(): Link.Cloudflare.Binding {
     return {
       type: "d1DatabaseBindings",
@@ -62,7 +99,7 @@ export class D1 extends Component implements Link.Cloudflare.Linkable {
   }
 
   /**
-   * The generated id of the D1 namespace.
+   * The generated id of the D1 database.
    */
   public get id() {
     return this.database.id;

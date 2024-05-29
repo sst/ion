@@ -9,9 +9,10 @@ import * as aws from "@pulumi/aws";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { Function, FunctionArgs } from "./function";
+import { FunctionArgs } from "./function";
 import { hashStringToPrettyString, sanitizeToPascalCase } from "../naming";
-import { VisibleError } from "../error";
+import { parseDynamoStreamArn } from "./helpers/arn";
+import { DynamoLambdaSubscriber } from "./dynamo-lambda-subscriber";
 
 export interface DynamoArgs {
   /**
@@ -142,6 +143,20 @@ export interface DynamoArgs {
     "keys-only" | "new-image" | "old-image" | "new-and-old-images"
   >;
   /**
+   * The field of the table to store the Time to Live (TTL) timestamp in. This field should
+   * be of type `number`. When the TTL timestamp is reached, the item will be deleted.
+   *
+   * Learn more about [Time to Live (TTL)](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html).
+   *
+   * @example
+   * ```js
+   * {
+   *   ttl: "expireAt",
+   * }
+   * ```
+   */
+  ttl?: Input<string>;
+  /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
    */
@@ -153,7 +168,7 @@ export interface DynamoArgs {
   };
 }
 
-export interface DynamoSubscribeArgs {
+export interface DynamoSubscriberArgs {
   /**
    * Filter the records processed by the `subscriber` function.
    *
@@ -227,17 +242,6 @@ export interface DynamoSubscribeArgs {
      */
     eventSourceMapping?: Transform<aws.lambda.EventSourceMappingArgs>;
   };
-}
-
-export interface DynamoSubscriber {
-  /**
-   * The Lambda function that'll be notified.
-   */
-  function: Output<Function>;
-  /**
-   * The Lambda event source mapping.
-   */
-  eventSourceMapping: Output<aws.lambda.EventSourceMapping>;
 }
 
 /**
@@ -344,7 +348,8 @@ export interface DynamoSubscriber {
  */
 export class Dynamo
   extends Component
-  implements Link.Linkable, Link.AWS.Linkable {
+  implements Link.Linkable, Link.AWS.Linkable
+{
   private constructorName: string;
   private table: Output<aws.dynamodb.Table>;
   private isStreamEnabled: boolean = false;
@@ -390,6 +395,13 @@ export class Dynamo
               pointInTimeRecovery: {
                 enabled: true,
               },
+              ttl:
+                args.ttl === undefined
+                  ? undefined
+                  : {
+                      attributeName: args.ttl,
+                      enabled: true,
+                    },
               globalSecondaryIndexes: Object.entries(globalIndexes ?? {}).map(
                 ([name, index]) => ({
                   name,
@@ -483,7 +495,7 @@ export class Dynamo
    */
   public subscribe(
     subscriber: string | FunctionArgs,
-    args?: DynamoSubscribeArgs,
+    args?: DynamoSubscriberArgs,
   ) {
     const sourceName = this.constructorName;
 
@@ -552,18 +564,11 @@ export class Dynamo
   public static subscribe(
     streamArn: Input<string>,
     subscriber: string | FunctionArgs,
-    args?: DynamoSubscribeArgs,
+    args?: DynamoSubscriberArgs,
   ) {
-    // ie. "arn:aws:dynamodb:us-east-1:112233445566:table/MyTable/stream/2024-02-25T23:17:55.264"
-    const tableName = output(streamArn).apply((streamArn) => {
-      const tableName = streamArn.split(":")[5]?.split("/")[1];
-      if (!streamArn.startsWith("arn:aws:dynamodb:") || !tableName)
-        throw new VisibleError(
-          `The provided ARN "${streamArn}" is not a DynamoDB stream ARN.`,
-        );
-      return tableName;
-    });
-
+    const tableName = output(streamArn).apply(
+      (streamArn) => parseDynamoStreamArn(streamArn).tableName,
+    );
     return this._subscribe(tableName, streamArn, subscriber, args);
   }
 
@@ -571,62 +576,27 @@ export class Dynamo
     name: Input<string>,
     streamArn: Input<string>,
     subscriber: string | FunctionArgs,
-    args: DynamoSubscribeArgs = {},
-  ): DynamoSubscriber {
-    const ret = all([name, subscriber, args]).apply(
-      ([name, subscriber, args]) => {
-        // Build subscriber name
-        const namePrefix = sanitizeToPascalCase(name);
-        const id = sanitizeToPascalCase(
-          hashStringToPrettyString(
-            [
-              streamArn,
-              JSON.stringify(args.filters ?? {}),
-              typeof subscriber === "string" ? subscriber : subscriber.handler,
-            ].join(""),
-            4,
-          ),
-        );
+    args: DynamoSubscriberArgs = {},
+  ) {
+    return all([name, subscriber, args]).apply(([name, subscriber, args]) => {
+      const prefix = sanitizeToPascalCase(name);
+      const suffix = sanitizeToPascalCase(
+        hashStringToPrettyString(
+          [
+            streamArn,
+            JSON.stringify(args.filters ?? {}),
+            typeof subscriber === "string" ? subscriber : subscriber.handler,
+          ].join(""),
+          6,
+        ),
+      );
 
-        const fn = Function.fromDefinition(
-          `${namePrefix}Subscriber${id}`,
-          subscriber,
-          {
-            description: `Subscribed to ${name}`,
-            permissions: [
-              {
-                actions: [
-                  "dynamodb:DescribeStream",
-                  "dynamodb:GetRecords",
-                  "dynamodb:GetShardIterator",
-                  "dynamodb:ListStreams",
-                ],
-                resources: [streamArn],
-              },
-            ],
-          },
-        );
-        const eventSourceMapping = new aws.lambda.EventSourceMapping(
-          `${namePrefix}EventSourceMapping${id}`,
-          transform(args.transform?.eventSourceMapping, {
-            eventSourceArn: streamArn,
-            functionName: fn.name,
-            filterCriteria: args.filters && {
-              filters: args.filters.map((filter) => ({
-                pattern: JSON.stringify(filter),
-              })),
-            },
-            startingPosition: "LATEST",
-          }),
-        );
-        return { fn, eventSourceMapping };
-      },
-    );
-
-    return {
-      function: ret.fn,
-      eventSourceMapping: ret.eventSourceMapping,
-    };
+      return new DynamoLambdaSubscriber(`${prefix}Subscriber${suffix}`, {
+        dynamo: { streamArn },
+        subscriber,
+        ...args,
+      });
+    });
   }
 
   /** @internal */

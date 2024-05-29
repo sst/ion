@@ -5,6 +5,7 @@ import {
   runtime,
   output,
 } from "@pulumi/pulumi";
+import * as aws from "@pulumi/aws";
 import { prefixName } from "./naming.js";
 import { VisibleError } from "./error.js";
 
@@ -15,15 +16,15 @@ export type Prettify<T> = {
   [K in keyof T]: T[K];
 } & {};
 
-export type Transform<T> = T | ((args: T) => void | T);
+export type Transform<T> = Partial<T> | ((args: T) => void);
 export function transform<T extends object>(
   transform: Transform<T> | undefined,
   args: T,
 ) {
   // Case: transform is a function
   if (typeof transform === "function") {
-    const ret = transform(args);
-    return ret ?? args;
+    transform(args);
+    return args;
   }
 
   // Case: no transform
@@ -63,17 +64,79 @@ export class Component extends ComponentResource {
 
           let overrides;
           switch (args.type) {
+            // AWS LoadBalancer resource names allow for 32 chars, but an 8 letter suffix
+            // ie. "-1234567" is automatically added
+            case "aws:lb/loadBalancer:LoadBalancer":
+              overrides = { name: prefixName(24, args.name) };
+              break;
+            case "aws:rds/cluster:Cluster":
+              overrides = {
+                clusterIdentifier: prefixName(63, args.name).toLowerCase(),
+              };
+              break;
+            case "aws:rds/clusterInstance:ClusterInstance":
+              overrides = {
+                identifier: prefixName(63, args.name).toLowerCase(),
+              };
+              break;
             case "aws:cloudwatch/eventRule:EventRule":
             case "aws:iam/user:User":
             case "aws:lambda/function:Function":
               overrides = { name: prefixName(64, args.name) };
               break;
+            case "aws:sqs/queue:Queue":
+              overrides = {
+                name: output(args.props.fifoQueue).apply((fifo) =>
+                  prefixName(80, args.name, fifo ? ".fifo" : undefined),
+                ),
+              };
+              break;
+            case "aws:iam/role:Role":
+              overrides = {
+                name: aws
+                  .getRegionOutput(undefined, { provider: args.opts.provider })
+                  .name.apply((region) =>
+                    prefixName(
+                      64,
+                      args.name,
+                      `-${region.toLowerCase().replace(/-/g, "")}`,
+                    ),
+                  ),
+              };
+              break;
             case "aws:apigatewayv2/api:Api":
             case "aws:apigatewayv2/authorizer:Authorizer":
+            case "aws:cognito/userPool:UserPool":
+            case "aws:iot/authorizer:Authorizer":
               overrides = { name: prefixName(128, args.name) };
               break;
+            case "aws:iot/topicRule:TopicRule":
+              overrides = {
+                name: prefixName(128, args.name).replaceAll("-", "_"),
+              };
+              break;
+            case "aws:appautoscaling/policy:Policy":
             case "aws:dynamodb/table:Table":
+            case "aws:ecs/cluster:Cluster":
               overrides = { name: prefixName(255, args.name) };
+              break;
+            case "aws:rds/subnetGroup:SubnetGroup":
+              overrides = { name: prefixName(255, args.name).toLowerCase() };
+              break;
+            case "aws:ec2/eip:Eip":
+            case "aws:ec2/internetGateway:InternetGateway":
+            case "aws:ec2/natGateway:NatGateway":
+            case "aws:ec2/routeTable:RouteTable":
+            case "aws:ec2/securityGroup:SecurityGroup":
+            case "aws:ec2/subnet:Subnet":
+            case "aws:ec2/vpc:Vpc":
+              overrides = {
+                tags: {
+                  // @ts-expect-error
+                  ...args.tags,
+                  Name: prefixName(255, args.name),
+                },
+              };
               break;
             case "aws:sns/topic:Topic":
               overrides = {
@@ -81,6 +144,9 @@ export class Component extends ComponentResource {
                   prefixName(256, args.name, fifo ? ".fifo" : undefined),
                 ),
               };
+              break;
+            case "aws:appsync/graphQLApi:GraphQLApi":
+              overrides = { name: prefixName(65536, args.name) };
               break;
             case "cloudflare:index/d1Database:D1Database":
             case "cloudflare:index/r2Bucket:R2Bucket":
@@ -94,35 +160,29 @@ export class Component extends ComponentResource {
                 title: prefixName(64, args.name).toLowerCase(),
               };
               break;
-            case "aws:rds/cluster:Cluster":
-              overrides = {
-                clusterIdentifier: prefixName(63, args.name).toLowerCase(),
-              };
-              break;
-            case "aws:rds/clusterInstance:ClusterInstance":
-              overrides = {
-                identifier: prefixName(63, args.name).toLowerCase(),
-              };
-              break;
-            case "aws:sqs/queue:Queue":
-              overrides = {
-                name: output(args.props.fifoQueue).apply((fifo) =>
-                  prefixName(80, args.name, fifo ? ".fifo" : undefined),
-                ),
-              };
-              break;
-            // resources prefixed manually
-            case "aws:iam/role:Role":
+            // resources manually named
+            case "aws:appsync/dataSource:DataSource":
+            case "aws:appsync/function:Function":
+            case "aws:appsync/resolver:Resolver":
+            case "aws:cognito/identityPool:IdentityPool":
+            case "aws:ecs/service:Service":
+            case "aws:ecs/taskDefinition:TaskDefinition":
+            case "aws:lb/targetGroup:TargetGroup":
             case "aws:s3/bucketV2:BucketV2":
+            case "aws:cloudwatch/eventBus:EventBus":
               break;
             // resources not prefixed
+            case "aws:acm/certificate:Certificate":
+            case "aws:acm/certificateValidation:CertificateValidation":
             case "aws:apigatewayv2/apiMapping:ApiMapping":
             case "aws:apigatewayv2/domainName:DomainName":
             case "aws:apigatewayv2/integration:Integration":
             case "aws:apigatewayv2/route:Route":
             case "aws:apigatewayv2/stage:Stage":
-            case "aws:acm/certificate:Certificate":
-            case "aws:acm/certificateValidation:CertificateValidation":
+            case "aws:appautoscaling/target:Target":
+            case "aws:appsync/domainName:DomainName":
+            case "aws:appsync/domainNameApiAssociation:DomainNameApiAssociation":
+            case "aws:ec2/routeTableAssociation:RouteTableAssociation":
             case "aws:iam/accessKey:AccessKey":
             case "aws:iam/policy:Policy":
             case "aws:iam/rolePolicyAttachment:RolePolicyAttachment":
@@ -134,10 +194,13 @@ export class Component extends ComponentResource {
             case "aws:cloudwatch/eventRule:EventRule":
             case "aws:cloudwatch/eventTarget:EventTarget":
             case "aws:cloudwatch/logGroup:LogGroup":
+            case "aws:cognito/identityPoolRoleAttachment:IdentityPoolRoleAttachment":
+            case "aws:cognito/userPoolClient:UserPoolClient":
             case "aws:lambda/eventSourceMapping:EventSourceMapping":
             case "aws:lambda/functionUrl:FunctionUrl":
             case "aws:lambda/invocation:Invocation":
             case "aws:lambda/permission:Permission":
+            case "aws:lb/listener:Listener":
             case "aws:route53/record:Record":
             case "aws:s3/bucketCorsConfigurationV2:BucketCorsConfigurationV2":
             case "aws:s3/bucketNotification:BucketNotification":
@@ -146,8 +209,13 @@ export class Component extends ComponentResource {
             case "aws:s3/bucketPolicy:BucketPolicy":
             case "aws:s3/bucketPublicAccessBlock:BucketPublicAccessBlock":
             case "aws:s3/bucketWebsiteConfigurationV2:BucketWebsiteConfigurationV2":
+            case "aws:ses/domainIdentityVerification:DomainIdentityVerification":
+            case "aws:sesv2/emailIdentity:EmailIdentity":
             case "aws:sns/topicSubscription:TopicSubscription":
+            case "cloudflare:index/record:Record":
             case "cloudflare:index/workerDomain:WorkerDomain":
+            case "docker:index/image:Image":
+            case "vercel:index/dnsRecord:DnsRecord":
               break;
             default:
               throw new VisibleError(

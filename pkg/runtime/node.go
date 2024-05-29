@@ -15,6 +15,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/sst/ion/internal/fs"
+	"github.com/sst/ion/internal/util"
 )
 
 type NodeRuntime struct {
@@ -36,7 +37,8 @@ type NodeWorker struct {
 }
 
 func (w *NodeWorker) Stop() {
-	w.cmd.Process.Signal(os.Interrupt)
+	// Terminate the whole process group
+	util.TerminateProcess(w.cmd.Process.Pid)
 }
 
 func (w *NodeWorker) Logs() io.ReadCloser {
@@ -145,8 +147,6 @@ func (r *NodeRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOutpu
 		MinifyIdentifiers: properties.Minify,
 	}
 
-	links, _ := json.Marshal(input.Links)
-
 	if isESM {
 		options.Format = esbuild.FormatESModule
 		options.Target = esbuild.ESNext
@@ -157,7 +157,6 @@ func (r *NodeRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOutpu
 				`const require = topLevelCreateRequire(import.meta.url);`,
 				`import { fileURLToPath as topLevelFileUrlToPath, URL as topLevelURL } from "url"`,
 				`const __dirname = topLevelFileUrlToPath(new topLevelURL(".", import.meta.url))`,
-				`globalThis.$SST_LINKS = ` + string(links) + ";",
 				properties.Banner,
 			}, "\n"),
 		}
@@ -209,6 +208,12 @@ func (r *NodeRuntime) Run(ctx context.Context, input *RunInput) (Worker, error) 
 		filepath.Join(input.Build.Out, input.Build.Handler),
 		input.WorkerID,
 	)
+
+	util.SetProcessGroupID(cmd)
+	cmd.Cancel = func() error {
+		return util.TerminateProcess(cmd.Process.Pid)
+	}
+
 	cmd.Env = append(input.Env, "AWS_LAMBDA_RUNTIME_API="+input.Server)
 	slog.Info("starting worker", "env", cmd.Env, "args", cmd.Args)
 	cmd.Dir = input.Build.Out

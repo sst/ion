@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/sst/ion/internal/fs"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/js"
@@ -25,6 +26,7 @@ type App struct {
 	Removal   string                 `json:"removal"`
 	Providers map[string]interface{} `json:"providers"`
 	Home      string                 `json:"home"`
+	Version   string                 `json:"version"`
 	// Deprecated: Backend is now Home
 	Backend string `json:"backend"`
 	// Deprecated: RemovalPolicy is now Removal
@@ -33,6 +35,7 @@ type App struct {
 
 type Project struct {
 	version         string
+	lock            ProviderLock
 	root            string
 	config          string
 	app             *App
@@ -75,6 +78,10 @@ type ProjectConfig struct {
 
 var ErrInvalidStageName = fmt.Errorf("invalid stage name")
 var ErrV2Config = fmt.Errorf("sstv2 config detected")
+var ErrBuildFailed = fmt.Errorf("")
+var ErrVersionInvalid = fmt.Errorf("invalid version")
+var ErrVersionMismatch = fmt.Errorf("")
+
 var InvalidStageRegex = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 
 func New(input *ProjectConfig) (*Project, error) {
@@ -131,7 +138,7 @@ console.log("~j" + JSON.stringify(mod.app({
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w%s", ErrBuildFailed, err)
 	}
 
 	slog.Info("evaluating config")
@@ -186,6 +193,20 @@ console.log("~j" + JSON.stringify(mod.app({
 				proj.app.Removal = "retain"
 			}
 
+			if proj.app.Version != "" && input.Version != "dev" {
+				constraint, err := semver.NewConstraint(proj.app.Version)
+				if err != nil {
+					return nil, ErrVersionInvalid
+				}
+				version, err := semver.NewVersion(input.Version)
+				if err != nil {
+					return nil, ErrVersionInvalid
+				}
+				if !constraint.Check(version) {
+					return nil, fmt.Errorf("%wYou are using v%s which does not match v%s in your \"sst.config.ts\".", ErrVersionMismatch, input.Version, proj.app.Version)
+				}
+			}
+
 			if proj.app.Removal != "remove" && proj.app.Removal != "retain" && proj.app.Removal != "retain-all" {
 				return nil, fmt.Errorf("Removal must be one of: remove, retain, retain-all")
 			}
@@ -195,6 +216,11 @@ console.log("~j" + JSON.stringify(mod.app({
 		fmt.Println(line)
 	}
 	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	err = proj.loadProviderLock()
+	if err != nil {
 		return nil, err
 	}
 

@@ -162,7 +162,7 @@ sst init
 </Section>
 Initialize a new project in the current directory. This will create a `sst.config.ts` and `sst install` your providers.
 
-If this is run in a Next.js, Remix, or Astro project, it'll init SST in drop-in mode.
+If this is run in a Next.js, Remix, Astro, or SvelteKit project, it'll init SST in drop-in mode.
 </Segment>
 
 ### dev
@@ -177,6 +177,12 @@ sst dev [command]
 #### Args
 - <p><code class="key">command?</code></p>
 The command to run
+</Section>
+
+<Section type="parameters">
+#### Flags
+- <p><code class="key">silent</code> <code class="primitive">boolean</code></p>
+Do not output function invocation logs
 </Section>
 Run your app in development mode. Optionally, pass in a command to start your frontend as well.
 
@@ -226,6 +232,12 @@ This is different from SST v2, in that you needed to run `sst dev` and `sst bind
 ```sh frame="none"
 sst deploy
 ```
+</Section>
+
+<Section type="parameters">
+#### Flags
+- <p><code class="key">target</code> <code class="primitive"></code></p>
+Comma seperated list of target URNs.
 </Section>
 Deploy your application. By default, it deploys to your personal stage.
 
@@ -322,6 +334,7 @@ If you don't have a version specified for your providers in your `sst.config.ts`
 <Section type="parameters">
 #### Subcommands
 - <p>[<code class="key">set</code>](#secret-set)</p>
+- <p>[<code class="key">load</code>](#secret-load)</p>
 - <p>[<code class="key">remove</code>](#secret-remove)</p>
 - <p>[<code class="key">list</code>](#secret-list)</p>
 </Section>
@@ -379,6 +392,39 @@ sst secret set Key -- "$(cat tmp.txt)"
 ```
 
 And make sure to delete the temp file.
+</Segment>
+<NestedTitle id="secret-load" Tag="h4" parent="secret ">load</NestedTitle>
+<Segment>
+<Section type="signature">
+```sh frame="none"
+sst secret load <file>
+```
+</Section>
+<Section type="parameters">
+#### Args
+- <p><code class="key">file</code></p>
+The file to load the secrets from.
+</Section>
+Load all the secrets from a file and set them.
+
+```bash frame="none"
+sst secret load ./secrets.env
+```
+
+The file needs to be in the _dotenv_ or bash format of key-value pairs.
+
+```sh title="secrets.env"
+KEY_1=VALUE1
+KEY_2=VALUE2
+```
+
+Optionally, set the secrets in a specific stage.
+
+```bash frame="none"
+sst secret load ./prod.env --stage=production
+```
+
+
 </Segment>
 <NestedTitle id="secret-remove" Tag="h4" parent="secret ">remove</NestedTitle>
 <Segment>
@@ -482,11 +528,19 @@ This is useful if you want to run multiple commands, all while accessing the lin
 sst remove
 ```
 </Section>
+
+<Section type="parameters">
+#### Flags
+- <p><code class="key">target</code> <code class="primitive">string</code></p>
+Comma seperated list of target URNs.
+</Section>
 Removes your application. By default, it removes your personal stage.
 
 :::tip
 The resources in your app are removed based on the `removal` setting in your `sst.config.ts`.
 :::
+
+This does not remove the SST _state_ and _bootstrap_ resources in your account as these might still be in use by other apps. You can remove them manually if you want to reset your account, [learn more](docs/providers/#state).
 
 Optionally, remove your app from a specific stage.
 
@@ -582,8 +636,23 @@ Disable telemetry.
 sst refresh
 ```
 </Section>
-Compares your local state with the state of the resources in the cloud provider. Any changes that are found are adopted into your local state.
 
-This is useful for cases where you want to ensure that your local state is in sync with your cloud provider.
+<Section type="parameters">
+#### Flags
+- <p><code class="key">target</code> <code class="primitive">string</code></p>
+Comma seperated list of target URNs.
+</Section>
+Compares your local state with the state of the resources in the cloud provider. Any changes that are found are adopted into your local state. It will:
+
+1. Go through every single resource in your state.
+2. Make a call to the cloud provider to check the resource.
+   - If the configs are different, it'll **update the state** to reflect the change.
+   - If the resource doesn't exist anymore, it'll **remove it from the state**.
+
+:::note
+The `sst refresh` does not make changes to the resources in the cloud provider.
+:::
+
+This is useful for cases where you want to ensure that your local state is in sync with your cloud provider. [Learn more about how state works](/docs/providers/#how-state-works).
 </Segment>
 </div>

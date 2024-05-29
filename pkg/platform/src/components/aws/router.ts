@@ -7,29 +7,44 @@ import { Cdn, CdnArgs } from "./cdn";
 
 export interface RouterArgs {
   /**
-   * Set a custom domain for your Router. Supports domains hosted either on
-   * [Route 53](https://aws.amazon.com/route53/) or outside AWS.
+   * Set a custom domain for your Router.
+   *
+   * Automatically manages domains hosted on AWS Route 53, Cloudflare, and Vercel. For other
+   * providers, you'll need to pass in a `cert` that validates domain ownership and add the
+   * DNS records.
    *
    * :::tip
-   * You can also migrate an externally hosted domain to Amazon Route 53 by
-   * [following this guide](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/MigratingDNS.html).
+   * Built-in support for AWS Route 53, Cloudflare, and Vercel. And manual setup for other
+   * providers.
    * :::
    *
    * @example
    *
+   * By default this assumes the domain is hosted on Route 53.
+   *
    * ```js
    * {
-   *   domain: "domain.com"
+   *   domain: "example.com"
    * }
    * ```
    *
-   * Specify the Route 53 hosted zone and a `www.` version of the custom domain.
+   * For domains hosted on Cloudflare.
    *
    * ```js
    * {
    *   domain: {
-   *     domainName: "domain.com",
-   *     hostedZone: "domain.com",
+   *     name: "example.com",
+   *     dns: sst.cloudflare.dns()
+   *   }
+   * }
+   * ```
+   *
+   * Specify a `www.` version of the custom domain.
+   *
+   * ```js
+   * {
+   *   domain: {
+   *     name: "domain.com",
    *     redirects: ["www.domain.com"]
    *   }
    * }
@@ -75,7 +90,7 @@ export interface RouterArgs {
    * {
    *   routes: {
    *     "/*": "myapp.com",
-   *     "/api/*": function.url
+   *     "/api/*": myFunction.url
    *   }
    * }
    * ```
@@ -118,14 +133,14 @@ export interface RouterArgs {
  * #### Route to a function URL
  *
  * ```ts
- * const function = new sst.aws.Function("MyFunction", {
+ * const myFunction = new sst.aws.Function("MyFunction", {
  *   handler: "src/api.handler",
  *   url: true,
  * });
  *
  * new sst.aws.Router("MyRouter", {
  *   routes: {
- *     "/*": function.url
+ *     "/*": myFunction.url
  *   }
  * });
  * ```
@@ -136,7 +151,7 @@ export interface RouterArgs {
  * new sst.aws.Router("MyRouter", {
  *   routes: {
  *     "/*": "myapp.com",
- *     "/api/*": function.url
+ *     "/api/*": myFunction.url
  *   }
  * });
  * ```
@@ -147,7 +162,7 @@ export interface RouterArgs {
  * new sst.aws.Router("MyRouter", {
  *   domain: "myapp.com",
  *   routes: {
- *     "/*": function.url
+ *     "/*": myFunction.url
  *   }
  * });
  * ```
@@ -168,10 +183,15 @@ export class Router extends Component implements Link.Linkable {
     validateRoutes();
 
     const cachePolicy = createCachePolicy();
+    const cfFunction = createCloudFrontFunction();
     const cdn = createCdn();
 
     this.cachePolicy = cachePolicy;
     this.cdn = cdn;
+
+    this.registerOutputs({
+      _hint: this.url,
+    });
 
     function validateRoutes() {
       output(args.routes).apply((routes) => {
@@ -183,6 +203,23 @@ export class Router extends Component implements Link.Linkable {
           }
         });
       });
+    }
+
+    function createCloudFrontFunction() {
+      return new aws.cloudfront.Function(
+        `${name}CloudfrontFunction`,
+        {
+          runtime: "cloudfront-js-1.0",
+          code: [
+            `function handler(event) {`,
+            `  var request = event.request;`,
+            `  request.headers["x-forwarded-host"] = request.headers.host;`,
+            `  return request;`,
+            `}`,
+          ].join("\n"),
+        },
+        { parent },
+      );
     }
 
     function createCachePolicy() {
@@ -280,9 +317,15 @@ export class Router extends Component implements Link.Linkable {
         cachedMethods: ["GET", "HEAD"],
         defaultTtl: 0,
         compress: true,
-        // CloudFront's Managed-AllViewerExceptHostHeader policy
         cachePolicyId: cachePolicy.id,
+        // CloudFront's Managed-AllViewerExceptHostHeader policy
         originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac",
+        functionAssociations: [
+          {
+            eventType: "viewer-request",
+            functionArn: cfFunction.arn,
+          },
+        ],
       };
 
       return output(args.routes).apply((routes) => {

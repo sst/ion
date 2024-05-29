@@ -6,6 +6,11 @@ export default $config({
       name: "streaming-problem",
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
+      providers: {
+        aws: {
+          region: "us-west-1",
+        },
+      },
     };
   },
   async run() {

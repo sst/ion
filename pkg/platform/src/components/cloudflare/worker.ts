@@ -150,7 +150,7 @@ export interface WorkerArgs {
    */
   environment?: Input<Record<string, Input<string>>>;
   /**
-   * [Transform](/docs/components#transform/) how this component creates its underlying
+   * [Transform](/docs/components/#transform) how this component creates its underlying
    * resources.
    */
   transform?: {
@@ -230,7 +230,10 @@ export interface WorkerArgs {
  * });
  * ```
  */
-export class Worker extends Component implements Link.Cloudflare.Linkable {
+export class Worker
+  extends Component
+  implements Link.Cloudflare.Linkable, Link.Linkable
+{
   private script: Output<cf.WorkerScript>;
   private workerUrl: WorkerUrl;
   private workerDomain?: cf.WorkerDomain;
@@ -254,18 +257,33 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
     this.workerDomain = workerDomain;
 
     this.registerOutputs({
-      _live: all([name, args.handler, args.build]).apply(
-        ([name, handler, build]) => ({
-          functionID: name,
-          links: [],
-          handler,
-          runtime: "worker",
-          properties: {
-            accountID: sst.cloudflare.DEFAULT_ACCOUNT_ID,
-            scriptName: script.name,
-            build,
-          },
-        }),
+      _receiver: {
+        directory: args.handler,
+        links: all([bindings]).apply(([links]) =>
+          Object.values(links)
+            .flat()
+            .filter((l) => l.name.startsWith("SST_RESOURCE_") === false)
+            .map((l) => l.name),
+        ),
+        environment: args.environment,
+        cloudflare: {},
+      },
+
+      _live: all([name, args.handler, args.build, args.live]).apply(
+        ([name, handler, build, live]) =>
+          !$dev || !live
+            ? undefined
+            : {
+                functionID: name,
+                links: [],
+                handler,
+                runtime: "worker",
+                properties: {
+                  accountID: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+                  scriptName: script.name,
+                  build,
+                },
+              },
       ),
       _metadata: {
         handler: args.handler,
@@ -277,7 +295,17 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
     }
 
     function buildBindings() {
-      const result = {} as Record<
+      const result = {
+        plainTextBindings: [
+          {
+            name: "SST_RESOURCE_App",
+            text: jsonStringify({
+              name: $app.name,
+              stage: $app.stage,
+            }),
+          },
+        ],
+      } as Record<
         ReturnType<Link.Cloudflare.Linkable["getCloudflareBinding"]>["type"],
         any[]
       >;
@@ -294,6 +322,7 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
               name,
               ...binding.properties,
             });
+            continue;
           }
           if (Link.isLinkable(link)) {
             const name = output(link.urn).apply(
@@ -371,7 +400,7 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
               accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
               content: (await fs.readFile(handler)).toString(),
               module: true,
-              compatibilityDate: "2024-01-01",
+              compatibilityDate: "2024-04-04",
               compatibilityFlags: ["nodejs_compat"],
               ...bindings,
               plainTextBindings: [
@@ -465,6 +494,19 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
   }
 
   /**
+   * When you link a worker (WorkerA) to another worker (WorkerB), it automatically creates
+   * a service binding between the workers. It allows WorkerA to call WorkerB without going
+   * through a publicly-accessible URL.
+   *
+   * @example
+   * ```ts title="index.ts" {3}
+   * import { Resource } from "sst";
+   *
+   * await Resource.WorkerB.fetch(request);
+   * ```
+   *
+   * [Learn more about binding Workers.](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/)
+   *
    * @internal
    */
   public getCloudflareBinding(): Link.Cloudflare.Binding {
@@ -472,6 +514,17 @@ export class Worker extends Component implements Link.Cloudflare.Linkable {
       type: "serviceBindings",
       properties: {
         service: this.script.id,
+      },
+    };
+  }
+
+  /**
+   * @internal
+   */
+  public getSSTLink() {
+    return {
+      properties: {
+        url: this.url,
       },
     };
   }

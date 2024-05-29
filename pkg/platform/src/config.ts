@@ -25,13 +25,14 @@
  *
  * The `Config` object takes two functions: [`app`](#app-2) and [`run`](#run).
  *
- * The `app` function is evaluated right when your app loads. It's used to define the app config and its providers.
+ * The `app` function is evaluated right when your app loads. It's used to define the app config and its providers. You can add
  *
  * :::note
- * You can Pulumi code in the `run` function not the `app` function.
+ * You need TypeScript 5 to see the types in your config.
  * :::
  *
- * While the `run` function is where you define your resources using SST or Pulumi's components.
+ * You can add Pulumi code in the `run` function not the `app` function. While the `run`
+ * function is where you define your resources using SST or Pulumi's components.
  *
  * :::tip
  * The [Global](/docs/reference/global/) library can help you with your app config and resources.
@@ -43,6 +44,31 @@
  */
 
 export interface App {
+  /**
+   * The version of SST supported by the app. The CLI will fail any commands if the version does
+   * not match.
+   *
+   * :::tip
+   * Useful in CI where you don't want it to automatically deploy with a new version of SST.
+   * :::
+   *
+   * @default The latest version of SST.
+   *
+   * @example
+   *
+   * Takes a specific version.
+   *
+   * ```ts
+   * version: "0.0.300"
+   * ```
+   *
+   * Also supports semver ranges.
+   * ```ts
+   * version: ">= 0.0.300"
+   * ```
+   */
+  version?: string;
+
   /**
    * The name of the app. This is used to prefix the names of the resources in your app.
    *
@@ -141,7 +167,7 @@ export interface App {
    * }
    * ```
    *
-   * By default, we use the latest verion of a provider. But you can optionally specify a version.
+   * By default, we use the latest version of a provider. But you can optionally specify a version.
    *
    * ```ts
    * {
@@ -175,7 +201,7 @@ export interface App {
    * }
    * ```
    *
-   * If you want to confgiure your home provider, you can:
+   * If you want to configure your home provider, you can:
    *
    * ```ts
    * {
@@ -243,7 +269,7 @@ export interface Config {
    *
    * @example
    *
-   * For exmaple, here we return the name of the bucket we created.
+   * For example, here we return the name of the bucket we created.
    *
    * ```ts
    * async run() {
@@ -258,7 +284,7 @@ export interface Config {
    * This will display the following in the CLI.
    *
    * ```bash frame=\"none\"
-   * buckeet: bucket-jOaikGu4rla
+   * bucket: bucket-jOaikGu4rla
    * ```
    */
   run(): Promise<Record<string, any> | void>;

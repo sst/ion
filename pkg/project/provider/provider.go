@@ -9,10 +9,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"time"
 
 	"golang.org/x/exp/slog"
+	"golang.org/x/sync/errgroup"
 )
 
 type Home interface {
@@ -106,12 +108,35 @@ func GetLinks(backend Home, app, stage string) (map[string]interface{}, error) {
 	return data, err
 }
 
+type Summary struct {
+	Version         string         `json:"version"`
+	UpdateID        string         `json:"updateID"`
+	TimeStarted     string         `json:"timeStarted"`
+	TimeCompleted   string         `json:"timeCompleted"`
+	ResourceUpdated int            `json:"resourceUpdated"`
+	ResourceCreated int            `json:"resourceCreated"`
+	ResourceDeleted int            `json:"resourceDeleted"`
+	ResourceSame    int            `json:"resourceSame"`
+	Errors          []SummaryError `json:"errors"`
+}
+
+type SummaryError struct {
+	URN     string `json:"urn"`
+	Message string `json:"message"`
+}
+
 func PutLinks(backend Home, app, stage string, data map[string]interface{}) error {
 	slog.Info("putting links", "app", app, "stage", stage)
 	if data == nil || len(data) == 0 {
 		return nil
 	}
 	return putData(backend, "link", app, stage, true, data)
+}
+
+func PutSummary(backend Home, app, stage, updateID string, summary Summary) error {
+	slog.Info("putting summary", "app", app, "stage", stage)
+	return putData(backend, "summary", app, stage+"/"+updateID, false, summary)
+
 }
 
 func GetSecrets(backend Home, app, stage string) (map[string]string, error) {
@@ -131,13 +156,25 @@ func PutSecrets(backend Home, app, stage string, data map[string]string) error {
 	return putData(backend, "secret", app, stage, true, data)
 }
 
-func PushState(backend Home, app, stage string, from string) error {
+func PushState(backend Home, updateID string, app, stage string, from string) error {
 	slog.Info("pushing state", "app", app, "stage", stage, "from", from)
 	file, err := os.Open(from)
 	if err != nil {
 		return nil
 	}
-	return backend.putData("app", app, stage, file)
+	var group errgroup.Group
+	fileBytes, err := io.ReadAll(file)
+	if err != nil {
+		return err
+	}
+	group.Go(func() error {
+		return backend.putData("app", app, stage, bytes.NewReader(fileBytes))
+	})
+	group.Go(func() error {
+		prefix := fmt.Sprintf("%020d", math.MaxInt64-time.Now().Unix())
+		return backend.putData("history", app, stage+"/"+prefix+"-"+updateID, bytes.NewReader(fileBytes))
+	})
+	return group.Wait()
 }
 
 var ErrStateNotFound = fmt.Errorf("state not found")
@@ -164,10 +201,12 @@ func PullState(backend Home, app, stage string, out string) error {
 }
 
 type lockData struct {
-	Created time.Time `json:"created"`
+	Created  time.Time `json:"created"`
+	UpdateID string    `json:"updateID"`
+	Command  string    `json:"command"`
 }
 
-func Lock(backend Home, app, stage string) error {
+func Lock(backend Home, updateID, command, app, stage string) error {
 	slog.Info("locking", "app", app, "stage", stage)
 	var lockData lockData
 	err := getData(backend, "lock", app, stage, false, &lockData)
@@ -178,6 +217,8 @@ func Lock(backend Home, app, stage string) error {
 		return ErrLockExists
 	}
 	lockData.Created = time.Now()
+	lockData.UpdateID = updateID
+	lockData.Command = command
 	err = putData(backend, "lock", app, stage, false, lockData)
 	if err != nil {
 		return err

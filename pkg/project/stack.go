@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/nrednav/cuid2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
@@ -19,6 +21,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
+	"github.com/sst/ion/internal/fs"
 	"github.com/sst/ion/pkg/global"
 	"github.com/sst/ion/pkg/js"
 	"github.com/sst/ion/pkg/project/provider"
@@ -34,12 +37,18 @@ type StackEvent struct {
 	ConcurrentUpdateEvent *ConcurrentUpdateEvent
 	CompleteEvent         *CompleteEvent
 	StackCommandEvent     *StackCommandEvent
+	BuildFailedEvent      *BuildFailedEvent
+}
+
+type BuildFailedEvent struct {
+	Error string
 }
 
 type StackInput struct {
 	OnEvent func(event *StackEvent)
 	OnFiles func(files []string)
 	Command string
+	Target  []string
 	Dev     bool
 }
 
@@ -52,11 +61,21 @@ type ConcurrentUpdateEvent struct{}
 type Links map[string]interface{}
 
 type Receiver struct {
-	Directory   string
-	Links       []string
-	Environment map[string]string
-	AwsRole     string
+	Directory   string              `json:"directory"`
+	Links       []string            `json:"links"`
+	Environment map[string]string   `json:"environment"`
+	AwsRole     string              `json:"awsRole"`
+	Cloudflare  *CloudflareReceiver `json:"cloudflare"`
+	Aws         *AwsReceiver        `json:"aws"`
 }
+
+type CloudflareReceiver struct {
+}
+
+type AwsReceiver struct {
+	Role string `json:"role"`
+}
+
 type Receivers map[string]Receiver
 
 type Warp struct {
@@ -90,8 +109,8 @@ type StackCommandEvent struct {
 }
 
 type Error struct {
-	Message string
-	URN     string
+	Message string `json:"message"`
+	URN     string `json:"urn"`
 }
 
 type StackEventStream = chan StackEvent
@@ -102,11 +121,9 @@ var ErrPassphraseInvalid = fmt.Errorf("passphrase invalid")
 
 func (s *stack) Run(ctx context.Context, input *StackInput) error {
 	slog.Info("running stack command", "cmd", input.Command)
-	input.OnEvent(&StackEvent{StackCommandEvent: &StackCommandEvent{
-		Command: input.Command,
-	}})
 
-	err := s.Lock()
+	updateID := cuid2.Generate()
+	err := s.Lock(updateID, input.Command)
 	if err != nil {
 		if err == provider.ErrLockExists {
 			input.OnEvent(&StackEvent{ConcurrentUpdateEvent: &ConcurrentUpdateEvent{}})
@@ -115,17 +132,21 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 	}
 	defer s.Unlock()
 
+	input.OnEvent(&StackEvent{StackCommandEvent: &StackCommandEvent{
+		Command: input.Command,
+	}})
+
 	_, err = s.PullState()
 	if err != nil {
 		if errors.Is(err, provider.ErrStateNotFound) {
-			if input.Command != "up" {
+			if input.Command != "deploy" {
 				return ErrStageNotFound
 			}
 		} else {
 			return err
 		}
 	}
-	defer s.PushState()
+	defer s.PushState(updateID)
 
 	passphrase, err := provider.Passphrase(s.project.home, s.project.app.Name, s.project.app.Stage)
 	if err != nil {
@@ -151,6 +172,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 		env["SST_SECRET_"+key] = value
 	}
 	env["PULUMI_CONFIG_PASSPHRASE"] = passphrase
+	env["NODE_OPTIONS"] = "--enable-source-maps --no-deprecation"
 
 	cli := map[string]interface{}{
 		"command": input.Command,
@@ -173,11 +195,9 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 	}
 
 	providerShim := []string{}
-	for name := range s.project.app.Providers {
-		pkg := getProviderPackage(name)
-		global := cleanProviderName(name)
-		providerShim = append(providerShim, fmt.Sprintf("import * as %s from '%s'", global, pkg))
-		providerShim = append(providerShim, fmt.Sprintf("globalThis.%s = %s", global, global))
+	for _, entry := range s.project.lock {
+		providerShim = append(providerShim, fmt.Sprintf("import * as %s from '%s'", entry.Alias, entry.Package))
+		providerShim = append(providerShim, fmt.Sprintf("globalThis.%s = %s", entry.Alias, entry.Alias))
 	}
 
 	buildResult, err := js.Build(js.EvalOptions{
@@ -201,6 +221,11 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 		),
 	})
 	if err != nil {
+		input.OnEvent(&StackEvent{
+			BuildFailedEvent: &BuildFailedEvent{
+				Error: err.Error(),
+			},
+		})
 		return err
 	}
 	outfile := buildResult.OutputFiles[0].Path
@@ -316,6 +341,9 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 					if strings.HasPrefix(event.DiagnosticEvent.Message, "update failed") {
 						break
 					}
+					if strings.Contains(event.DiagnosticEvent.Message, "failed to register new resource") {
+						break
+					}
 					complete.Errors = append(complete.Errors, Error{
 						Message: event.DiagnosticEvent.Message,
 						URN:     event.DiagnosticEvent.URN,
@@ -349,12 +377,11 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 		if len(deployment.Resources) == 0 {
 			return
 		}
-		outputs := decrypt(deployment.Resources[0].Outputs)
 		complete.Resources = deployment.Resources
 
 		cloudflareBindings := map[string]string{}
 		for _, resource := range complete.Resources {
-			outputs := decrypt(resource.Outputs)
+			outputs := decrypt(resource.Outputs).(map[string]interface{})
 			if match, ok := outputs["_live"].(map[string]interface{}); ok {
 				data, _ := json.Marshal(match)
 				var entry Warp
@@ -367,6 +394,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 				json.Unmarshal(data, &entry)
 				complete.Receivers[entry.Directory] = entry
 			}
+
 			if hint, ok := outputs["_hint"].(string); ok {
 				complete.Hints[string(resource.URN)] = hint
 			}
@@ -391,34 +419,65 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 					cloudflareBindings[item["name"].(string)] = "KVNamespace"
 				}
 			}
+
+			if match, ok := outputs["serviceBindings"].([]interface{}); ok {
+				for _, binding := range match {
+					item := binding.(map[string]interface{})
+					cloudflareBindings[item["name"].(string)] = "Service"
+				}
+			}
 		}
 
+		outputs := decrypt(deployment.Resources[0].Outputs).(map[string]interface{})
 		linksOutput, ok := outputs["_links"]
 		if ok {
-			links := linksOutput.(map[string]interface{})
-			for key, value := range links {
+			for key, value := range linksOutput.(map[string]interface{}) {
 				complete.Links[key] = value
 			}
-			typesFile, _ := os.Create(filepath.Join(s.project.PathWorkingDir(), "types.generated.ts"))
-			defer typesFile.Close()
-			typesFile.WriteString(`import "sst"` + "\n")
-			typesFile.WriteString(`declare module "sst" {` + "\n")
-			typesFile.WriteString("  export interface Resource " + inferTypes(links, "  ") + "\n")
-			typesFile.WriteString("}" + "\n")
 
-			if len(cloudflareBindings) > 0 {
-				typesFile.WriteString(`import * as cloudflare from "@cloudflare/workers-types"` + "\n")
-				typesFile.WriteString(`declare module "sst" {` + "\n")
-				typesFile.WriteString("  export interface Resource {\n")
-				for key, value := range cloudflareBindings {
-					typesFile.WriteString("  " + key + ": cloudflare." + value + "\n")
+			types := map[string]map[string]interface{}{}
+			for _, receiver := range complete.Receivers {
+				if len(receiver.Links) == 0 {
+					continue
 				}
-				typesFile.WriteString("  }" + "\n")
-				typesFile.WriteString("}" + "\n")
+				typesPath, err := fs.FindUp(filepath.Join(s.project.PathRoot(), receiver.Directory), "tsconfig.json")
+				if err != nil {
+					continue
+				}
+				dir := filepath.Join(filepath.Dir(typesPath), "sst-env.d.ts")
+				links, ok := types[dir]
+				if !ok {
+					links = map[string]interface{}{}
+					types[dir] = links
+				}
+				for _, link := range receiver.Links {
+					if cloudflareBindings[link] != "" && receiver.Cloudflare != nil {
+						links[link] = literal{value: `import("@cloudflare/workers-types").` + cloudflareBindings[link]}
+						continue
+					}
+					links[link] = complete.Links[link]
+				}
 			}
 
-			typesFile.WriteString("export {}")
-			provider.PutLinks(s.project.home, s.project.app.Name, s.project.app.Stage, links)
+			types[filepath.Join(s.project.PathWorkingDir(), "types.generated.ts")] = complete.Links
+
+			for path, links := range types {
+				slog.Info("generating types", "path", path, "count", len(links))
+				typesFile, err := os.Create(path)
+				if err != nil {
+					slog.Error("failed to create types file", "path", path, "err", err)
+					continue
+				}
+				defer typesFile.Close()
+				typesFile.WriteString(`/* tslint:disable */` + "\n")
+				typesFile.WriteString(`/* eslint-disable */` + "\n")
+				typesFile.WriteString(`import "sst"` + "\n")
+				typesFile.WriteString(`declare module "sst" {` + "\n")
+				typesFile.WriteString("  export interface Resource " + inferTypes(links, "  ") + "\n")
+				typesFile.WriteString("}" + "\n")
+				typesFile.WriteString("export {}")
+			}
+			provider.PutLinks(s.project.home, s.project.app.Name, s.project.app.Stage, complete.Links)
 		}
 
 		for key, value := range outputs {
@@ -430,31 +489,83 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 	}()
 
 	slog.Info("running stack command", "cmd", input.Command)
+	var summary auto.UpdateSummary
+
 	switch input.Command {
-	case "up":
-		_, err = stack.Up(ctx,
+	case "deploy":
+		result, derr := stack.Up(ctx,
+			upOptionFunc(func(opts *optup.Options) {
+				opts.ContinueOnError = true
+			}),
+			optup.Target(input.Target),
+			optup.TargetDependents(),
 			optup.ProgressStreams(),
 			optup.ErrorProgressStreams(),
 			optup.EventStreams(stream),
 		)
+		err = derr
+		summary = result.Summary
 
-	case "destroy":
-		_, err = stack.Destroy(ctx,
+	case "remove":
+		result, derr := stack.Destroy(ctx,
+			optdestroy.ContinueOnError(),
+			optdestroy.Target(input.Target),
+			optdestroy.TargetDependents(),
 			optdestroy.ProgressStreams(),
 			optdestroy.ErrorProgressStreams(),
 			optdestroy.EventStreams(stream),
 		)
+		err = derr
+		summary = result.Summary
 
 	case "refresh":
-		_, err = stack.Refresh(ctx,
+		result, derr := stack.Refresh(ctx,
+			optrefresh.Target(input.Target),
 			optrefresh.ProgressStreams(),
 			optrefresh.ErrorProgressStreams(),
 			optrefresh.EventStreams(stream),
 		)
+		err = derr
+		summary = result.Summary
+	}
+
+	var parsed provider.Summary
+	parsed.Version = s.project.Version()
+	parsed.UpdateID = updateID
+	parsed.TimeStarted = summary.StartTime
+	parsed.TimeCompleted = time.Now().Format(time.RFC3339)
+	if summary.EndTime != nil {
+		parsed.TimeCompleted = *summary.EndTime
+	}
+	if summary.ResourceChanges != nil {
+		if match, ok := (*summary.ResourceChanges)["same"]; ok {
+			parsed.ResourceSame = match
+		}
+		if match, ok := (*summary.ResourceChanges)["create"]; ok {
+			parsed.ResourceCreated = match
+		}
+		if match, ok := (*summary.ResourceChanges)["update"]; ok {
+			parsed.ResourceUpdated = match
+		}
+		if match, ok := (*summary.ResourceChanges)["delete"]; ok {
+			parsed.ResourceDeleted = match
+		}
+	}
+	for _, err := range complete.Errors {
+		parsed.Errors = append(parsed.Errors, provider.SummaryError{
+			URN:     err.URN,
+			Message: err.Message,
+		})
+	}
+
+	err = provider.PutSummary(s.project.home, s.project.app.Name, s.project.app.Stage, updateID, parsed)
+	if err != nil {
+		return err
 	}
 
 	slog.Info("done running stack command")
 	if err != nil {
+		slog.Error("stack run failed", "error", err)
 		return ErrStackRunFailed
 	}
 	return nil
@@ -486,10 +597,8 @@ func (s *stack) Import(ctx context.Context, input *ImportOptions) error {
 		parent, err = resource.ParseURN(urnPrefix + parentType + "::" + parentName)
 	}
 
-	fmt.Println(urn)
-	fmt.Println(parent)
-
-	err = provider.Lock(s.project.home, s.project.app.Name, s.project.app.Stage)
+	updateID := cuid2.Generate()
+	err = provider.Lock(s.project.home, updateID, "import", s.project.app.Name, s.project.app.Stage)
 	if err != nil {
 		return err
 	}
@@ -602,11 +711,11 @@ func (s *stack) Import(ctx context.Context, input *ImportOptions) error {
 	if err != nil {
 		return err
 	}
-	return s.PushState()
+	return s.PushState(updateID)
 }
 
-func (s *stack) Lock() error {
-	return provider.Lock(s.project.home, s.project.app.Name, s.project.app.Stage)
+func (s *stack) Lock(updateID string, command string) error {
+	return provider.Lock(s.project.home, updateID, command, s.project.app.Name, s.project.app.Stage)
 }
 
 func (s *stack) Unlock() error {
@@ -652,10 +761,11 @@ func (s *stack) PullState() (string, error) {
 	return path, nil
 }
 
-func (s *stack) PushState() error {
+func (s *stack) PushState(version string) error {
 	pulumiDir := filepath.Join(s.project.PathWorkingDir(), ".pulumi")
 	return provider.PushState(
 		s.project.home,
+		version,
 		s.project.app.Name,
 		s.project.app.Stage,
 		filepath.Join(pulumiDir, "stacks", s.project.app.Name, fmt.Sprintf("%v.json", s.project.app.Stage)),
@@ -670,20 +780,34 @@ func (s *stack) Cancel() error {
 	)
 }
 
-func decrypt(input map[string]interface{}) map[string]interface{} {
-	for key, value := range input {
-		switch value := value.(type) {
-		case map[string]interface{}:
-			if value["plaintext"] != nil {
-				var parsed any
-				json.Unmarshal([]byte(value["plaintext"].(string)), &parsed)
-				input[key] = parsed
-				continue
+func decrypt(input interface{}) interface{} {
+	switch cast := input.(type) {
+	case map[string]interface{}:
+		if cast["plaintext"] != nil {
+			var parsed any
+			str, ok := cast["plaintext"].(string)
+			if ok {
+				json.Unmarshal([]byte(str), &parsed)
+				return parsed
 			}
-			input[key] = decrypt(value)
-		default:
-			continue
 		}
+		for key, value := range cast {
+			cast[key] = decrypt(value)
+		}
+		return cast
+	case []interface{}:
+		for i, value := range cast {
+			cast[i] = decrypt(value)
+		}
+		return cast
+	default:
+		return cast
 	}
-	return input
+}
+
+type upOptionFunc func(*optup.Options)
+
+// ApplyOption is an implementation detail
+func (o upOptionFunc) ApplyOption(opts *optup.Options) {
+	o(opts)
 }

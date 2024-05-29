@@ -3,31 +3,48 @@
   "name": "sst",
   "type": "module",
   "sideEffects": false,
-  "version": "3.0.13",
+  "version": "3.0.32",
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./*": [
-      "./dist/*/index.js",
-      "./dist/*.js"
-    ]
+    "./auth": "./dist/auth/index.js",
+    "./auth/adapter": "./dist/auth/adapter/index.js",
+    "./event": "./dist/event/index.js",
+    "./realtime": "./dist/realtime/index.js",
+    "./*": "./dist/*.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc -w",
-    "release": "pnpm build && pnpm version patch && pnpm publish --no-git-checks --tag=ion --access=public"
+    "release": "bun run build && pnpm version patch && pnpm publish --no-git-checks --tag=ion --access=public"
   },
   "devDependencies": {
     "@tsconfig/node18": "^18.2.2",
     "@types/node": "^20.11.0",
-    "typescript": "^5.3.3"
+    "hono": "4.3.9",
+    "typescript": "^5.3.3",
+    "valibot": "0.30.0",
+    "zod": "^3.23.8"
   },
   "files": [
     "dist"
   ],
+  "peerDependencies": {
+    "hono": "4.x",
+    "valibot": "0.30.x"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    },
+    "valibot": {
+      "optional": true
+    }
+  },
   "dependencies": {
     "@aws-sdk/client-lambda": "3.478.0",
-    "hono": "4.0.1",
+    "@tsconfig/node20": "^20.1.4",
+    "aws4fetch": "^1.0.18",
     "jose": "5.2.3",
     "openid-client": "5.6.4"
   }

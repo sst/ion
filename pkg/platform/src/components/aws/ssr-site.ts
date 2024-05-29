@@ -29,10 +29,7 @@ import { BaseSsrSiteArgs } from "../base/base-ssr-site.js";
 
 type CloudFrontFunctionConfig = { injections: string[] };
 type EdgeFunctionConfig = { function: Unwrap<FunctionArgs> };
-type ServerOriginConfig = {
-  function: Unwrap<FunctionArgs>;
-  streaming?: boolean;
-};
+type ServerOriginConfig = { function: Unwrap<FunctionArgs> };
 type ImageOptimizationOriginConfig = {
   function: Unwrap<FunctionArgs>;
 };
@@ -102,6 +99,7 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs {
         paths?: Input<"all" | "versioned" | string[]>;
       }
   >;
+  vpc?: FunctionArgs["vpc"];
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -445,7 +443,9 @@ function handler(event) {
                 ...(link ?? []),
               ]),
               transform: {
-                function: (args) => ({ ...args, publish: true }),
+                function: (args) => {
+                  args.publish = true;
+                },
               },
               live: false,
               _ignoreCodeChanges: $dev,
@@ -523,8 +523,8 @@ function handler(event) {
           description: `${name} server`,
           runtime: "nodejs20.x",
           timeout: "20 seconds",
-          permissions: args.permissions,
           memory: "1024 MB",
+          vpc: args.vpc,
           ...props.function,
           nodejs: {
             format: "esm" as const,
@@ -534,9 +534,12 @@ function handler(event) {
             ...environment,
             ...props.function.environment,
           })),
-          streaming: props.streaming,
+          permissions: output(args.permissions).apply((permissions) => [
+            ...(permissions ?? []),
+            ...(props.function.permissions ?? []),
+          ]),
           injections: args.warm
-            ? [useServerFunctionWarmingInjection(props.streaming)]
+            ? [useServerFunctionWarmingInjection(props.function.streaming)]
             : [],
           link: output(args.link).apply((link) => [
             ...(props.function.link ?? []),
@@ -729,7 +732,7 @@ function handler(event) {
           comment: `${name} app`,
           origins: Object.values(origins),
           originGroups: Object.values(originGroups),
-          defaultRootObject: "",
+          defaultRootObject: plan.defaultRootObject ?? "",
           defaultCacheBehavior: buildBehavior(
             plan.behaviors.find((behavior) => !behavior.pattern)!,
           ),
@@ -821,8 +824,8 @@ function handler(event) {
             _skipMetadata: true,
           },
           transform: {
-            target: (targetArgs) => {
-              targetArgs.retryPolicy = {
+            target: (args) => {
+              args.retryPolicy = {
                 maximumRetryAttempts: 0,
                 maximumEventAgeInSeconds: 60,
               };
@@ -992,6 +995,7 @@ export function validatePlan<
     cfFunction?: keyof CloudFrontFunctions;
     edgeFunction?: keyof EdgeFunctions;
   }[];
+  defaultRootObject?: aws.cloudfront.DistributionArgs["defaultRootObject"];
   errorResponses?: aws.types.input.cloudfront.DistributionCustomErrorResponse[];
   serverCachePolicy?: {
     allowedHeaders?: string[];

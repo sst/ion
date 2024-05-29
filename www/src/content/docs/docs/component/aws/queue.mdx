@@ -81,113 +81,51 @@ new Queue(name, args?, opts?)
 </Section>
 </Segment>
 
-## Methods
-
-### subscribe
+## QueueArgs
+### fifo?
 <Segment>
-<Section type="signature">
-```ts
-subscribe(subscriber, args?)
-```
-</Section>
-
 <Section type="parameters">
-#### Parameters
-- <p><code class="key">subscriber</code> <code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)</p>
-The function that'll be notified.
-- <p><code class="key">args?</code> [<code class="type">QueueSubscribeArgs</code>](#queuesubscribeargs)</p>
-Configure the subscription.
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code>
+</InlineSection>
 </Section>
 
 <InlineSection>
-**Returns** [<code class="type">QueueSubscriber</code>](#queuesubscriber)
+**Default** <code class="primitive">false</code>
 </InlineSection>
-Subscribe to this queue.
+FIFO or _first-in-first-out_ queues are designed to guarantee that messages are processed exactly once and in the order that they are sent.
+
+:::caution
+Changing a standard queue to a FIFO queue (or the other way around) will cause the queue to be destroyed and recreated.
+:::
 
 ```js
-queue.subscribe("src/subscriber.handler");
-
-Add a filter to the subscription.
-
-```js
-queue.subscribe("src/subscriber.handler", {
-  filters: [
-    {
-      body: {
-        RequestCode: ["BBBB"]
-      }
-    }
-  ]
-});
-```
-
-Customize the subscriber function.
-
-```js
-queue.subscribe({
-  handler: "src/subscriber.handler",
-  timeout: "60 seconds"
-});
+{
+  fifo: true
+}
 ```
 </Segment>
-
-### static subscribe
+### transform?
 <Segment>
-<Section type="signature">
-```ts
-Queue.subscribe(queueArn, subscriber, args?)
-```
-</Section>
-
 <Section type="parameters">
-#### Parameters
-- <p><code class="key">queueArn</code> <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
-The ARN of the SQS queue to subscribe to.
-- <p><code class="key">subscriber</code> <code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)</p>
-The function that'll be notified.
-- <p><code class="key">args?</code> [<code class="type">QueueSubscribeArgs</code>](#queuesubscribeargs)</p>
-Configure the subscription.
-</Section>
-
 <InlineSection>
-**Returns** [<code class="type">QueueSubscriber</code>](#queuesubscriber)
+**Type** <code class="primitive">Object</code>
 </InlineSection>
-Subscribe to an SQS queue that was not created in your app.
+- <p>[<code class="key">queue?</code>](#transform-queue)</p>
+</Section>
+[Transform](/docs/components#transform) how this component creates its underlying
+resources.
 
-For example, let's say you have an existing SQS queue with the following ARN.
+</Segment>
+<NestedTitle id="transform-queue" Tag="h4" parent="transform.">queue?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">QueueArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sqs/queue/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">QueueArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sqs/queue/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+</InlineSection>
+</Section>
+Transform the SQS queue resource.
 
-```js
-const queueArn = "arn:aws:sqs:us-east-1:123456789012:MyQueue";
-```
-
-You can subscribe to it by passing in the ARN.
-
-```js
-sst.aws.Queue.subscribe(queueArn, "src/subscriber.handler");
-```
-
-Add a filter to the subscription.
-
-```js
-sst.aws.Queue.subscribe(queueArn, "src/subscriber.handler", {
-  filters: [
-    {
-      body: {
-        RequestCode: ["BBBB"]
-      }
-    }
-  ]
-});
-```
-
-Customize the subscriber function.
-
-```js
-sst.aws.Queue.subscribe(queueArn, {
-  handler: "src/subscriber.handler",
-  timeout: "60 seconds"
-});
-```
 </Segment>
 
 ## Properties
@@ -232,68 +170,129 @@ The Amazon SQS queue.
 The SQS queue URL.
 </Segment>
 
-## Links
+## SDK
 
 The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
 
-### url
+### Links
 <Segment>
 <Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">string</code>
-</InlineSection>
-</Section>
+- <p><code class="key">url</code> <code class="primitive">string</code></p>
 The SQS queue URL.
+</Section>
 </Segment>
 
-## QueueArgs
-### fifo?
+## Methods
+
+### subscribe
 <Segment>
+<Section type="signature">
+```ts
+subscribe(subscriber, args?)
+```
+</Section>
+
 <Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code>
-</InlineSection>
+#### Parameters
+- <p><code class="key">subscriber</code> <code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)</p>
+The function that'll be notified.
+- <p><code class="key">args?</code> [<code class="type">QueueSubscriberArgs</code>](#queuesubscriberargs)</p>
+Configure the subscription.
 </Section>
 
 <InlineSection>
-**Default** <code class="primitive">false</code>
+**Returns** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">QueueLambdaSubscriber</code>](/docs/component/aws/queue-lambda-subscriber/)<code class="symbol">&gt;</code>
 </InlineSection>
-FIFO or _first-in-first-out_ queues are designed to guarantee that messages are processed exactly once and in the order that they are sent.
-
-:::caution
-Changing a standard queue to a FIFO queue (or the other way around) will cause the queue to be destroyed and recreated.
-:::
+Subscribe to this queue.
 
 ```js
-{
-  fifo: true
-}
+queue.subscribe("src/subscriber.handler");
+```
+
+Add a filter to the subscription.
+
+```js
+queue.subscribe("src/subscriber.handler", {
+  filters: [
+    {
+      body: {
+        RequestCode: ["BBBB"]
+      }
+    }
+  ]
+});
+```
+
+Customize the subscriber function.
+
+```js
+queue.subscribe({
+  handler: "src/subscriber.handler",
+  timeout: "60 seconds"
+});
 ```
 </Segment>
-### transform?
+
+### static subscribe
 <Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Object</code>
-</InlineSection>
-- <p>[<code class="key">queue?</code>](#transform-queue)</p>
+<Section type="signature">
+```ts
+Queue.subscribe(queueArn, subscriber, args?)
+```
 </Section>
-[Transform](/docs/components#transform) how this component creates its underlying
-resources.
 
-</Segment>
-<NestedTitle id="transform-queue" Tag="h4" parent="transform.">queue?</NestedTitle>
-<Segment>
 <Section type="parameters">
-<InlineSection>
-**Type** [<code class="type">QueueArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sqs/queue/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">QueueArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sqs/queue/#inputs)<code class="symbol"> => </code>[<code class="type">QueueArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sqs/queue/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
-</InlineSection>
+#### Parameters
+- <p><code class="key">queueArn</code> <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
+The ARN of the SQS queue to subscribe to.
+- <p><code class="key">subscriber</code> <code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)</p>
+The function that'll be notified.
+- <p><code class="key">args?</code> [<code class="type">QueueSubscriberArgs</code>](#queuesubscriberargs)</p>
+Configure the subscription.
 </Section>
-Transform the SQS queue resource.
 
+<InlineSection>
+**Returns** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">QueueLambdaSubscriber</code>](/docs/component/aws/queue-lambda-subscriber/)<code class="symbol">&gt;</code>
+</InlineSection>
+Subscribe to an SQS queue that was not created in your app.
+
+For example, let's say you have an existing SQS queue with the following ARN.
+
+```js
+const queueArn = "arn:aws:sqs:us-east-1:123456789012:MyQueue";
+```
+
+You can subscribe to it by passing in the ARN.
+
+```js
+sst.aws.Queue.subscribe(queueArn, "src/subscriber.handler");
+```
+
+Add a filter to the subscription.
+
+```js
+sst.aws.Queue.subscribe(queueArn, "src/subscriber.handler", {
+  filters: [
+    {
+      body: {
+        RequestCode: ["BBBB"]
+      }
+    }
+  ]
+});
+```
+
+Customize the subscriber function.
+
+```js
+sst.aws.Queue.subscribe(queueArn, {
+  handler: "src/subscriber.handler",
+  timeout: "60 seconds"
+});
+```
 </Segment>
 
-## QueueSubscribeArgs
+## QueueSubscriberArgs
 ### filters?
 <Segment>
 <Section type="parameters">
@@ -362,32 +361,10 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">EventSourceMappingArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/eventsourcemapping/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EventSourceMappingArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/eventsourcemapping/#inputs)<code class="symbol"> => </code>[<code class="type">EventSourceMappingArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/eventsourcemapping/#inputs)<code class="symbol"> | </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">EventSourceMappingArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/eventsourcemapping/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EventSourceMappingArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/eventsourcemapping/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
 </InlineSection>
 </Section>
 Transform the Lambda Event Source Mapping resource.
-
-</Segment>
-
-## QueueSubscriber
-### eventSourceMapping
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">EventSourceMapping</code>](https://www.pulumi.com/registry/packages/aws/api-docs/lambda/eventsourcemapping/)<code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The Lambda event source mapping.
-
-</Segment>
-### function
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">Function</code>](/docs/component/aws/function/)<code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The Lambda function that'll be notified.
 
 </Segment>
 </div>
