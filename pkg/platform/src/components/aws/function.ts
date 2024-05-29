@@ -414,15 +414,16 @@ export interface FunctionArgs {
    * }
    * ```
    */
-  logging?:
-    | Input<{
+  logging?: Input<
+    | {
         /**
          * The duration the function logs are kept in CloudWatch.
          * @default `forever`
          */
         retention?: Input<keyof typeof RETENTION>;
-      }>
-    | false;
+      }
+    | false
+  >;
   /**
    * The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
    * of the Lambda function.
@@ -884,7 +885,7 @@ export class Function
 {
   private function: Output<aws.lambda.Function>;
   private role?: aws.iam.Role;
-  private logGroup: aws.cloudwatch.LogGroup;
+  private logGroup: Output<aws.cloudwatch.LogGroup | undefined>;
   private fnUrl: Output<aws.lambda.FunctionUrl | undefined>;
   private missingSourcemap?: boolean;
 
@@ -1020,11 +1021,13 @@ export class Function
     }
 
     function normalizeLogging() {
-      if (args.logging === false) return;
-      return output(args.logging).apply((logging) => ({
-        ...logging,
-        retention: logging?.retention ?? "forever",
-      }));
+      return output(args.logging).apply((logging) => {
+        if (logging === false) return;
+        return {
+          ...logging,
+          retention: logging?.retention ?? "forever",
+        };
+      });
     }
 
     function normalizeUrl() {
@@ -1394,63 +1397,64 @@ export class Function
     }
 
     function createLogGroup() {
-      if (!logging) return;
-      return new aws.cloudwatch.LogGroup(
-        `${name}LogGroup`,
-        transform(args.transform?.logGroup, {
-          name: `/aws/lambda/${prefixName(64, `${name}Function`)}`,
-          retentionInDays: logging.apply(
-            (logging) => RETENTION[logging.retention],
-          ),
-        }),
-        { parent },
-      );
+      return logging.apply((logging) => {
+        if (!logging) return;
+        return new aws.cloudwatch.LogGroup(
+          `${name}LogGroup`,
+          transform(args.transform?.logGroup, {
+            name: `/aws/lambda/${prefixName(64, `${name}Function`)}`,
+            retentionInDays: RETENTION[logging.retention],
+          }),
+          { parent },
+        );
+      });
     }
 
     function createFunction() {
-      const transformed = transform(args.transform?.function, {
-        description: all([args.description, dev]).apply(([description, dev]) =>
-          dev
-            ? description
-              ? `${description.substring(0, 240)} (live)`
-              : "live"
-            : `${description ?? ""}`,
-        ),
-        code: new asset.FileArchive(
-          path.join($cli.paths.platform, "functions", "empty-function"),
-        ),
-        handler,
-        role: args.role ?? role!.arn,
-        runtime,
-        timeout: timeout.apply((timeout) => toSeconds(timeout)),
-        memorySize: memory.apply((memory) => toMBs(memory)),
-        environment: {
-          variables: environment,
-        },
-        architectures,
-
-        loggingConfig: logging && {
-          logFormat: "Text",
-          logGroup: logGroup.name,
-        },
-        vpcConfig: args.vpc && {
-          securityGroupIds: output(args.vpc).securityGroups,
-          subnetIds: output(args.vpc).subnets,
-        },
-        layers: args.layers,
-      });
-      transformed.runtime = all([transformed.runtime, dev]).apply(
-        ([runtime, dev]) => (dev ? "provided.al2023" : runtime!),
+      return all([dev, logGroup]).apply(
+        ([dev, logGroup]) =>
+          new aws.lambda.Function(
+            `${name}Function`,
+            transform(args.transform?.function, {
+              description: output(args.description).apply((description) =>
+                dev
+                  ? description
+                    ? `${description.substring(0, 240)} (live)`
+                    : "live"
+                  : `${description ?? ""}`,
+              ),
+              code: new asset.FileArchive(
+                path.join($cli.paths.platform, "functions", "empty-function"),
+              ),
+              handler,
+              role: args.role ?? role!.arn,
+              runtime: dev ? "provided.al2023" : runtime,
+              timeout: timeout.apply((timeout) => toSeconds(timeout)),
+              memorySize: memory.apply((memory) => toMBs(memory)),
+              environment: {
+                variables: environment,
+              },
+              architectures: dev ? ["x86_64"] : architectures,
+              loggingConfig: logGroup
+                ? {
+                    logFormat: "Text",
+                    logGroup: logGroup.name,
+                  }
+                : undefined,
+              vpcConfig: args.vpc && {
+                securityGroupIds: output(args.vpc).securityGroups,
+                subnetIds: output(args.vpc).subnets,
+              },
+              layers: args.layers,
+            }),
+            {
+              parent,
+              ignoreChanges: args._ignoreCodeChanges
+                ? ["code", "handler"]
+                : undefined,
+            },
+          ),
       );
-      transformed.architectures = all([transformed.architectures, dev]).apply(
-        ([architectures, dev]) => (dev ? ["x86_64"] : architectures!),
-      );
-      return new aws.lambda.Function(`${name}Function`, transformed, {
-        parent,
-        ignoreChanges: args._ignoreCodeChanges
-          ? ["code", "handler"]
-          : undefined,
-      });
     }
 
     function createUrl() {
