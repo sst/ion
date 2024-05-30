@@ -31,7 +31,7 @@ export class Auth extends Component implements Link.Linkable {
     this._authenticator = output(args.authenticator).apply((args) => {
       return new Function(`${name}Authenticator`, {
         ...args,
-        url: true,
+        url: args.url || true,
         streaming: !$dev,
         environment: {
           ...args.environment,
