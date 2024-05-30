@@ -18,7 +18,7 @@ Before you begin, ensure you have the following installed:
 Create a new Flutter project:
 
 ```bash
-flutter create sst_ion_flutter_web
+flutter create aws_flutter_web
 ```
 
 ### Step 2: Initialize SST Ion
@@ -39,13 +39,13 @@ Edit the `sst.config.ts` file in your project's root directory to set up the dep
 export default $config({
   app(input) {
     return {
-      name: "sst-ion-flutter-web",
+      name: "aws-flutter-web",
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
     };
   },
   async run() {
-    new sst.aws.StaticSite("FlutterSite", {
+    new sst.aws.StaticSite("MySite", {
       build: {
         command: "flutter build web",
         output: "build/web",
