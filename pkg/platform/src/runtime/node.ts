@@ -162,7 +162,7 @@ export async function build(
       const cmd = ["npm install"];
       if (installPackages.includes("sharp")) {
         cmd.push(
-          "--platform=linux",
+          "--os=linux --libc=glibc",
           input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64",
         );
       }
