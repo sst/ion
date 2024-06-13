@@ -4,6 +4,7 @@ import { exec } from "child_process";
 import esbuild, { BuildOptions, BuildResult } from "esbuild";
 import pulumi from "@pulumi/pulumi";
 import { findAbove } from "../util/fs.js";
+import { getNpmVersion } from "../util/npm.js";
 import { FunctionArgs } from "../components/aws/function.js";
 import fsSync from "fs";
 
@@ -160,11 +161,20 @@ export async function build(
         }),
       );
       const cmd = ["npm install"];
+
+      const npmVersion = await getNpmVersion();
       if (installPackages.includes("sharp")) {
-        cmd.push(
-          "--platform=linux",
-          input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64",
-        );
+        if(npmVersion.major >= 9) {
+          cmd.push(
+            "--os=linux",
+            input.architecture === "arm64" ? "--cpu=arm64" : "--cpu=x64"
+          )    
+        } else {
+          cmd.push(
+            "--platform=linux",
+            input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64",
+          );
+        }
       }
       await new Promise<void>((resolve, reject) => {
         exec(cmd.join(" "), { cwd: out }, (error) => {
