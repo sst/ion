@@ -162,7 +162,7 @@ export async function build(
       );
       const cmd = ["npm install"];
 
-      const npmVersion = await getNpmVersion();
+      const npmVersion = await getNpmVersion(out);
       if (installPackages.includes("sharp")) {
         if(npmVersion.major >= 9) {
           cmd.push(

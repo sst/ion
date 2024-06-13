@@ -1,9 +1,9 @@
 
 import { exec } from "child_process";
 
-export function getNpmVersion() {
+export function getNpmVersion(cwd: string) {
   return new Promise((resolve, reject) => {
-    exec("npm --version", (error, stdout, stderr) => {
+    exec("npm --version", { cwd }, (error, stdout, stderr) => {
       if (error) {
         reject(error);
         return;
