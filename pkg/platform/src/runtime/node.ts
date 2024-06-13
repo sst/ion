@@ -52,7 +52,16 @@ export async function build(
     .join(path.posix.sep);
 
   // Rebuilt using existing esbuild context
-  const forceExternal = ["sharp", "pg-native"];
+  const forceExternal = [
+    "sharp",
+    "pg-native",
+    "@node-rs/argon2",
+    "@node-rs/bcrypt",
+    "@node-rs/crc32",
+    "@node-rs/jsonwebtoken",
+    "@node-rs/jieba",
+    "@node-rs/xxhash",
+  ];
   const { external, ...override } = nodejs.esbuild || {};
   const links = Object.fromEntries(
     input.links?.map((item) => [item.name, item.properties]) || [],
@@ -160,7 +169,10 @@ export async function build(
         }),
       );
       const cmd = ["npm install"];
-      if (installPackages.includes("sharp")) {
+      if (
+        installPackages.includes("sharp") || 
+        installPackages.some((x) => x.startsWith("@node-rs"))
+      ) {
         cmd.push(
           "--platform=linux",
           input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64",
