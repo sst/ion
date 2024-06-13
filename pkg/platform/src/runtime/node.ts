@@ -164,15 +164,17 @@ export async function build(
 
       const npmVersion = await getNpmVersion(out);
       if (installPackages.includes("sharp")) {
+		const architectureCmd = input.architecture === "arm64" ? "--cpu=arm64" : "--cpu=x64";
+
         if(npmVersion.major >= 9) {
           cmd.push(
             "--os=linux",
-            input.architecture === "arm64" ? "--cpu=arm64" : "--cpu=x64"
+            architectureCmd
           )    
         } else {
           cmd.push(
             "--platform=linux",
-            input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64",
+            architectureCmd,
           );
         }
       }
