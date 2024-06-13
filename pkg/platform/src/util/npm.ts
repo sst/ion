@@ -1,7 +1,9 @@
 
 import { exec } from "child_process";
 
-export function getNpmVersion(cwd: string) {
+export function getNpmVersion(
+  cwd: string
+): Promise<Record<"major" | "minor" | "patch", number>> {
   return new Promise((resolve, reject) => {
     exec("npm --version", { cwd }, (error, stdout, stderr) => {
       if (error) {
