@@ -162,9 +162,10 @@ export async function build(
       const cmd = [
         "npm install",
         "--platform=linux",
-        "--os=linux", // support for npm v10 versions
-        input.architecture === "arm64" ? "--cpu=arm64" : "--cpu=x64",
-        input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64", // support for npm v10 versions
+        input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64",
+		// support npm versions 10 and above
+        "--os=linux",
+		input.architecture === "arm64" ? "--cpu=arm64" : "--cpu=x64",
       ];
       await new Promise<void>((resolve, reject) => {
         exec(cmd.join(" "), { cwd: out }, (error) => {
