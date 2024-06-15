@@ -1,4 +1,4 @@
-import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
+import pulumi, { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
@@ -27,6 +27,13 @@ export interface QueueArgs {
    * ```
    */
   fifo?: Input<boolean>;
+  /**
+   * Sets up a dead-letter queue to which Amazon SQS moves messages after the value of `retryLimit` is exceeded.
+   */
+  deadLetterQueue?: {
+    arn: Input<string>,
+    retryLimit: Input<number>
+  }
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -172,13 +179,22 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
     }
 
     function createQueue() {
-      return new aws.sqs.Queue(
-        `${name}Queue`,
-        transform(args?.transform?.queue, {
-          fifoQueue: fifo,
-        }),
-        { parent },
-      );
+      return all([args?.deadLetterQueue]).apply(([deadLetterQueue]) =>{
+        const deadLetterQueueArgs = deadLetterQueue ? {
+          redrivePolicy: pulumi.jsonStringify({
+            deadLetterTargetArn: deadLetterQueue.arn,
+            maxReceiveCount: deadLetterQueue.retryLimit
+          }),
+        } : {};
+        return new aws.sqs.Queue(
+            `${name}Queue`,
+            transform(args?.transform?.queue, {
+              fifoQueue: fifo,
+              ...deadLetterQueueArgs
+            }),
+            { parent },
+        );
+      });
     }
   }
 

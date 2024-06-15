@@ -14,7 +14,13 @@ export default $config({
     };
   },
   async run() {
-    const queue = new sst.aws.Queue("MyQueue");
+    const deadLetterQueue = new sst.aws.Queue("MyDeadLetterQueue");
+    const queue = new sst.aws.Queue("MyQueue", {
+      deadLetterQueue: {
+        arn: deadLetterQueue.arn,
+        retryLimit: 5
+      }
+    });
     queue.subscribe("subscriber.handler");
 
     const app = new sst.aws.Function("MyApp", {
@@ -26,6 +32,7 @@ export default $config({
     return {
       app: app.url,
       queue: queue.url,
+      deadLetterQueue: deadLetterQueue.url
     };
   },
 });
