@@ -39,6 +39,7 @@ export default $config({
     return {
       app: app.url,
       queue: queue.url,
+      dlQueue: dlQueue.url,
     };
   },
 });
