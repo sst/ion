@@ -1,5 +1,7 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
+import pulumi from "@pulumi/pulumi";
+
 /**
  * ## Subscribe to queues
  *
@@ -14,7 +16,18 @@ export default $config({
     };
   },
   async run() {
-    const queue = new sst.aws.Queue("MyQueue");
+    const dlQueue = new sst.aws.Queue("MyDLQueue")
+    const queue = new sst.aws.Queue("MyQueue", {
+      transform: {
+        queue:
+            {
+              redrivePolicy: pulumi.jsonStringify({
+                deadLetterTargetArn: dlQueue.arn,
+                maxReceiveCount: 5
+              }),
+            }
+      }
+    });
     queue.subscribe("subscriber.handler");
 
     const app = new sst.aws.Function("MyApp", {
