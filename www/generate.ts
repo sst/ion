@@ -1,7 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
 import * as TypeDoc from "typedoc";
-
 import config from "./config";
 
 type CliCommand = {
@@ -338,6 +337,7 @@ async function generateExamplesDocs() {
 }
 
 async function generateGlobalConfigDoc(module: TypeDoc.DeclarationReflection) {
+  console.info(`Generating Global...`);
   const outputFilePath = `src/content/docs/docs/reference/global.mdx`;
   fs.writeFileSync(
     outputFilePath,
@@ -359,6 +359,7 @@ async function generateGlobalConfigDoc(module: TypeDoc.DeclarationReflection) {
 }
 
 async function generateConfigDoc(module: TypeDoc.DeclarationReflection) {
+  console.info(`Generating Config...`);
   const sourceFile = module.sources![0].fileName;
   const outputFilePath = `src/content/docs/docs/reference/config.mdx`;
   fs.writeFileSync(
@@ -369,7 +370,8 @@ async function generateConfigDoc(module: TypeDoc.DeclarationReflection) {
       renderImports(outputFilePath),
       renderBodyBegin(),
       renderAbout(module),
-      renderInterfacesAtH2Level(module),
+      renderInterfacesAtH2Level(module, { filter: (c) => c.name === "Config" }),
+      renderInterfacesAtH2Level(module, { filter: (c) => c.name !== "Config" }),
       renderBodyEnd(),
     ]
       .flat()
@@ -662,6 +664,8 @@ function renderType(
     }
     // types in different doc
     const externalModule = {
+      ApiGatewayV1Authorizer: "apigatewayv1-authorizer",
+      ApiGatewayV1LambdaRoute: "apigatewayv1-lambda-route",
       ApiGatewayV2LambdaRoute: "apigatewayv2-lambda-route",
       ApiGatewayWebSocketRoute: "apigateway-websocket-route",
       AppSyncDataSource: "app-sync-data-source",
@@ -1067,45 +1071,60 @@ function renderMethods(module: TypeDoc.DeclarationReflection) {
   const methods = useClassMethods(module);
   if (!methods?.length) return lines;
 
-  lines.push(``, `## Methods`);
+  return [
+    ``,
+    `## Methods`,
+    ...methods.flatMap((m) =>
+      renderMethod(module, m, {
+        methodTitle: `### ${m.flags.isStatic ? "static " : ""}${renderName(m)}`,
+        parametersTitle: `#### Parameters`,
+      })
+    ),
+  ];
+}
 
-  for (const m of methods) {
+function renderMethod(
+  module: TypeDoc.DeclarationReflection,
+  method: TypeDoc.DeclarationReflection,
+  opts: { methodTitle: string; parametersTitle: string }
+) {
+  if (method.kind !== TypeDoc.ReflectionKind.Method) return [];
+  const lines = [];
+  lines.push(
+    ``,
+    opts.methodTitle,
+    `<Segment>`,
+    `<Section type="signature">`,
+    "```ts",
+    (method.flags.isStatic ? `${useClassName(module)}.` : "") +
+      renderSignature(method.signatures![0]),
+    "```",
+    `</Section>`
+  );
+
+  // parameters
+  if (method.signatures![0].parameters?.length) {
     lines.push(
       ``,
-      `### ${m.flags.isStatic ? "static " : ""}${m.name}`,
-      `<Segment>`,
-      `<Section type="signature">`,
-      "```ts",
-      (m.flags.isStatic ? `${useClassName(module)}.` : "") +
-        renderSignature(m.signatures![0]),
-      "```",
+      `<Section type="parameters">`,
+      opts.parametersTitle,
+      ...method.signatures![0].parameters.flatMap((param) => [
+        `- <p><code class="key">${renderSignatureArg(
+          param
+        )}</code> ${renderType(module, param.type!)}</p>`,
+        ...renderDescription(param),
+      ]),
       `</Section>`
     );
-
-    // parameters
-    if (m.signatures![0].parameters?.length) {
-      lines.push(
-        ``,
-        `<Section type="parameters">`,
-        `#### Parameters`,
-        ...m.signatures![0].parameters.flatMap((param) => [
-          `- <p><code class="key">${renderSignatureArg(
-            param
-          )}</code> ${renderType(module, param.type!)}</p>`,
-          ...renderDescription(param),
-        ]),
-        `</Section>`
-      );
-    }
-
-    lines.push(
-      ...renderReturnValue(module, m.signatures![0]),
-      ...renderDescription(m.signatures![0]),
-      ``,
-      ...renderExamples(m.signatures![0]),
-      `</Segment>`
-    );
   }
+
+  lines.push(
+    ...renderReturnValue(module, method.signatures![0]),
+    ...renderDescription(method.signatures![0]),
+    ``,
+    ...renderExamples(method.signatures![0]),
+    `</Segment>`
+  );
   return lines;
 }
 
@@ -1305,58 +1324,50 @@ function renderInterfacesAtH2Level(
           `</Segment>`,
           // nested props (ie. `.domain`, `.transform`)
           ...useNestedTypes(prop.type!, prop.name).flatMap(
-            ({ depth, prefix, subType }) => [
-              `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${
-                depth === 0 ? "h4" : "h5"
-              }" parent="${prefix}.">${renderName(subType)}</NestedTitle>`,
-              `<Segment>`,
-              `<Section type="parameters">`,
-              `<InlineSection>`,
-              `**Type** ${renderType(module, subType.type!)}`,
-              `</InlineSection>`,
-              `</Section>`,
-              ...renderDefaultTag(module, subType),
-              ...renderDescription(subType),
-              ``,
-              ...renderExamples(subType),
-              `</Segment>`,
-            ]
+            ({ depth, prefix, subType }) => {
+              return subType.kind === TypeDoc.ReflectionKind.Method
+                ? renderMethod(module, subType, {
+                    methodTitle: `<NestedTitle id="${useLinkHashes(module).get(
+                      subType
+                    )}" Tag="${
+                      depth === 0 ? "h4" : "h5"
+                    }" parent="${prefix}.">${renderName(
+                      subType
+                    )}</NestedTitle>`,
+                    parametersTitle: `**Parameters**`,
+                  })
+                : [
+                    `<NestedTitle id="${useLinkHashes(module).get(
+                      subType
+                    )}" Tag="${
+                      depth === 0 ? "h4" : "h5"
+                    }" parent="${prefix}.">${renderName(
+                      subType
+                    )}</NestedTitle>`,
+                    `<Segment>`,
+                    `<Section type="parameters">`,
+                    `<InlineSection>`,
+                    `**Type** ${renderType(module, subType.type!)}`,
+                    `</InlineSection>`,
+                    `</Section>`,
+                    ...renderDefaultTag(module, subType),
+                    ...renderDescription(subType),
+                    ``,
+                    ...renderExamples(subType),
+                    `</Segment>`,
+                  ];
+            }
           )
         );
       } else if (prop.kind === TypeDoc.ReflectionKind.Method) {
         console.debug(`   - interface method ${prop.name}`);
         lines.push(
-          `### ${renderName(prop)}`,
-          `<Segment>`,
-          `<Section type="signature">`,
-          "```ts",
-          renderSignature(prop.signatures![0]),
-          "```",
-          `</Section>`
-        );
-
-        // parameters
-        if (prop.signatures![0].parameters?.length) {
-          lines.push(
-            ``,
-            `<Section type="parameters">`,
-            `#### Parameters`,
-            ...prop.signatures![0].parameters.flatMap((param) => [
-              `- <p><code class="key">${renderSignatureArg(
-                param
-              )}</code> ${renderType(module, param.type!)}</p>`,
-              ...renderDescription(param),
-            ]),
-            `</Section>`
-          );
-        }
-
-        lines.push(
-          ...renderReturnValue(module, prop.signatures![0]),
-          ...renderDescription(prop.signatures![0]),
-          ``,
-          ...renderExamples(prop.signatures![0]),
-          `</Segment>`
+          ...renderMethod(module, prop, {
+            methodTitle: `### ${
+              prop.flags.isStatic ? "static " : ""
+            }${renderName(prop)}`,
+            parametersTitle: `#### Parameters`,
+          })
         );
       }
     }
@@ -1493,7 +1504,9 @@ function renderNestedTypeList(
       const hasChildren =
         subType.kind === TypeDoc.ReflectionKind.Property
           ? useNestedTypes(subType.type!).length
-          : useNestedTypes(subType.getSignature?.type!).length;
+          : subType.kind === TypeDoc.ReflectionKind.Method
+            ? useNestedTypes(subType.signatures![0].type!).length
+            : useNestedTypes(subType.getSignature?.type!).length;
       const type = hasChildren ? ` ${renderType(module, subType.type!)}` : "";
       const generateHash = (counter = 0): string => {
         const hash =
@@ -1738,6 +1751,9 @@ async function buildComponents() {
       "../pkg/platform/src/components/secret.ts",
       "../pkg/platform/src/components/aws/apigateway-websocket.ts",
       "../pkg/platform/src/components/aws/apigateway-websocket-route.ts",
+      "../pkg/platform/src/components/aws/apigatewayv1.ts",
+      "../pkg/platform/src/components/aws/apigatewayv1-authorizer.ts",
+      "../pkg/platform/src/components/aws/apigatewayv1-lambda-route.ts",
       "../pkg/platform/src/components/aws/apigatewayv2.ts",
       "../pkg/platform/src/components/aws/apigatewayv2-lambda-route.ts",
       "../pkg/platform/src/components/aws/app-sync.ts",
