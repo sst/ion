@@ -162,6 +162,7 @@ export async function build(
       );
       const cmd = [
         "npm install",
+        "--force",
         "--platform=linux",
         input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64",
         // support npm versions 10 and above
