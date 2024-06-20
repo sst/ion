@@ -27,6 +27,7 @@ import {
 } from "./cluster";
 import { RETENTION } from "./logging.js";
 import { prefixName } from "../naming";
+import { isLinkable } from "./linkable";
 
 export interface ServiceArgs extends ClusterServiceArgs {
   /**
@@ -265,7 +266,7 @@ export class Service extends Component implements Link.Linkable {
     function buildLinkPermissions() {
       return output(args.link ?? []).apply((links) =>
         links.flatMap((l) => {
-          if (!Link.AWS.isLinkable(l)) return [];
+          if (!isLinkable(l)) return [];
           return l.getSSTAWSPermissions();
         }),
       );
@@ -581,7 +582,7 @@ export class Service extends Component implements Link.Linkable {
     }
 
     function createAutoScaling() {
-      new aws.appautoscaling.Target(
+      const target = new aws.appautoscaling.Target(
         `${name}AutoScalingTarget`,
         {
           serviceNamespace: "ecs",
@@ -596,9 +597,9 @@ export class Service extends Component implements Link.Linkable {
       new aws.appautoscaling.Policy(
         `${name}AutoScalingCpuPolicy`,
         {
-          serviceNamespace: "ecs",
-          scalableDimension: "ecs:service:DesiredCount",
-          resourceId: interpolate`service/${cluster.name}/${service.name}`,
+          serviceNamespace: target.serviceNamespace,
+          scalableDimension: target.scalableDimension,
+          resourceId: target.resourceId,
           policyType: "TargetTrackingScaling",
           targetTrackingScalingPolicyConfiguration: {
             predefinedMetricSpecification: {
@@ -613,9 +614,9 @@ export class Service extends Component implements Link.Linkable {
       new aws.appautoscaling.Policy(
         `${name}AutoScalingMemoryPolicy`,
         {
-          serviceNamespace: "ecs",
-          scalableDimension: "ecs:service:DesiredCount",
-          resourceId: interpolate`service/${cluster.name}/${service.name}`,
+          serviceNamespace: target.serviceNamespace,
+          scalableDimension: target.scalableDimension,
+          resourceId: target.resourceId,
           policyType: "TargetTrackingScaling",
           targetTrackingScalingPolicyConfiguration: {
             predefinedMetricSpecification: {

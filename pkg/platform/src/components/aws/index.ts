@@ -1,3 +1,4 @@
+export * from "./apigatewayv1.js";
 export * from "./apigatewayv2.js";
 export * from "./apigateway-websocket.js";
 export * from "./app-sync.js";
@@ -27,6 +28,7 @@ export * from "./svelte-kit.js";
 export * from "./vector.js";
 export * from "./vpc.js";
 export * from "./react.js";
+export { linkable } from "./linkable.js";
 
 // internal components
 export * from "./cdn.js";
