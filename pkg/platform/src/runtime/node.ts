@@ -168,6 +168,9 @@ export async function build(
         "--os=linux",
         input.architecture === "arm64" ? "--cpu=arm64" : "--cpu=x64",
       ];
+      if (installPackages.includes("sharp")) {
+        cmd.push("--libc=glibc");
+      }
       await new Promise<void>((resolve, reject) => {
         exec(cmd.join(" "), { cwd: out }, (error) => {
           if (error) {
