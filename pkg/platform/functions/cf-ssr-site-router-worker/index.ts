@@ -2,13 +2,19 @@ declare var caches: any;
 declare var SST_ASSET_MANIFEST: Record<string, string>;
 declare var SST_ROUTES: { regex: string; origin: "assets" | "server" }[];
 
+import { Buffer } from 'node:buffer';
+
 export interface Env {
   ASSETS: any;
   SERVER: any;
+  ASSETS_PREFIX?: string;
 }
-
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+
+    const getAssetsPathname = (pathname: string) => env.ASSETS_PREFIX ? `${env.ASSETS_PREFIX}/${decodeURIComponent(pathname)}` : decodeURIComponent(pathname);
+
+
     const url = new URL(request.url);
     const pathname = url.pathname.replace(/^\//, "");
 
@@ -24,7 +30,9 @@ export default {
     }
     // Fetch from assets origin
     else if (route?.origin === "assets") {
-      const object = await env.ASSETS.getWithMetadata(pathname);
+      const updPathname = getAssetsPathname(pathname);
+      const object = await env.ASSETS.getWithMetadata(updPathname);
+
       if (object.value) return await respond(200, object);
     }
 
@@ -52,12 +60,14 @@ export default {
     async function respond(status: number, object: any) {
       // build response
       const headers = new Headers();
-      if (SST_ASSET_MANIFEST[pathname]) {
-        headers.set("etag", SST_ASSET_MANIFEST[pathname]);
+      const updPathname = getAssetsPathname(pathname);
+      if (SST_ASSET_MANIFEST[updPathname]) {
+        headers.set("etag", SST_ASSET_MANIFEST[updPathname]);
         headers.set("content-type", object.metadata.contentType);
-        headers.set("cache-controle", object.metadata.cacheControl);
+        headers.set("cache-control", object.metadata.cacheControl);
       }
-      const response = new Response(object.value, {
+      const decoded = Buffer.from(object.value, "base64").toString("utf-8");
+      const response = new Response(decoded, {
         status,
         headers,
       });

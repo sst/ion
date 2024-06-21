@@ -24,69 +24,17 @@ import type { Input } from "../input.js";
 import { Cache } from "./providers/cache.js";
 import { Queue } from "./queue.js";
 import { buildApp } from "../base/base-ssr-site.js";
-
-const DEFAULT_OPEN_NEXT_VERSION = "3.0.2";
-const DEFAULT_CACHE_POLICY_ALLOWED_HEADERS = ["x-open-next-cache-key"];
-
-type BaseFunction = {
-  handler: string;
-  bundle: string;
-};
-
-type OpenNextFunctionOrigin = {
-  type: "function";
-  streaming?: boolean;
-  wrapper: string;
-  converter: string;
-} & BaseFunction;
-
-type OpenNextServerFunctionOrigin = OpenNextFunctionOrigin & {
-  queue: string;
-  incrementalCache: string;
-  tagCache: string;
-};
-
-type OpenNextImageOptimizationOrigin = OpenNextFunctionOrigin & {
-  imageLoader: string;
-};
-
-type OpenNextS3Origin = {
-  type: "s3";
-  originPath: string;
-  copy: {
-    from: string;
-    to: string;
-    cached: boolean;
-    versionedSubDir?: string;
-  }[];
-};
-
-interface OpenNextOutput {
-  edgeFunctions: {
-    [key: string]: BaseFunction;
-  } & {
-    middleware?: BaseFunction & { pathResolver: string };
-  };
-  origins: {
-    s3: OpenNextS3Origin;
-    default: OpenNextServerFunctionOrigin;
-    imageOptimizer: OpenNextImageOptimizationOrigin;
-  } & {
-    [key: string]: OpenNextServerFunctionOrigin | OpenNextS3Origin;
-  };
-  behaviors: {
-    pattern: string;
-    origin?: string;
-    edgeFunction?: string;
-  }[];
-  additionalProps?: {
-    disableIncrementalCache?: boolean;
-    disableTagCache?: boolean;
-    initializationFunction?: BaseFunction;
-    warmer?: BaseFunction;
-    revalidationFunction?: BaseFunction;
-  };
-}
+import {  
+  DEFAULT_CACHE_POLICY_ALLOWED_HEADERS, 
+  OpenNextImageOptimizationOrigin, 
+  OpenNextS3Origin, 
+  OpenNextServerFunctionOrigin,
+  loadBuildId, 
+  loadOpenNextOutput, 
+  loadOpenNextOutputPlaceholder,
+  loadPrerenderManifest,
+  normalizeBuildCommand,
+} from "../base/base-next.js";
 
 export interface NextjsArgs extends SsrSiteArgs {
   /**
@@ -467,7 +415,7 @@ export class Nextjs extends Component implements Link.Linkable {
     >;
 
     const parent = this;
-    const buildCommand = normalizeBuildCommand();
+    const buildCommand = normalizeBuildCommand(args.buildCommand, args.openNextVersion);
     const { sitePath, partition, region } = prepare(args, opts);
     const { access, bucket } = createBucket(parent, name, partition, args);
     const outputPath = buildApp(name, args, sitePath, buildCommand);
@@ -516,24 +464,11 @@ export class Nextjs extends Component implements Link.Linkable {
       },
     });
 
-    function normalizeBuildCommand() {
-      return all([args?.buildCommand, args?.openNextVersion]).apply(
-        ([buildCommand, openNextVersion]) =>
-          buildCommand ??
-          [
-            "npx",
-            "--yes",
-            `open-next@${openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION}`,
-            "build",
-          ].join(" "),
-      );
-    }
-
     function loadBuildOutput() {
       const cache = new Cache(
         `${name}OpenNextOutput`,
         {
-          data: $dev ? loadOpenNextOutputPlaceholder() : loadOpenNextOutput(),
+          data: $dev ? loadOpenNextOutputPlaceholder(outputPath) : loadOpenNextOutput(outputPath),
         },
         {
           parent,
@@ -543,105 +478,13 @@ export class Nextjs extends Component implements Link.Linkable {
 
       return {
         openNextOutput: cache.data as ReturnType<typeof loadOpenNextOutput>,
-        buildId: loadBuildId(),
+        buildId: loadBuildId(outputPath, name),
         routesManifest: loadRoutesManifest(),
         appPathRoutesManifest: loadAppPathRoutesManifest(),
         appPathsManifest: loadAppPathsManifest(),
         pagesManifest: loadPagesManifest(),
-        prerenderManifest: loadPrerenderManifest(),
+        prerenderManifest: loadPrerenderManifest(outputPath),
       };
-    }
-
-    function loadOpenNextOutput() {
-      return outputPath.apply((outputPath) => {
-        const openNextOutputPath = path.join(
-          outputPath,
-          ".open-next",
-          "open-next.output.json",
-        );
-        if (!fs.existsSync(openNextOutputPath)) {
-          throw new VisibleError(
-            `Failed to load open-next.output.json from "${openNextOutputPath}".`,
-          );
-        }
-        const content = fs.readFileSync(openNextOutputPath).toString();
-        const json = JSON.parse(content) as OpenNextOutput;
-        // Currently open-next.output.json's initializationFunction value
-        // is wrong, it is set to ".open-next/initialization-function"
-        if (json.additionalProps?.initializationFunction) {
-          json.additionalProps.initializationFunction = {
-            handler: "index.handler",
-            bundle: ".open-next/dynamodb-provider",
-          };
-        }
-        return json;
-      });
-    }
-
-    function loadOpenNextOutputPlaceholder() {
-      // Configure origins and behaviors based on the Next.js app from quick start
-      return outputPath.apply((outputPath) => ({
-        edgeFunctions: {},
-        origins: {
-          s3: {
-            type: "s3",
-            originPath: "_assets",
-            // do not upload anything
-            copy: [],
-          },
-          imageOptimizer: {
-            type: "function",
-            handler: "index.handler",
-            bundle: path.join(
-              outputPath,
-              ".open-next/image-optimization-function",
-            ),
-            streaming: false,
-          },
-          default: {
-            type: "function",
-            handler: "index.handler",
-            bundle: path.join(
-              outputPath,
-              ".open-next/server-functions/default",
-            ),
-            streaming: false,
-          },
-        },
-        behaviors: [
-          { pattern: "_next/image*", origin: "imageOptimizer" },
-          { pattern: "_next/data/*", origin: "default" },
-          { pattern: "*", origin: "default" },
-          { pattern: "BUILD_ID", origin: "s3" },
-          { pattern: "_next/*", origin: "s3" },
-          { pattern: "favicon.ico", origin: "s3" },
-          { pattern: "next.svg", origin: "s3" },
-          { pattern: "vercel.svg", origin: "s3" },
-        ],
-        additionalProps: {
-          // skip creating revalidation queue
-          disableIncrementalCache: true,
-          // skip creating revalidation table
-          disableTagCache: true,
-        },
-      }));
-    }
-
-    function loadBuildId() {
-      return outputPath.apply((outputPath) => {
-        if ($dev) return "mock-build-id";
-
-        try {
-          return fs
-            .readFileSync(path.join(outputPath, ".next/BUILD_ID"))
-            .toString();
-        } catch (e) {
-          console.error(e);
-          throw new VisibleError(
-            `Failed to read build id from ".next/BUILD_ID" for the "${name}" site.`,
-          );
-        }
-      });
     }
 
     function loadRoutesManifest() {
@@ -727,25 +570,6 @@ export class Nextjs extends Component implements Link.Linkable {
       });
     }
 
-    function loadPrerenderManifest() {
-      return outputPath.apply((outputPath) => {
-        if ($dev) return { version: 0, routes: {} };
-
-        try {
-          const content = fs
-            .readFileSync(
-              path.join(outputPath, ".next/prerender-manifest.json"),
-            )
-            .toString();
-          return JSON.parse(content) as {
-            version: number;
-            routes: Record<string, unknown>;
-          };
-        } catch (e) {
-          console.debug("Failed to load prerender-manifest.json", e);
-        }
-      });
-    }
 
     function buildPlan() {
       return all([
