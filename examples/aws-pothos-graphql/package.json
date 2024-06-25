@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "extract": "sst shell tsx pothos/extract.ts",
+    "extract:dev": "sst shell tsx watch pothos/extract.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
@@ -10,10 +12,16 @@
   "description": "",
   "dependencies": {
     "@pothos/core": "^3.41.1",
+    "@urql/core": "^5.0.4",
     "graphql-yoga": "^5.3.1",
-    "sst": "^3.0.2"
+    "react": "^18.3.1",
+    "sst": "^3.0.2",
+    "urql": "^4.1.0",
+    "wonka": "^6.3.4"
   },
   "devDependencies": {
-    "@types/aws-lambda": "8.10.138"
+    "@genql/cli": "^6.3.3",
+    "@types/aws-lambda": "8.10.138",
+    "@types/react": "^18.3.3"
   }
 }

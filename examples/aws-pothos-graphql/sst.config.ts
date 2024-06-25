@@ -11,11 +11,18 @@ export default $config({
   async run() {
     const pothos = new sst.aws.Function("PothosGraphql", {
       url: true,
-      handler: "index.handler",
+      handler: "pothos/graphql.handler",
+    });
+
+    const client = new sst.aws.Function("Client", {
+      url: true,
+      link: [pothos],
+      handler: "client.handler",
     });
 
     return {
       api: pothos.url,
+      client: client.url,
     };
   },
 });
