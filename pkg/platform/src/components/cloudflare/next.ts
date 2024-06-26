@@ -627,7 +627,10 @@ export class NextJs extends Component implements Link.Linkable {
           return {
             handler: path.join(outputPath, openNextOutput.edgeFunctions.middleware!.bundle, 'handler.mjs'),
             environment: {
-              OPEN_NEXT_ORIGIN: jsonStringify(openNextOrigin)
+              OPEN_NEXT_ORIGIN: jsonStringify(openNextOrigin),
+              // When the domain is not set, we disable the cache.
+              // Haven't found a proper way to invalidate the cache when the domain is not set.
+              DISABLE_CACHE: args.domain ? "false" : "true",
             },
             build: {
               esbuild: {
