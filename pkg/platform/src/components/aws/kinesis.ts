@@ -223,8 +223,12 @@ export class Kinesis
   ) {
     return all([name, streamArn]).apply(([name, streamArn]) => {
       const prefix = sanitizeToPascalCase(name);
+
+      const subscriberHandler =
+        typeof subscriber === "string" ? subscriber : subscriber.handler;
+
       const suffix = sanitizeToPascalCase(
-        hashStringToPrettyString(`${streamArn}${subscriber}`, 6),
+        hashStringToPrettyString(`${streamArn}${subscriberHandler}`, 6),
       );
       return new KinesisLambdaSubscriber(
         `${prefix}Subscriber${suffix}`,
