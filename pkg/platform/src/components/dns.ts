@@ -6,6 +6,7 @@
 
 import { ComponentResourceOptions, Output, Resource } from "@pulumi/pulumi";
 import { Input } from "./input";
+import { GetRecordResult } from "@pulumi/cloudflare/getRecord";
 
 export interface Record {
   /**
@@ -43,25 +44,36 @@ type CreateRecord = (
   opts: ComponentResourceOptions,
 ) => Output<Resource>;
 
+type FindRecord = (
+    namePrefix: string,
+    record: Record,
+    opts: ComponentResourceOptions,
+) => Promise<Output<GetRecordResult>>;
+
 type CreateAliasRecord = (
   namePrefix: string,
   record: AliasRecord,
   opts: ComponentResourceOptions,
 ) => Output<Resource>[];
 
+type UnSupportedFindRecord = () => void;
+
 type AwsDns = {
   provider: "aws";
   createRecord: CreateRecord;
   createAliasRecords: CreateAliasRecord;
+  findRecord: UnSupportedFindRecord;
 };
 
 type CloudflareDns = {
   provider: "cloudflare";
   createRecord: CreateRecord;
+  findRecord: FindRecord;
 };
 type VercelDns = {
   provider: "vercel";
   createRecord: CreateRecord;
+  findRecord: UnSupportedFindRecord;
 };
 
 export type Dns = AwsDns | CloudflareDns | VercelDns;

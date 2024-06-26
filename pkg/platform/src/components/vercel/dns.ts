@@ -70,6 +70,7 @@ export function dns(args: DnsArgs) {
   return {
     provider: "vercel",
     createRecord,
+    findRecord
   } satisfies Dns;
 
   function useCAARecord(namePrefix: string, opts: ComponentResourceOptions) {
@@ -87,6 +88,12 @@ export function dns(args: DnsArgs) {
       );
     }
     return caaRecord;
+  }
+
+  function findRecord() {
+    throw new Error(
+      `Currentr version of the Vercel adapter does not support finding records.`
+    );
   }
 
   function createRecord(

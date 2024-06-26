@@ -70,7 +70,43 @@ export function dns(args: DnsArgs = {}) {
   return {
     provider: "cloudflare",
     createRecord,
+    findRecord,
   } satisfies Dns;
+
+  async function findRecord(
+    namePrefix: string,
+    record: Record,
+    opts: ComponentResourceOptions,
+  ) {
+    return output(record).apply((record) => {
+      const nameSuffix = sanitizeToPascalCase(record.name);
+      const zoneId = lookupZone();
+      const dnsRecord = findRecord();
+      return dnsRecord;
+
+      function lookupZone() {
+        if (args.zone) return args.zone;
+        return new ZoneLookup(
+          `${namePrefix}${record.type}ZoneLookup${nameSuffix}`,
+          {
+            accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+            domain: output(record.name).apply((name) =>
+              name.replace(/\.$/, ""),
+            ),
+          },
+          opts,
+        ).id;
+      }
+
+      function findRecord() {
+        return cloudflare.getRecord({
+          zoneId: zoneId.toString(),
+          type: record.type,
+          hostname: record.name,
+        })
+      }
+    });
+  }
 
   function createRecord(
     namePrefix: string,

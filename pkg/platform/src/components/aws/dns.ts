@@ -71,7 +71,14 @@ export function dns(args: DnsArgs = {}) {
     provider: "aws",
     createRecord,
     createAliasRecords,
+    findRecord
   } satisfies Dns;
+
+  function findRecord() {
+    throw new Error(
+      `Current version of the AWS adapter does not support finding records.`
+    );
+  }
 
   /**
    * Creates a DNS record in the hosted zone.
