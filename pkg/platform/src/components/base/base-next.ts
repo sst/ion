@@ -3,7 +3,7 @@ import { VisibleError } from "../error";
 import fs from "node:fs";
 import { Input, Output, all } from "@pulumi/pulumi";
 
-export const DEFAULT_OPEN_NEXT_VERSION = "3.0.5";
+export const DEFAULT_OPEN_NEXT_VERSION = "3.0.6";
 export const DEFAULT_CACHE_POLICY_ALLOWED_HEADERS = ["x-open-next-cache-key"];
 
 export type BaseFunction = {
