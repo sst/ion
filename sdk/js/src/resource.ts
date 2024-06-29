@@ -1,4 +1,4 @@
-import { env } from "process";
+const env = process.env;
 
 export interface Resource {
   App: {
