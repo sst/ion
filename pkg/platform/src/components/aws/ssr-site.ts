@@ -100,6 +100,7 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs {
       }
   >;
   vpc?: FunctionArgs["vpc"];
+  cdnServerCachePolicyId?: Input<string>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -642,7 +643,7 @@ function handler(event) {
           ],
           cachedMethods: ["GET", "HEAD"],
           compress: true,
-          cachePolicyId: useServerBehaviorCachePolicy().id,
+          cachePolicyId: args.cdnServerCachePolicyId ?? useServerBehaviorCachePolicy().id,
           // CloudFront's Managed-AllViewerExceptHostHeader policy
           originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac",
           functionAssociations: cfFunction

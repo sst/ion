@@ -373,6 +373,18 @@ export interface NextjsArgs extends SsrSiteArgs {
    * ```
    */
   vpc?: SsrSiteArgs["vpc"];
+  /**
+   * Set a shared server cache policy id. Prevents creating new cache policies
+   * that cause hitting AWS' 20 custom policies hard limit.
+   *
+   * @example
+   * ```js
+   * {
+   *   cdnServerCachePolicyId: "2a8001c4-41ef-4459-9576-d2ecf2532da8"
+   * }
+   * ```  
+   */
+  cdnServerCachePolicyId?: Input<string>;
 }
 
 /**
