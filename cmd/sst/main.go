@@ -289,6 +289,22 @@ var Root = Command{
 			},
 		},
 		{
+			Name: "y",
+			Type: "bool",
+			Description: Description{
+				Short: "Skip interactive confirmation",
+				Long: strings.Join([]string{
+					"",
+					"Skip interactive confirmation for detected framework.",
+					"",
+					"```bash",
+					"sst init -y",
+					"```",
+					"",
+				}, "\n"),
+			},
+		},
+		{
 			Name: "help",
 			Type: "bool",
 			Description: Description{
