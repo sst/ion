@@ -92,7 +92,7 @@ export function dns(args: DnsArgs) {
 
   function findRecord() {
     throw new Error(
-      `Currentr version of the Vercel adapter does not support finding records.`
+      `Current version of the Vercel adapter does not support finding records.`
     );
   }
 
