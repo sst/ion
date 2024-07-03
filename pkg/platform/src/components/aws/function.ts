@@ -480,7 +480,7 @@ export interface FunctionArgs {
    * ```js
    * {
    *   url: {
-   *     authorization: "iam",
+   *     authorization: "AWS_IAM",
    *     cors: {
    *       allowOrigins: ['https://example.com']
    *     }
@@ -493,17 +493,17 @@ export interface FunctionArgs {
     | {
         /**
          * The authorization used for the function URL. Supports [IAM authorization](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
-         * @default `"none"`
+         * @default `"NONE"`
          * @example
          * ```js
          * {
          *   url: {
-         *     authorization: "iam"
+         *     authorization: "AWS_IAM"
          *   }
          * }
          * ```
          */
-        authorization?: Input<"none" | "iam">;
+        authorization?: Input<"NONE" | "AWS_IAM">;
         /**
          * Customize the CORS (Cross-origin resource sharing) settings for the function URL.
          * @default `true`
@@ -1049,7 +1049,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
         }
 
         // normalize authorization
-        const defaultAuthorization = "none" as const;
+        const defaultAuthorization = "NONE" as const;
         const authorization = url.authorization ?? defaultAuthorization;
 
         // normalize cors

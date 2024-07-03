@@ -323,6 +323,17 @@ export interface NextjsArgs extends SsrSiteArgs {
    */
   openNextVersion?: Input<string>;
   /**
+   * Ensure function urls use IAM Auth instead of being public access.
+   * @default `false`
+   * @example
+   * ```js
+   * {
+   *   enableServerUrlIamAuth: true,
+   * }
+   * ```
+   */
+  enableServerUrlIamAuth?: Input<boolean>;
+  /**
    * Configure the Lambda function used for image optimization.
    * @default `{memory: "1024 MB"}`
    */
@@ -753,6 +764,7 @@ export class Nextjs extends Component implements Link.Linkable {
         buildId,
         openNextOutput,
         args?.imageOptimization,
+        args?.enableServerUrlIamAuth,
         [bucket.arn, bucket.name],
         revalidationQueue.apply((q) => ({ url: q?.url, arn: q?.arn })),
         revalidationTable.apply((t) => ({ name: t?.name, arn: t?.arn })),
@@ -762,6 +774,7 @@ export class Nextjs extends Component implements Link.Linkable {
           buildId,
           openNextOutput,
           imageOptimization,
+          enableServerUrlIamAuth,
           [bucketArn, bucketName],
           { url: revalidationQueueUrl, arn: revalidationQueueArn },
           { name: revalidationTableName, arn: revalidationTableArn },
@@ -885,6 +898,9 @@ export class Nextjs extends Component implements Link.Linkable {
                               : {}),
                           },
                           memory: imageOptimization?.memory ?? "1536 MB",
+                          url: {
+                            authorization: enableServerUrlIamAuth ? 'AWS_IAM' : 'NONE'
+                          }
                         },
                       },
                     },
@@ -900,6 +916,9 @@ export class Nextjs extends Component implements Link.Linkable {
                         bundle: path.join(outputPath, value.bundle),
                         handler: value.handler,
                         streaming: value.streaming,
+                        url: {
+                          authorization: enableServerUrlIamAuth ? 'AWS_IAM' : 'NONE'
+                        },
                         ...defaultFunctionProps,
                       },
                     },
