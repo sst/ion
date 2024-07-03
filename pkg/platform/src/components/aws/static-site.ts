@@ -569,29 +569,18 @@ export class StaticSite extends Component implements Link.Linkable {
             },
           ],
           defaultRootObject: indexPage,
-          customErrorResponses: args.errorPage
-            ? [
-                {
-                  errorCode: 403,
-                  responsePagePath: interpolate`/${args.errorPage}`,
-                },
-                {
-                  errorCode: 404,
-                  responsePagePath: interpolate`/${args.errorPage}`,
-                },
-              ]
-            : [
-                {
-                  errorCode: 403,
-                  responsePagePath: interpolate`/${indexPage}`,
-                  responseCode: 200,
-                },
-                {
-                  errorCode: 404,
-                  responsePagePath: interpolate`/${indexPage}`,
-                  responseCode: 200,
-                },
-              ],
+          customErrorResponses: [
+            {
+              errorCode: 403,
+              responsePagePath: interpolate`/${args.errorPage || indexPage}`,
+              responseCode: 200,
+            },
+            {
+              errorCode: 404,
+              responsePagePath: interpolate`/${args.errorPage || indexPage}`,
+              responseCode: 200,
+            },
+          ],
           defaultCacheBehavior: {
             targetOriginId: "s3",
             viewerProtocolPolicy: "redirect-to-https",
