@@ -435,7 +435,7 @@ export class Remix extends Component implements Link.Linkable {
           const assetsPath = isUsingVite
             ? path.join("build", "client")
             : "public";
-          const assetsVersionedSubDir = isUsingVite ? undefined : "build";
+          const assetsVersionedSubDir = isUsingVite ? "assets" : "build";
 
           return {
             assetsPath,
