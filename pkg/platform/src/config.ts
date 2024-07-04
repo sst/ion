@@ -568,7 +568,7 @@ export interface Config {
      *       if (event.type === "pushed" && event.branch === "main") {
      *         return {
      *           stage: "production",
-     *           runner: { engine: "codebuild", compute: "large" },
+     *           runner: { engine: "codebuild", compute: "large" }
      *         };
      *       }
      *     }
