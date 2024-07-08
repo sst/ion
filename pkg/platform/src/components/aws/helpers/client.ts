@@ -35,6 +35,7 @@ export const awsFetch = async (
   const { AwsClient } = await import(sourcePath);
   const region = opts?.region ?? process.env.SST_AWS_REGION ?? "us-east-1";
   console.log({ region });
+
   const client = new AwsClient({
     ...(process.env.SST_AWS_ACCESS_KEY_ID
       ? {
