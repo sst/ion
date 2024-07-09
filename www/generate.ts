@@ -3,6 +3,17 @@ import * as fs from "fs";
 import * as TypeDoc from "typedoc";
 import config from "./config";
 
+process.on("uncaughtException", (err) => {
+  restoreCode();
+  console.error("There was an uncaught error", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason, promise) => {
+  restoreCode();
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  process.exit(1);
+});
+
 type CliCommand = {
   name: string;
   hidden: boolean;
@@ -36,8 +47,8 @@ function useLinkHashes(module: TypeDoc.DeclarationReflection) {
 }
 
 try {
-  await configureLogger();
-  await patchCode();
+  configureLogger();
+  patchCode();
   if (!cmd || cmd === "components") {
     const components = await buildComponents();
     const sdks = await buildSdk();
@@ -67,7 +78,7 @@ try {
   if (!cmd || cmd === "cli") await generateCliDoc();
   if (!cmd || cmd === "examples") await generateExamplesDocs();
 } finally {
-  await restoreCode();
+  restoreCode();
 }
 
 function generateCliDoc() {
@@ -664,6 +675,9 @@ function renderType(
     }
     // types in different doc
     const externalModule = {
+      ApiGatewayV1Authorizer: "apigatewayv1-authorizer",
+      ApiGatewayV1LambdaRoute: "apigatewayv1-lambda-route",
+      ApiGatewayV2Authorizer: "apigatewayv2-authorizer",
       ApiGatewayV2LambdaRoute: "apigatewayv2-lambda-route",
       ApiGatewayWebSocketRoute: "apigateway-websocket-route",
       AppSyncDataSource: "app-sync-data-source",
@@ -1698,7 +1712,7 @@ function configureLogger() {
   console.debug = () => {};
 }
 
-async function patchCode() {
+function patchCode() {
   // patch Input
   fs.renameSync(
     "../pkg/platform/src/components/input.ts",
@@ -1725,7 +1739,7 @@ async function patchCode() {
   );
 }
 
-async function restoreCode() {
+function restoreCode() {
   // restore Input
   fs.renameSync(
     "../pkg/platform/src/components/input.ts.bk",
@@ -1750,7 +1764,11 @@ async function buildComponents() {
       "../pkg/platform/src/components/secret.ts",
       "../pkg/platform/src/components/aws/apigateway-websocket.ts",
       "../pkg/platform/src/components/aws/apigateway-websocket-route.ts",
+      "../pkg/platform/src/components/aws/apigatewayv1.ts",
+      "../pkg/platform/src/components/aws/apigatewayv1-authorizer.ts",
+      "../pkg/platform/src/components/aws/apigatewayv1-lambda-route.ts",
       "../pkg/platform/src/components/aws/apigatewayv2.ts",
+      "../pkg/platform/src/components/aws/apigatewayv2-authorizer.ts",
       "../pkg/platform/src/components/aws/apigatewayv2-lambda-route.ts",
       "../pkg/platform/src/components/aws/app-sync.ts",
       "../pkg/platform/src/components/aws/app-sync-data-source.ts",

@@ -70,6 +70,10 @@ const sidebar = [
       { label: "StaticSite", link: "/docs/component/aws/static-site/" },
       { label: "SolidStart", link: "/docs/component/aws/solid-start/" },
       {
+        label: "ApiGatewayV1",
+        link: "/docs/component/aws/apigatewayv1/",
+      },
+      {
         label: "ApiGatewayV2",
         link: "/docs/component/aws/apigatewayv2/",
       },
@@ -151,6 +155,14 @@ const sidebar = [
         link: "/docs/component/aws/cognito-user-pool-client/",
       },
       {
+        label: "ApiGatewayV1Authorizer",
+        link: "/docs/component/aws/apigatewayv1-authorizer/",
+      },
+      {
+        label: "ApiGatewayV2Authorizer",
+        link: "/docs/component/aws/apigatewayv2-authorizer/",
+      },
+      {
         label: "QueueLambdaSubscriber",
         link: "/docs/component/aws/queue-lambda-subscriber/",
       },
@@ -177,6 +189,10 @@ const sidebar = [
       {
         label: "SnsTopicLambdaSubscriber",
         link: "/docs/component/aws/sns-topic-lambda-subscriber/",
+      },
+      {
+        label: "ApiGatewayV1LambdaRoute",
+        link: "/docs/component/aws/apigatewayv1-lambda-route/",
       },
       {
         label: "ApiGatewayV2LambdaRoute",
