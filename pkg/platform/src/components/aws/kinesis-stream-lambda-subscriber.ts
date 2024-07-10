@@ -3,11 +3,11 @@ import { Output, output } from "@pulumi/pulumi";
 import { Component, transform } from "../component";
 import { Input } from "../input.js";
 import { Function, FunctionArgs } from "./function.js";
-import { KinesisLambdaSubscriberArgs } from "./kinesis.js";
+import { KinesisStreamLambdaSubscriberArgs } from "./kinesis-stream.js";
 
-export interface Args extends KinesisLambdaSubscriberArgs {
+export interface Args extends KinesisStreamLambdaSubscriberArgs {
   /**
-   * The stream to use.
+   * The Kinesis stream to use.
    */
   stream: Input<{
     /**
@@ -22,16 +22,16 @@ export interface Args extends KinesisLambdaSubscriberArgs {
 }
 
 /**
- * The `KinesisLambdaSubscriber` component is internally used by the `Kinesis` component to
- * add consumer to [Amazon Kinesis](https://aws.amazon.com/kinesis/).
+ * The `KinesisStreamLambdaSubscriber` component is internally used by the `KinesisStream` component to
+ * add consumer to [Amazon Kinesis Data Streams](https://docs.aws.amazon.com/streams/latest/dev/introduction.html).
  *
  * :::caution
  * This component is not intended for public use.
  * :::
  *
- * You'll find this component returned by the `subscribe` method of the `Kinesis` component.
+ * You'll find this component returned by the `subscribe` method of the `KinesisStream` component.
  */
-export class KinesisLambdaSubscriber extends Component {
+export class KinesisStreamLambdaSubscriber extends Component {
   private readonly fn: Output<Function>;
   private readonly eventSourceMapping: aws.lambda.EventSourceMapping;
   constructor(name: string, args: Args, opts?: $util.ComponentResourceOptions) {
@@ -62,9 +62,6 @@ export class KinesisLambdaSubscriber extends Component {
                   "kinesis:ListShards",
                   "kinesis:ListStreams",
                   "kinesis:SubscribeToShard",
-                  "logs:CreateLogGroup",
-                  "logs:CreateLogStream",
-                  "logs:PutLogEvents",
                 ],
                 resources: [stream.arn],
               },
@@ -114,6 +111,6 @@ export class KinesisLambdaSubscriber extends Component {
   }
 }
 
-const __pulumiType = "sst:aws:KinesisLambdaSubscriber";
+const __pulumiType = "sst:aws:KinesisStreamLambdaSubscriber";
 // @ts-expect-error
-KinesisLambdaSubscriber.__pulumiType = __pulumiType;
+KinesisStreamLambdaSubscriber.__pulumiType = __pulumiType;

@@ -8,30 +8,27 @@
 export default $config({
   app(input) {
     return {
-      name: "aws-kinesis",
+      name: "aws-kinesis-stream",
       home: "aws",
       removal: input?.stage === "production" ? "retain" : "remove",
     };
   },
   async run() {
-    const stream = new sst.aws.Kinesis("MyStream");
-    // This lambda will handle all kind of events
-    stream.subscribe("subscriber.handler");
-    // This lambda will handle all events that contains { "type": "filter" }
-    stream.subscribe(
-      {
-        handler: "subscriber-with-filter.handler",
-      },
-      {
-        filters: [
-          {
-            data: {
-              type: ["filter"],
-            },
+    const stream = new sst.aws.KinesisStream("MyStream");
+
+    // Create a function subscribing to all events
+    stream.subscribe("subscriber.all");
+
+    // Create a function subscribing to events of `bar` type
+    stream.subscribe("subscriber.filtered", {
+      filters: [
+        {
+          data: {
+            type: ["bar"],
           },
-        ],
-      }
-    );
+        },
+      ],
+    });
 
     const app = new sst.aws.Function("MyApp", {
       handler: "publisher.handler",
@@ -42,7 +39,6 @@ export default $config({
     return {
       app: app.url,
       stream: stream.name,
-      streamArn: stream.arn,
     };
   },
 });
