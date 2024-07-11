@@ -19,6 +19,25 @@ export default $config({
       },
     };
   },
+  console: {
+    autodeploy: {
+      target(event) {
+        if (
+          event.type === "branch" &&
+          event.branch === "dev" &&
+          event.action === "pushed"
+        ) {
+          return { stage: "production" };
+        }
+      },
+      workflow(context) {
+        context.install();
+        context.shell("goenv install 1.21.3 && goenv global 1.21.3");
+        context.shell("cd pkg/platform && ./scripts/build-functions");
+        context.deploy();
+      },
+    },
+  },
   async run() {
     const isPersonal = $app.stage !== "production" && $app.stage !== "dev";
     const domain =

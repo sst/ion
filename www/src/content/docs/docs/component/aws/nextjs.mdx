@@ -427,7 +427,7 @@ To manually set up a domain on an unsupported provider, you'll need to:
 </InlineSection>
 The DNS provider to use for the domain. Defaults to the AWS.
 
-Takes an adapter that can create the DNS records on the provider. This can automate 
+Takes an adapter that can create the DNS records on the provider. This can automate
 validating the domain and setting up the DNS routing.
 
 Supports Route 53, Cloudflare, and Vercel adapters. For other providers, you'll need
@@ -739,7 +739,7 @@ By default, this is pinned to the version of OpenNext that was released with the
 
 ```js
 {
-  openNextVersion: "3.0.0-rc.3"
+  openNextVersion: "3.0.2"
 }
 ```
 </Segment>
@@ -971,7 +971,7 @@ The underlying [resources](/docs/components/#nodes) this component creates.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">Bucket</code>](/docs/component/aws/bucket/)
+**Type** <code class="primitive">undefined</code><code class="symbol"> | </code>[<code class="type">Bucket</code>](/docs/component/aws/bucket/)
 </InlineSection>
 </Section>
 The Amazon S3 Bucket that stores the assets.
@@ -980,7 +980,7 @@ The Amazon S3 Bucket that stores the assets.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">Cdn</code>](/docs/component/aws/cdn/)<code class="symbol">&gt;</code>
+**Type** <code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">Cdn</code>](/docs/component/aws/cdn/)<code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 The Amazon CloudFront CDN that serves the app.
@@ -989,7 +989,7 @@ The Amazon CloudFront CDN that serves the app.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">Function</code>](/docs/component/aws/function/)<code class="symbol">&gt;</code>
+**Type** <code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">Output</code><code class="symbol">&lt;</code>[<code class="type">Function</code>](/docs/component/aws/function/)<code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 The AWS Lambda server function that renders the app.
@@ -999,7 +999,7 @@ The AWS Lambda server function that renders the app.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 The URL of the Next.js app.
@@ -1015,7 +1015,7 @@ The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
 ### Links
 <Segment>
 <Section type="parameters">
-- <p><code class="key">url</code> <code class="primitive">string</code></p>
+- <p><code class="key">url</code> <code class="primitive">string</code><code class="symbol"> | </code><code class="primitive">string</code></p>
 The URL of the Next.js app.
 
 If the `domain` is set, this is the URL with the custom domain.

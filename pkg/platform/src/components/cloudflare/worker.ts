@@ -7,7 +7,6 @@ import {
   jsonStringify,
   interpolate,
 } from "@pulumi/pulumi";
-import * as aws from "@pulumi/aws";
 import * as cf from "@pulumi/cloudflare";
 import type { Loader, BuildOptions } from "esbuild";
 import { build } from "../../runtime/cloudflare.js";
@@ -16,8 +15,8 @@ import { WorkerUrl } from "./providers/worker-url.js";
 import { Link } from "../link.js";
 import type { Input } from "../input.js";
 import { ZoneLookup } from "./providers/zone-lookup.js";
-import { VisibleError } from "../error.js";
 import { isLinkable } from "../aws/linkable.js";
+import { iam } from "@pulumi/aws";
 
 export interface WorkerArgs {
   /**
@@ -162,10 +161,6 @@ export interface WorkerArgs {
   };
   /**
    * @internal
-   */
-  _ignoreCodeChanges?: boolean;
-  /**
-   * @internal
    * Placehodler for future feature.
    */
   live?: boolean;
@@ -271,7 +266,7 @@ export class Worker
       },
       _live: all([name, args.handler, args.build, args.live]).apply(
         ([name, handler, build, live]) =>
-          !$dev || !live == false
+          !$dev || live == false
             ? undefined
             : {
                 functionID: name,
@@ -348,13 +343,13 @@ export class Worker
 
         if (permissions.length === 0) return;
 
-        const user = new aws.iam.User(
+        const user = new iam.User(
           `${name}AwsUser`,
           { forceDestroy: true },
           { parent },
         );
 
-        new aws.iam.UserPolicy(
+        new iam.UserPolicy(
           `${name}AwsPolicy`,
           {
             user: user.name,
@@ -369,7 +364,7 @@ export class Worker
           { parent },
         );
 
-        const keys = new aws.iam.AccessKey(
+        const keys = new iam.AccessKey(
           `${name}AwsCredentials`,
           { user: user.name },
           { parent },
@@ -380,7 +375,7 @@ export class Worker
     }
 
     function buildHandler() {
-      const buildResult = all([args]).apply(async ([args, linkData]) => {
+      const buildResult = all([args]).apply(async ([args]) => {
         const result = await build(name, args);
         if (result.type === "error") {
           throw new Error(result.errors.join("\n"));

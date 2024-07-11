@@ -1,5 +1,4 @@
 import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
-import * as aws from "@pulumi/aws";
 import { Component, Prettify, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
@@ -15,6 +14,8 @@ import { RETENTION } from "./logging";
 import { dns as awsDns } from "./dns.js";
 import { ApiGatewayV2DomainArgs } from "./helpers/apigatewayv2-domain";
 import { ApiGatewayV2LambdaRoute } from "./apigatewayv2-lambda-route";
+import { ApiGatewayV2Authorizer } from "./apigatewayv2-authorizer";
+import { apigatewayv2, cloudwatch } from "@pulumi/aws";
 
 export interface ApiGatewayV2Args {
   /**
@@ -78,19 +79,19 @@ export interface ApiGatewayV2Args {
     /**
      * Transform the API Gateway HTTP API resource.
      */
-    api?: Transform<aws.apigatewayv2.ApiArgs>;
+    api?: Transform<apigatewayv2.ApiArgs>;
     /**
      * Transform the API Gateway HTTP API stage resource.
      */
-    stage?: Transform<aws.apigatewayv2.StageArgs>;
+    stage?: Transform<apigatewayv2.StageArgs>;
     /**
      * Transform the API Gateway HTTP API domain name resource.
      */
-    domainName?: Transform<aws.apigatewayv2.DomainNameArgs>;
+    domainName?: Transform<apigatewayv2.DomainNameArgs>;
     /**
      * Transform the CloudWatch LogGroup resource used for access logs.
      */
-    accessLog?: Transform<aws.cloudwatch.LogGroupArgs>;
+    accessLog?: Transform<cloudwatch.LogGroupArgs>;
     /**
      * Transform the routes. This is called for every route that is added.
      *
@@ -145,6 +146,78 @@ export interface ApiGatewayV2Args {
   };
 }
 
+export interface ApiGatewayV2AuthorizerArgs {
+  /**
+   * The name of the authorizer.
+   * @example
+   * ```js
+   * {
+   *   name: "myAuthorizer",
+   * }
+   * ```
+   */
+  name: string;
+  /**
+   * Create a JWT or JSON Web Token authorizer that can be used by the routes.
+   *
+   * @example
+   * You can configure JWT auth.
+   *
+   * ```js
+   * {
+   *   jwt: {
+   *     issuer: "https://issuer.com/",
+   *     audiences: ["https://api.example.com"],
+   *     identitySource: "$request.header.AccessToken"
+   *   }
+   * }
+   * ```
+   *
+   * You can also use Cognito as the identity provider.
+   *
+   * ```js
+   * {
+   *   jwt: {
+   *     audiences: [userPoolClient.id],
+   *     issuer: $interpolate`https://cognito-idp.${aws.getArnOutput(userPool).region}.amazonaws.com/${userPool.id}`,
+   *   }
+   * }
+   * ```
+   *
+   * Where `userPool` and `userPoolClient` are:
+   *
+   * ```js
+   * const userPool = new aws.cognito.UserPool();
+   * const userPoolClient = new aws.cognito.UserPoolClient();
+   * ```
+   */
+  jwt: Input<{
+    /**
+     * Base domain of the identity provider that issues JSON Web Tokens.
+     */
+    issuer: Input<string>;
+    /**
+     * List of the intended recipients of the JWT. A valid JWT must provide an `aud` that matches at least one entry in this list.
+     */
+    audiences: Input<Input<string>[]>;
+    /**
+     * Specifies where to extract the JWT from the request.
+     * @default `"$request.header.Authorization"`
+     */
+    identitySource?: Input<string>;
+  }>;
+  /**
+   * [Transform](/docs/components#transform) how this component creates its underlying
+   * resources.
+   */
+  transform?: {
+    /**
+     * Transform the API Gateway authorizer resource.
+     */
+    authorizer?: Transform<apigatewayv2.AuthorizerArgs>;
+  };
+}
+
 export interface ApiGatewayV2RouteArgs {
   /**
    * Enable auth for your HTTP API.
@@ -177,53 +250,24 @@ export interface ApiGatewayV2RouteArgs {
      * {
      *   auth: {
      *     jwt: {
-     *       issuer: "https://issuer.com/",
-     *       audiences: ["https://api.example.com"],
-     *       scopes: ["read:profile", "write:profile"],
-     *       identitySource: "$request.header.AccessToken"
+     *       authorizer: myAuthorizer.id,
+     *       scopes: ["read:profile", "write:profile"]
      *     }
      *   }
      * }
      * ```
      *
-     * You can also use Cognito as the identity provider.
-     *
-     * ```js
-     * {
-     *   auth: {
-     *     jwt: {
-     *       audiences: [userPoolClient.id],
-     *       issuer: $interpolate`https://cognito-idp.${aws.getArnOutput(userPool).region}.amazonaws.com/${userPool.id}`,
-     *     }
-     *   }
-     * }
-     * ```
-     *
-     * Where `userPool` and `userPoolClient` are:
-     *
-     * ```js
-     * const userPool = new aws.cognito.UserPool();
-     * const userPoolClient = new aws.cognito.UserPoolClient();
-     * ```
+     * Where `myAuthorizer` is created by calling the `addAuthorizer` method.
      */
     jwt?: Input<{
       /**
-       * Base domain of the identity provider that issues JSON Web Tokens.
+       * Authorizer ID of the JWT authorizer.
        */
-      issuer: Input<string>;
-      /**
-       * List of the intended recipients of the JWT. A valid JWT must provide an `aud` that matches at least one entry in this list.
-       */
-      audiences: Input<Input<string>[]>;
+      authorizer: Input<string>;
       /**
        * Defines the permissions or access levels that the JWT grants. If the JWT does not have the required scope, the request is rejected. By default it does not require any scopes.
        */
       scopes?: Input<Input<string>[]>;
-      /**
-       * Specifies where to extract the JWT from the request.
-       * @default `"$request.header.Authorization"`
-       */
-      identitySource?: Input<string>;
     }>;
   }>;
   /**
@@ -234,15 +278,11 @@ export interface ApiGatewayV2RouteArgs {
     /**
      * Transform the API Gateway HTTP API integration resource.
      */
-    integration?: Transform<aws.apigatewayv2.IntegrationArgs>;
+    integration?: Transform<apigatewayv2.IntegrationArgs>;
     /**
      * Transform the API Gateway HTTP API route resource.
      */
-    route?: Transform<aws.apigatewayv2.RouteArgs>;
-    /**
-     * Transform the API Gateway authorizer resource.
-     */
-    authorizer?: Transform<aws.apigatewayv2.AuthorizerArgs>;
+    route?: Transform<apigatewayv2.RouteArgs>;
   };
 }
 
@@ -311,10 +351,10 @@ export interface ApiGatewayV2RouteArgs {
 export class ApiGatewayV2 extends Component implements Link.Linkable {
   private constructorName: string;
   private constructorArgs: ApiGatewayV2Args;
-  private api: aws.apigatewayv2.Api;
-  private apigDomain?: aws.apigatewayv2.DomainName;
-  private apiMapping?: Output<aws.apigatewayv2.ApiMapping>;
-  private logGroup: aws.cloudwatch.LogGroup;
+  private api: apigatewayv2.Api;
+  private apigDomain?: apigatewayv2.DomainName;
+  private apiMapping?: Output<apigatewayv2.ApiMapping>;
+  private logGroup: cloudwatch.LogGroup;
 
   constructor(
     name: string,
@@ -381,7 +421,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     }
 
     function createApi() {
-      return new aws.apigatewayv2.Api(
+      return new apigatewayv2.Api(
         `${name}Api`,
         transform(args.transform?.api, {
           protocolType: "HTTP",
@@ -397,7 +437,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     }
 
     function createLogGroup() {
-      return new aws.cloudwatch.LogGroup(
+      return new cloudwatch.LogGroup(
         `${name}AccessLog`,
         transform(args.transform?.accessLog, {
           name: `/aws/vendedlogs/apis/${prefixName(64, name)}`,
@@ -410,7 +450,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     }
 
     function createStage() {
-      new aws.apigatewayv2.Stage(
+      new apigatewayv2.Stage(
         `${name}Stage`,
         transform(args.transform?.stage, {
           apiId: api.id,
@@ -463,7 +503,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     function createDomainName() {
       if (!domain || !certificateArn) return;
 
-      return new aws.apigatewayv2.DomainName(
+      return new apigatewayv2.DomainName(
         `${name}DomainName`,
         transform(args.transform?.domainName, {
           domainName: domain?.name,
@@ -514,7 +554,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
 
       return domain.path?.apply(
         (path) =>
-          new aws.apigatewayv2.ApiMapping(
+          new apigatewayv2.ApiMapping(
             `${name}DomainMapping`,
             {
               apiId: api.id,
@@ -539,9 +579,9 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     //       trailing slash, the API fails with the error {"message":"Not Found"}
     return this.apigDomain && this.apiMapping
       ? all([this.apigDomain.domainName, this.apiMapping.apiMappingKey]).apply(
-        ([domain, key]) =>
-          key ? `https://${domain}/${key}/` : `https://${domain}`,
-      )
+          ([domain, key]) =>
+            key ? `https://${domain}/${key}/` : `https://${domain}`,
+        )
       : this.api.apiEndpoint;
   }
 
@@ -700,6 +740,38 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
 
       return `${method} ${path}`;
     }
+  }
+
+  /**
+   * Add an authorizer to the API Gateway HTTP API.
+   *
+   * @param args Configure the authorizer.
+   * @example
+   * Here's how you add a JWT authorizer.
+   *
+   * ```js
+   * api.addAuthorizer({
+   *   name: "myAuthorizer",
+   *   jwt: {
+   *     issuer: "https://issuer.com/",
+   *     audiences: ["https://api.example.com"],
+   *     identitySource: "$request.header.AccessToken"
+   *   }
+   * });
+   * ```
+   */
+  public addAuthorizer(args: ApiGatewayV2AuthorizerArgs) {
+    const self = this;
+    const selfName = this.constructorName;
+    const nameSuffix = sanitizeToPascalCase(args.name);
+
+    return new ApiGatewayV2Authorizer(`${selfName}Authorizer${nameSuffix}`, {
+      api: {
+        id: self.api.id,
+        name: selfName,
+      },
+      ...args,
+    });
   }
 
   /** @internal */
