@@ -2,7 +2,6 @@ package multiplexer
 
 import (
 	"context"
-	"log"
 	"log/slog"
 	"os"
 	"syscall"
@@ -66,8 +65,10 @@ func (s *Multiplexer) mainRect() (int, int) {
 }
 
 func (s *Multiplexer) resize(width int, height int) {
+	s.width = width
+	s.height = height
 	s.root.Resize(PAD_WIDTH, PAD_HEIGHT, SIDEBAR_WIDTH, height-PAD_HEIGHT*2)
-	s.main.Resize(PAD_WIDTH+SIDEBAR_WIDTH+PAD_WIDTH, PAD_HEIGHT, width-PAD_WIDTH-SIDEBAR_WIDTH-PAD_WIDTH-PAD_WIDTH, height-PAD_HEIGHT*2)
+	s.main.Resize(PAD_WIDTH+SIDEBAR_WIDTH+PAD_WIDTH+1, PAD_HEIGHT, width-PAD_WIDTH-SIDEBAR_WIDTH-PAD_WIDTH-PAD_WIDTH-1, height-PAD_HEIGHT*2)
 	mw, mh := s.main.Size()
 	for _, p := range s.processes {
 		p.vt.Resize(mw, mh)
@@ -94,6 +95,8 @@ func (s *Multiplexer) Start() {
 				break
 			}
 
+			selected := s.selectedProcess()
+
 			switch evt := unknown.(type) {
 
 			case *tcell.EventResize:
@@ -104,7 +107,10 @@ func (s *Multiplexer) Start() {
 				continue
 
 			case *tcellterm.EventRedraw:
-				s.draw()
+				if selected != nil && selected.vt == evt.VT() {
+					selected.vt.Draw()
+					s.screen.Show()
+				}
 				continue
 
 			case *tcellterm.EventClosed:
@@ -123,7 +129,6 @@ func (s *Multiplexer) Start() {
 				continue
 
 			case *tcell.EventKey:
-				selected := s.selectedProcess()
 				switch evt.Key() {
 				case 256:
 					switch evt.Rune() {
@@ -154,16 +159,16 @@ func (s *Multiplexer) Start() {
 					}
 				case tcell.KeyCtrlU:
 					if selected != nil {
-						log.Println("scrolling up")
-						selected.scrollUp(s.height)
+						selected.scrollUp(s.height/2 + 1)
 						s.draw()
+						s.screen.Sync()
 						continue
 					}
 				case tcell.KeyCtrlD:
 					if selected != nil {
-						log.Println("scrolling down")
-						selected.scrollDown(s.height)
+						selected.scrollDown(s.height/2 + 1)
 						s.draw()
+						s.screen.Sync()
 						continue
 					}
 				case tcell.KeyEnter:
@@ -199,6 +204,7 @@ func (s *Multiplexer) Start() {
 
 				if selected != nil && s.focused && !selected.isScrolling() {
 					selected.vt.HandleEvent(evt)
+					s.draw()
 				}
 			}
 		}

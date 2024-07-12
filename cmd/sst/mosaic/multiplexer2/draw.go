@@ -75,7 +75,7 @@ func (s *Multiplexer) draw() {
 		selected.vt.Draw()
 		if s.focused {
 			y, x, _, _ := selected.vt.Cursor()
-			s.screen.ShowCursor(SIDEBAR_WIDTH+x, y+PAD_HEIGHT)
+			s.screen.ShowCursor(SIDEBAR_WIDTH+1+x, y+PAD_HEIGHT)
 		}
 		if !s.focused {
 			s.screen.HideCursor()
@@ -110,7 +110,6 @@ func (s *Multiplexer) move(offset int) {
 	}
 	s.selected = index
 	s.draw()
-	s.screen.Sync()
 }
 
 func (s *Multiplexer) focus() {
