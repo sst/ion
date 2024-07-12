@@ -3,12 +3,14 @@ package multiplexer
 import (
 	"context"
 	"log"
+	"log/slog"
 	"os"
 	"syscall"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/gdamore/tcell/v2/views"
 	"github.com/sst/ion/cmd/sst/mosaic/multiplexer2/ecma48"
+	tcellterm "github.com/sst/ion/cmd/sst/mosaic/multiplexer2/tcell-term"
 )
 
 var PAD_HEIGHT = 0
@@ -24,6 +26,7 @@ type Multiplexer struct {
 	processes []*process
 	screen    tcell.Screen
 	root      *views.ViewPort
+	main      *views.ViewPort
 	stack     *views.BoxLayout
 	renderer  *renderer
 }
@@ -47,28 +50,40 @@ func New(ctx context.Context) *Multiplexer {
 	result.processes = []*process{}
 	result.screen, _ = tcell.NewScreen()
 	result.screen.Init()
-	// result.screen.EnableMouse()
 	result.screen.Show()
 	width, height := result.screen.Size()
 	result.width = width
 	result.height = height
 	result.root = views.NewViewPort(result.screen, 0, 0, 0, 0)
+	result.main = views.NewViewPort(result.screen, 0, 0, 0, 0)
 	result.stack = views.NewBoxLayout(views.Vertical)
 	result.stack.SetView(result.root)
 	return result
 }
 
-func (s *Multiplexer) mainRect() (bool, int, int, int, int) {
-	return true, SIDEBAR_WIDTH + 1, 0, s.width - SIDEBAR_WIDTH + 1, s.height
+func (s *Multiplexer) mainRect() (int, int) {
+	return s.width - SIDEBAR_WIDTH + 1, s.height
+}
+
+func (s *Multiplexer) resize(width int, height int) {
+	s.root.Resize(PAD_WIDTH, PAD_HEIGHT, SIDEBAR_WIDTH, height-PAD_HEIGHT*2)
+	s.main.Resize(PAD_WIDTH+SIDEBAR_WIDTH+PAD_WIDTH, PAD_HEIGHT, width-PAD_WIDTH-SIDEBAR_WIDTH-PAD_WIDTH-PAD_WIDTH, height-PAD_HEIGHT*2)
+	mw, mh := s.main.Size()
+	for _, p := range s.processes {
+		p.vt.Resize(mw, mh)
+	}
 }
 
 func (s *Multiplexer) Start() {
 	defer func() {
 		for _, p := range s.processes {
-			p.pane.Kill()
+			p.vt.Close()
 		}
 		s.screen.Fini()
 	}()
+
+	s.resize(s.screen.Size())
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -80,27 +95,31 @@ func (s *Multiplexer) Start() {
 			}
 
 			switch evt := unknown.(type) {
-			case *drawEvent:
-				s.draw()
-				continue
-
-			case *cursorEvent:
-				if s.focused {
-					s.screen.ShowCursor(evt.X, evt.Y)
-					s.screen.Show()
-				}
-				continue
 
 			case *tcell.EventResize:
-				width, height := evt.Size()
-				s.width = width
-				s.height = height
-				s.root.Resize(PAD_WIDTH, PAD_HEIGHT, SIDEBAR_WIDTH, height-PAD_HEIGHT*2)
-				for _, p := range s.processes {
-					p.pane.SetRenderRect(s.mainRect())
-				}
+				slog.Info("resize")
+				s.resize(evt.Size())
 				s.draw()
 				s.screen.Sync()
+				continue
+
+			case *tcellterm.EventRedraw:
+				s.draw()
+				continue
+
+			case *tcellterm.EventClosed:
+				for index, proc := range s.processes {
+					if proc.vt == evt.VT() {
+						if !proc.dead {
+							proc.dead = true
+							s.sort()
+							if index == s.selected {
+								s.blur()
+							}
+						}
+					}
+				}
+				s.draw()
 				continue
 
 			case *tcell.EventKey:
@@ -119,8 +138,8 @@ func (s *Multiplexer) Start() {
 							continue
 						}
 					case 'x':
-						if selected.killable && !selected.pane.IsDead() && !s.focused {
-							selected.pane.Kill()
+						if selected.killable && !selected.dead && !s.focused {
+							selected.vt.Close()
 						}
 					}
 				case tcell.KeyUp:
@@ -136,19 +155,19 @@ func (s *Multiplexer) Start() {
 				case tcell.KeyCtrlU:
 					if selected != nil {
 						log.Println("scrolling up")
-						selected.scrollUp(1)
+						selected.scrollUp(s.height)
 						s.draw()
 						continue
 					}
 				case tcell.KeyCtrlD:
 					if selected != nil {
 						log.Println("scrolling down")
-						selected.scrollDown(1)
+						selected.scrollDown(s.height)
 						s.draw()
 						continue
 					}
 				case tcell.KeyEnter:
-					if s.focused && selected != nil && selected.isScrolling() {
+					if selected != nil && selected.isScrolling() && (s.focused || !selected.killable) {
 						selected.scrollReset()
 						s.draw()
 						s.screen.Sync()
@@ -156,8 +175,8 @@ func (s *Multiplexer) Start() {
 					}
 					if !s.focused {
 						if selected.killable {
-							if selected.pane.IsDead() {
-								s.AddProcess(selected.key, selected.args, selected.icon, selected.title, selected.dir, selected.killable, selected.env...)
+							if selected.dead {
+								selected.start()
 								continue
 							}
 							s.focus()
@@ -179,19 +198,9 @@ func (s *Multiplexer) Start() {
 				}
 
 				if selected != nil && s.focused && !selected.isScrolling() {
-					selected.pane.Write([]byte(keyCode(evt)))
+					selected.vt.HandleEvent(evt)
 				}
 			}
 		}
 	}
-}
-
-type drawEvent struct {
-	tcell.EventTime
-}
-
-type cursorEvent struct {
-	tcell.EventTime
-	X int
-	Y int
 }

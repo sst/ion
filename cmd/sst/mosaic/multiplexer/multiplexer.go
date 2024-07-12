@@ -7,9 +7,9 @@ import (
 	"sort"
 	"time"
 
-	tcellterm "git.sr.ht/~rockorager/tcell-term"
 	"github.com/gdamore/tcell/v2"
 	"github.com/gdamore/tcell/v2/views"
+	tcellterm "github.com/sst/ion/cmd/sst/mosaic/multiplexer/tcell-term"
 )
 
 type Model struct {
@@ -130,11 +130,19 @@ func (m *Model) update(ev tcell.Event) {
 				m.draw()
 				return
 			}
+		case tcell.KeyCtrlU:
+			m.selectedPane().vt.ScrollUp(1)
+			m.draw()
+			return
+
+		case tcell.KeyCtrlD:
+			m.selectedPane().vt.ScrollDown(1)
+			m.draw()
+			return
 		}
 
 		if m.focus == "main" {
 			m.panes[m.selected].vt.HandleEvent(ev)
-			m.panes[m.selected].vt.Draw()
 		}
 
 	case *tcell.EventResize:
