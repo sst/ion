@@ -12,7 +12,6 @@ import {
   interpolate,
   unsecret,
 } from "@pulumi/pulumi";
-import * as aws from "@pulumi/aws";
 import { build } from "../../runtime/node.js";
 import { FunctionCodeUpdater } from "./providers/function-code-updater.js";
 import { bootstrap } from "./helpers/bootstrap.js";
@@ -25,6 +24,15 @@ import type { Input } from "../input.js";
 import { prefixName } from "../naming.js";
 import { RETENTION } from "./logging.js";
 import { AWSLinkable, isLinkable } from "./linkable.js";
+import {
+  cloudwatch,
+  getCallerIdentityOutput,
+  getRegionOutput,
+  iam,
+  lambda,
+  s3,
+  types,
+} from "@pulumi/aws";
 
 export type FunctionPermissionArgs = {
   /**
@@ -474,7 +482,7 @@ export interface FunctionArgs {
    *   url: {
    *     authorization: "iam",
    *     cors: {
-   *       allowedOrigins: ['https://example.com']
+   *       allowOrigins: ['https://example.com']
    *     }
    *   }
    * }
@@ -513,8 +521,8 @@ export interface FunctionArgs {
          * {
          *   url: {
          *     cors: {
-         *       allowedMethods: ["GET", "POST"],
-         *       allowedOrigins: ["https://example.com"]
+         *       allowMethods: ["GET", "POST"],
+         *       allowOrigins: ["https://example.com"]
          *     }
          *   }
          * }
@@ -763,20 +771,16 @@ export interface FunctionArgs {
     /**
      * Transform the Lambda Function resource.
      */
-    function?: Transform<aws.lambda.FunctionArgs>;
+    function?: Transform<lambda.FunctionArgs>;
     /**
      * Transform the IAM Role resource.
      */
-    role?: Transform<aws.iam.RoleArgs>;
+    role?: Transform<iam.RoleArgs>;
     /**
      * Transform the CloudWatch LogGroup resource.
      */
-    logGroup?: Transform<aws.cloudwatch.LogGroupArgs>;
+    logGroup?: Transform<cloudwatch.LogGroupArgs>;
   };
-  /**
-   * @internal
-   */
-  _ignoreCodeChanges?: boolean;
   /**
    * @internal
    */
@@ -879,10 +883,10 @@ export interface FunctionArgs {
  *
  */
 export class Function extends Component implements Link.Linkable, AWSLinkable {
-  private function: Output<aws.lambda.Function>;
-  private role?: aws.iam.Role;
-  private logGroup: aws.cloudwatch.LogGroup;
-  private fnUrl: Output<aws.lambda.FunctionUrl | undefined>;
+  private function: Output<lambda.Function>;
+  private role?: iam.Role;
+  private logGroup: cloudwatch.LogGroup;
+  private fnUrl: Output<lambda.FunctionUrl | undefined>;
   private missingSourcemap?: boolean;
 
   constructor(
@@ -928,40 +932,32 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
     this.fnUrl = fnUrl;
 
     this.registerOutputs({
-      _receiver: args._skipMetadata
-        ? undefined
-        : all([args.bundle, args.handler]).apply(([bundle, handler]) => ({
-            directory: bundle || handler,
+      _live: unsecret(
+        all([dev]).apply(([dev]) => {
+          if (!dev) return undefined;
+          return all([
+            name,
             links,
-            environment,
-            aws: {
-              role: role?.arn,
+            args.handler,
+            args.bundle,
+            args.runtime,
+            args.nodejs,
+            copyFiles,
+          ]).apply(
+            ([name, links, handler, bundle, runtime, nodejs, copyFiles]) => {
+              return {
+                functionID: name,
+                links,
+                handler: handler,
+                bundle: bundle,
+                runtime: runtime || "nodejs20.x",
+                copyFiles,
+                properties: nodejs,
+              };
             },
-          })),
-      _live: all([dev]).apply(([dev]) => {
-        if (!dev) return undefined;
-        return all([
-          name,
-          links,
-          args.handler,
-          args.bundle,
-          args.runtime,
-          args.nodejs,
-          copyFiles,
-        ]).apply(
-          ([name, links, handler, bundle, runtime, nodejs, copyFiles]) => {
-            return {
-              functionID: name,
-              links,
-              handler: handler,
-              bundle: bundle,
-              runtime: runtime || "nodejs20.x",
-              copyFiles,
-              properties: nodejs,
-            };
-          },
-        );
-      }),
+          );
+        }),
+      ),
       _metadata: {
         handler: args.handler,
         internal: args._skipMetadata,
@@ -969,7 +965,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
     });
 
     function normalizeRegion() {
-      return aws.getRegionOutput(undefined, { provider: opts?.provider }).name;
+      return getRegionOutput(undefined, { provider: opts?.provider }).name;
     }
 
     function normalizeInjections() {
@@ -1036,7 +1032,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
         const authorization = url.authorization ?? defaultAuthorization;
 
         // normalize cors
-        const defaultCors: aws.types.input.lambda.FunctionUrlCors = {
+        const defaultCors: types.input.lambda.FunctionUrlCors = {
           allowHeaders: ["*"],
           allowMethods: ["*"],
           allowOrigins: ["*"],
@@ -1099,17 +1095,6 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
 
     function buildHandler() {
       return dev.apply((dev) => {
-        if (args._ignoreCodeChanges) {
-          return {
-            bundle: path.join(
-              $cli.paths.platform,
-              "functions",
-              "empty-function",
-            ),
-            handler: "index.handler",
-          };
-        }
-
         if (dev) {
           return {
             handler: "bootstrap",
@@ -1204,7 +1189,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
                     `export const ${newHandlerFunction} = awslambda.streamifyResponse(async (event, responseStream, context) => {`,
                     ...injections,
                     `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
-                    `  return rawHandler(event, context);`,
+                    `  return rawHandler(event, responseStream, context);`,
                     `});`,
                   ].join("\n")
                 : [
@@ -1230,7 +1215,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
 
       const policy = all([args.permissions || [], linkPermissions, dev]).apply(
         ([argsPermissions, linkPermissions, dev]) =>
-          aws.iam.getPolicyDocumentOutput({
+          iam.getPolicyDocumentOutput({
             statements: [
               ...argsPermissions,
               ...linkPermissions,
@@ -1246,14 +1231,14 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
           }),
       );
 
-      return new aws.iam.Role(
+      return new iam.Role(
         `${name}Role`,
         transform(args.transform?.role, {
           assumeRolePolicy: !$dev
-            ? aws.iam.assumeRolePolicyForPrincipal({
+            ? iam.assumeRolePolicyForPrincipal({
                 Service: "lambda.amazonaws.com",
               })
-            : aws.iam.getPolicyDocumentOutput({
+            : iam.getPolicyDocumentOutput({
                 statements: [
                   {
                     actions: ["sts:AssumeRole"],
@@ -1266,7 +1251,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
                         type: "AWS",
                         identifiers: [
                           interpolate`arn:aws:iam::${
-                            aws.getCallerIdentityOutput().accountId
+                            getCallerIdentityOutput().accountId
                           }:root`,
                         ],
                       },
@@ -1370,7 +1355,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
     }
 
     function createBucketObject() {
-      return new aws.s3.BucketObjectv2(
+      return new s3.BucketObjectv2(
         `${name}Code`,
         {
           key: interpolate`assets/${name}-code-${bundleHash}.zip`,
@@ -1381,16 +1366,13 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
         },
         {
           parent,
-          ignoreChanges: args._ignoreCodeChanges
-            ? ["key", "source"]
-            : undefined,
           retainOnDelete: true,
         },
       );
     }
 
     function createLogGroup() {
-      return new aws.cloudwatch.LogGroup(
+      return new cloudwatch.LogGroup(
         `${name}LogGroup`,
         transform(args.transform?.logGroup, {
           name: `/aws/lambda/${prefixName(64, `${name}Function`)}`,
@@ -1439,19 +1421,14 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
       transformed.architectures = all([transformed.architectures, dev]).apply(
         ([architectures, dev]) => (dev ? ["x86_64"] : architectures!),
       );
-      return new aws.lambda.Function(`${name}Function`, transformed, {
-        parent,
-        ignoreChanges: args._ignoreCodeChanges
-          ? ["code", "handler"]
-          : undefined,
-      });
+      return new lambda.Function(`${name}Function`, transformed, { parent });
     }
 
     function createUrl() {
       return url.apply((url) => {
         if (url === undefined) return;
 
-        return new aws.lambda.FunctionUrl(
+        return new lambda.FunctionUrl(
           `${name}Url`,
           {
             functionName: fn.name,

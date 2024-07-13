@@ -108,7 +108,7 @@ export async function build(
     minify: nodejs.minify,
     ...override,
   };
-
+  Object.assign(options, nodejs.esbuild);
   try {
     const result = await esbuild.build(options);
 
@@ -160,12 +160,17 @@ export async function build(
           ),
         }),
       );
-      const cmd = ["npm install"];
+      const cmd = [
+        "npm install",
+        "--force",
+        "--platform=linux",
+        input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64",
+        // support npm versions 10 and above
+        "--os=linux",
+        input.architecture === "arm64" ? "--cpu=arm64" : "--cpu=x64",
+      ];
       if (installPackages.includes("sharp")) {
-        cmd.push(
-          "--platform=linux",
-          input.architecture === "arm64" ? "--arch=arm64" : "--arch=x64",
-        );
+        cmd.push("--libc=glibc");
       }
       await new Promise<void>((resolve, reject) => {
         exec(cmd.join(" "), { cwd: out }, (error) => {
@@ -179,13 +184,11 @@ export async function build(
 
     const moveSourcemap = async () => {
       if (nodejs.sourcemap) return;
-
       const map = Object.keys(result.metafile?.outputs || {}).find((item) =>
         item.endsWith(".map"),
       );
       if (!map) return;
-
-      const oldPath = path.resolve(out, map);
+      const oldPath = path.resolve($cli.paths.platform, map);
       const newPath = path.join(sourcemapOut, path.basename(map));
       await fs.rename(oldPath, newPath);
       return newPath;

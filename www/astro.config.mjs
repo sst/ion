@@ -6,8 +6,12 @@ import sst from "astro-sst";
 
 const sidebar = [
   {
-    label: "What is Ion",
+    label: "Intro",
     link: "/docs/",
+  },
+  {
+    label: "Workflow",
+    link: "/docs/workflow/",
   },
   {
     label: "Get Started",
@@ -45,6 +49,14 @@ const sidebar = [
     ],
   },
   {
+    label: "How to",
+    items: [
+      // { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
+      // { label: "Import Resources", link: "/docs/import-resources/" },
+      { label: "Custom Domains", link: "/docs/custom-domains/" },
+    ],
+  },
+  {
     label: "AWS",
     items: [
       { label: "Vpc", link: "/docs/component/aws/vpc/" },
@@ -68,6 +80,11 @@ const sidebar = [
       { label: "SvelteKit", link: "/docs/component/aws/svelte-kit/" },
       { label: "StaticSite", link: "/docs/component/aws/static-site/" },
       { label: "SolidStart", link: "/docs/component/aws/solid-start/" },
+      { label: "KinesisStream", link: "/docs/component/aws/kinesis-stream/" },
+      {
+        label: "ApiGatewayV1",
+        link: "/docs/component/aws/apigatewayv1/",
+      },
       {
         label: "ApiGatewayV2",
         link: "/docs/component/aws/apigatewayv2/",
@@ -103,14 +120,6 @@ const sidebar = [
       { label: "Global", link: "/docs/reference/global/" },
       { label: "Config", link: "/docs/reference/config/" },
       { label: "Secret", link: "/docs/component/secret/" },
-    ],
-  },
-  {
-    label: "How to",
-    items: [
-      // { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
-      // { label: "Import Resources", link: "/docs/import-resources/" },
-      { label: "Custom Domains", link: "/docs/custom-domains/" },
     ],
   },
   {
@@ -150,6 +159,14 @@ const sidebar = [
         link: "/docs/component/aws/cognito-user-pool-client/",
       },
       {
+        label: "ApiGatewayV1Authorizer",
+        link: "/docs/component/aws/apigatewayv1-authorizer/",
+      },
+      {
+        label: "ApiGatewayV2Authorizer",
+        link: "/docs/component/aws/apigatewayv2-authorizer/",
+      },
+      {
         label: "QueueLambdaSubscriber",
         link: "/docs/component/aws/queue-lambda-subscriber/",
       },
@@ -174,12 +191,20 @@ const sidebar = [
         link: "/docs/component/aws/sns-topic-lambda-subscriber/",
       },
       {
+        label: "ApiGatewayV1LambdaRoute",
+        link: "/docs/component/aws/apigatewayv1-lambda-route/",
+      },
+      {
         label: "ApiGatewayV2LambdaRoute",
         link: "/docs/component/aws/apigatewayv2-lambda-route/",
       },
       {
         label: "ApiGatewayWebSocketRoute",
         link: "/docs/component/aws/apigateway-websocket-route/",
+      },
+      {
+        label: "KinesisStreamLambdaSubscriber",
+        link: "/docs/component/aws/kinesis-stream-lambda-subscriber/",
       },
     ],
   },

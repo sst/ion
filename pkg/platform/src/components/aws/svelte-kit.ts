@@ -5,6 +5,7 @@ import { Function } from "./function.js";
 import {
   SsrSiteArgs,
   createBucket,
+  createDevServer,
   createServersAndDistribution,
   prepare,
   useCloudFrontFunctionHostHeaderInjection,
@@ -15,8 +16,8 @@ import { Bucket } from "./bucket.js";
 import { Component } from "../component.js";
 import { Link } from "../link.js";
 import type { Input } from "../input.js";
-import { Cache } from "./providers/cache.js";
 import { buildApp } from "../base/base-ssr-site.js";
+import { URL_UNAVAILABLE } from "./linkable.js";
 
 export interface SvelteKitArgs extends SsrSiteArgs {
   /**
@@ -318,9 +319,9 @@ export interface SvelteKitArgs extends SsrSiteArgs {
  * ```
  */
 export class SvelteKit extends Component implements Link.Linkable {
-  private cdn: Output<Cdn>;
-  private assets: Bucket;
-  private server: Output<Function>;
+  private cdn?: Output<Cdn>;
+  private assets?: Bucket;
+  private server?: Output<Function>;
 
   constructor(
     name: string,
@@ -332,9 +333,44 @@ export class SvelteKit extends Component implements Link.Linkable {
     const parent = this;
     const edge = normalizeEdge();
     const { sitePath, partition } = prepare(args, opts);
+
+    if ($dev) {
+      const server = createDevServer(parent, name, args);
+      this.registerOutputs({
+        _metadata: {
+          mode: "placeholder",
+          path: sitePath,
+          edge,
+          server: server.arn,
+        },
+        _receiver: {
+          directory: sitePath,
+          links: output(args.link || [])
+            .apply(Link.build)
+            .apply((links) => links.map((link) => link.name)),
+          aws: {
+            role: server.nodes.role.arn,
+          },
+          environment: args.environment,
+        },
+        _dev: {
+          directory: sitePath,
+          links: output(args.link || [])
+            .apply(Link.build)
+            .apply((links) => links.map((link) => link.name)),
+          aws: {
+            role: server.nodes.role.arn,
+          },
+          environment: args.environment,
+          command: "npm run dev",
+        },
+      });
+      return;
+    }
+
     const { access, bucket } = createBucket(parent, name, partition, args);
     const outputPath = buildApp(name, args, sitePath);
-    const { buildMeta } = loadBuildOutput();
+    const buildMeta = loadBuildMetadata();
     const plan = buildPlan();
     const { distribution, ssrFunctions, edgeFunctions } =
       createServersAndDistribution(
@@ -352,13 +388,11 @@ export class SvelteKit extends Component implements Link.Linkable {
     this.cdn = distribution;
     this.server = serverFunction;
     this.registerOutputs({
-      _hint: $dev
-        ? undefined
-        : all([this.cdn.domainUrl, this.cdn.url]).apply(
-          ([domainUrl, url]) => domainUrl ?? url,
-        ),
+      _hint: all([this.cdn.domainUrl, this.cdn.url]).apply(
+        ([domainUrl, url]) => domainUrl ?? url,
+      ),
       _metadata: {
-        mode: $dev ? "placeholder" : "deployed",
+        mode: "deployed",
         path: sitePath,
         url: distribution.apply((d) => d.domainUrl ?? d.url),
         edge,
@@ -370,51 +404,40 @@ export class SvelteKit extends Component implements Link.Linkable {
       return output(args?.edge).apply((edge) => edge ?? false);
     }
 
-    function loadBuildOutput() {
-      const cache = new Cache(
-        `${name}BuildOutput`,
-        {
-          data: $dev ? loadBuildMetadataPlaceholder() : loadBuildMetadata(),
-        },
-        {
-          parent,
-          ignoreChanges: $dev ? ["*"] : undefined,
-        },
-      );
-
-      return {
-        buildMeta: cache.data as ReturnType<typeof loadBuildMetadata>,
-      };
-    }
-
     function loadBuildMetadata() {
+      const serverPath = ".svelte-kit/svelte-kit-sst/server";
       const assetsPath = ".svelte-kit/svelte-kit-sst/client";
-      return outputPath.apply((outputPath) => ({
-        serverPath: ".svelte-kit/svelte-kit-sst/server",
-        serverFiles: ".svelte-kit/svelte-kit-sst/prerendered",
-        prerenderedPath: ".svelte-kit/svelte-kit-sst/prerendered",
-        assetsPath,
-        assetsVersionedSubDir: "_app",
-        // create 1 behaviour for each top level asset file/folder
-        staticRoutes: fs
-          .readdirSync(path.join(outputPath, assetsPath))
-          .map((item) =>
-            fs.statSync(path.join(outputPath, assetsPath, item)).isDirectory()
-              ? `${item}/*`
-              : item,
-          ),
-      }));
-    }
 
-    function loadBuildMetadataPlaceholder() {
-      return {
-        serverPath: ".svelte-kit/svelte-kit-sst/server",
-        serverFiles: undefined,
-        prerenderedPath: "placeholder",
-        assetsPath: "placeholder",
-        assetsVersionedSubDir: undefined,
-        staticRoutes: ["_app/*", "favicon.png"],
-      };
+      return outputPath.apply((outputPath) => {
+        let basePath = "";
+        try {
+          const manifest = fs
+            .readFileSync(path.join(serverPath, "manifest.js"))
+            .toString();
+          const appDir = manifest.match(/appDir: "(.+?)"/)?.[1];
+          const appPath = manifest.match(/appPath: "(.+?)"/)?.[1];
+          if (appDir && appPath && appPath.endsWith(appDir)) {
+            basePath = appPath.substring(0, appPath.length - appDir.length);
+          }
+        } catch (e) {}
+
+        return {
+          basePath,
+          serverPath,
+          serverFiles: ".svelte-kit/svelte-kit-sst/prerendered",
+          prerenderedPath: ".svelte-kit/svelte-kit-sst/prerendered",
+          assetsPath,
+          assetsVersionedSubDir: "_app",
+          // create 1 behaviour for each top level asset file/folder
+          staticRoutes: fs
+            .readdirSync(path.join(outputPath, assetsPath))
+            .map((item) =>
+              fs.statSync(path.join(outputPath, assetsPath, item)).isDirectory()
+                ? `${basePath}${item}/*`
+                : `${basePath}${item}`,
+            ),
+        };
+      });
     }
 
     function buildPlan() {
@@ -440,11 +463,11 @@ export class SvelteKit extends Component implements Link.Linkable {
             },
             copyFiles: buildMeta.serverFiles
               ? [
-                {
-                  from: path.join(outputPath, buildMeta.serverFiles),
-                  to: "prerendered",
-                },
-              ]
+                  {
+                    from: path.join(outputPath, buildMeta.serverFiles),
+                    to: "prerendered",
+                  },
+                ]
               : undefined,
           };
 
@@ -460,29 +483,29 @@ export class SvelteKit extends Component implements Link.Linkable {
             },
             edgeFunctions: edge
               ? {
-                server: { function: serverConfig },
-              }
+                  server: { function: serverConfig },
+                }
               : undefined,
             origins: {
               ...(edge
                 ? {}
                 : {
-                  server: {
-                    server: { function: serverConfig },
-                  },
-                }),
+                    server: {
+                      server: { function: serverConfig },
+                    },
+                  }),
               s3: {
                 s3: {
                   copy: [
                     {
                       from: buildMeta.assetsPath,
-                      to: "",
+                      to: buildMeta.basePath,
                       cached: true,
                       versionedSubDir: buildMeta.assetsVersionedSubDir,
                     },
                     {
                       from: buildMeta.prerenderedPath,
-                      to: "",
+                      to: buildMeta.basePath,
                       cached: false,
                     },
                   ],
@@ -492,16 +515,16 @@ export class SvelteKit extends Component implements Link.Linkable {
             behaviors: [
               edge
                 ? {
-                  cacheType: "server",
-                  cfFunction: "serverCfFunction",
-                  edgeFunction: "server",
-                  origin: "s3",
-                }
+                    cacheType: "server",
+                    cfFunction: "serverCfFunction",
+                    edgeFunction: "server",
+                    origin: "s3",
+                  }
                 : {
-                  cacheType: "server",
-                  cfFunction: "serverCfFunction",
-                  origin: "server",
-                },
+                    cacheType: "server",
+                    cfFunction: "serverCfFunction",
+                    origin: "server",
+                  },
               ...buildMeta.staticRoutes.map(
                 (route) =>
                   ({
@@ -524,6 +547,8 @@ export class SvelteKit extends Component implements Link.Linkable {
    * Otherwise, it's the autogenerated CloudFront URL.
    */
   public get url() {
+    if (!this.cdn) return;
+
     return all([this.cdn.domainUrl, this.cdn.url]).apply(
       ([domainUrl, url]) => domainUrl ?? url,
     );
@@ -553,7 +578,8 @@ export class SvelteKit extends Component implements Link.Linkable {
   public getSSTLink() {
     return {
       properties: {
-        url: this.url,
+        url:
+          this.url?.apply((url) => url || URL_UNAVAILABLE) || URL_UNAVAILABLE,
       },
     };
   }

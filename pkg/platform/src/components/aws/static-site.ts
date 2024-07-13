@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import * as aws from "@pulumi/aws";
 import {
   ComponentResourceOptions,
   all,
@@ -10,7 +9,7 @@ import {
 } from "@pulumi/pulumi";
 import { Cdn, CdnArgs } from "./cdn.js";
 import { Bucket, BucketArgs } from "./bucket.js";
-import { Component, Prettify, Transform, transform } from "../component.js";
+import { Component, Transform, transform } from "../component.js";
 import { Link } from "../link.js";
 import { Input } from "../input.js";
 import { globSync } from "glob";
@@ -22,6 +21,8 @@ import {
   cleanup,
   prepare,
 } from "../base/base-static-site.js";
+import { cloudfront, iam } from "@pulumi/aws";
+import { URL_UNAVAILABLE } from "./linkable.js";
 
 export interface StaticSiteArgs extends BaseStaticSiteArgs {
   /**
@@ -144,46 +145,46 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
   invalidation?: Input<
     | false
     | {
-      /**
-       * Configure if `sst deploy` should wait for the CloudFront cache invalidation to finish.
-       *
-       * :::tip
-       * For non-prod environments it might make sense to pass in `false`.
-       * :::
-       *
-       * Waiting for the CloudFront cache invalidation process to finish ensures that the new content will be served once the deploy finishes. However, this process can sometimes take more than 5 mins.
-       * @default `false`
-       * @example
-       * ```js
-       * {
-       *   invalidation: {
-       *     wait: true
-       *   }
-       * }
-       * ```
-       */
-      wait?: Input<boolean>;
-      /**
-       * The paths to invalidate.
-       *
-       * You can either pass in an array of glob patterns to invalidate specific files. Or you can use the built-in option `all` to invalidation all files when any file changes.
-       *
-       * :::note
-       * Invalidating `all` counts as one invalidation, while each glob pattern counts as a single invalidation path.
-       * :::
-       * @default `"all"`
-       * @example
-       * Invalidate the `index.html` and all files under the `products/` route.
-       * ```js
-       * {
-       *   invalidation: {
-       *     paths: ["/index.html", "/products/*"]
-       *   }
-       * }
-       * ```
-       */
-      paths?: Input<"all" | string[]>;
-    }
+        /**
+         * Configure if `sst deploy` should wait for the CloudFront cache invalidation to finish.
+         *
+         * :::tip
+         * For non-prod environments it might make sense to pass in `false`.
+         * :::
+         *
+         * Waiting for the CloudFront cache invalidation process to finish ensures that the new content will be served once the deploy finishes. However, this process can sometimes take more than 5 mins.
+         * @default `false`
+         * @example
+         * ```js
+         * {
+         *   invalidation: {
+         *     wait: true
+         *   }
+         * }
+         * ```
+         */
+        wait?: Input<boolean>;
+        /**
+         * The paths to invalidate.
+         *
+         * You can either pass in an array of glob patterns to invalidate specific files. Or you can use the built-in option `all` to invalidation all files when any file changes.
+         *
+         * :::note
+         * Invalidating `all` counts as one invalidation, while each glob pattern counts as a single invalidation path.
+         * :::
+         * @default `"all"`
+         * @example
+         * Invalidate the `index.html` and all files under the `products/` route.
+         * ```js
+         * {
+         *   invalidation: {
+         *     paths: ["/index.html", "/products/*"]
+         *   }
+         * }
+         * ```
+         */
+        paths?: Input<"all" | string[]>;
+      }
   >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -362,6 +363,7 @@ export class StaticSite extends Component implements Link.Linkable {
     const access = createCloudFrontOriginAccessIdentity();
     const bucket = createS3Bucket();
     const bucketFile = uploadAssets();
+    const cloudfrontFunction = createCloudfrontFunction();
     const distribution = createDistribution();
     createDistributionInvalidation();
     this.assets = bucket;
@@ -377,10 +379,33 @@ export class StaticSite extends Component implements Link.Linkable {
     });
 
     function createCloudFrontOriginAccessIdentity() {
-      return new aws.cloudfront.OriginAccessIdentity(
+      return new cloudfront.OriginAccessIdentity(
         `${name}OriginAccessIdentity`,
         {},
         { parent },
+      );
+    }
+
+    function createCloudfrontFunction() {
+      return new cloudfront.Function(
+        `${name}Function`,
+        {
+          runtime: "cloudfront-js-1.0",
+          code: `
+    function handler(event) {
+        var request = event.request;
+        var uri = request.uri;
+        if (uri.endsWith('/')) {
+          request.uri += 'index.html';
+        } else if (!uri.includes('.')) {
+          request.uri += '.html';
+        }
+        return request;
+    }`,
+        },
+        {
+          parent,
+        },
       );
     }
 
@@ -390,7 +415,7 @@ export class StaticSite extends Component implements Link.Linkable {
         transform(args.transform?.assets, {
           transform: {
             policy: (policyArgs) => {
-              const newPolicy = aws.iam.getPolicyDocumentOutput({
+              const newPolicy = iam.getPolicyDocumentOutput({
                 statements: [
                   {
                     principals: [
@@ -547,27 +572,29 @@ export class StaticSite extends Component implements Link.Linkable {
           defaultRootObject: indexPage,
           customErrorResponses: args.errorPage
             ? [
-              {
-                errorCode: 403,
-                responsePagePath: interpolate`/${args.errorPage}`,
-              },
-              {
-                errorCode: 404,
-                responsePagePath: interpolate`/${args.errorPage}`,
-              },
-            ]
+                {
+                  errorCode: 403,
+                  responsePagePath: interpolate`/${args.errorPage}`,
+                  responseCode: 403,
+                },
+                {
+                  errorCode: 404,
+                  responsePagePath: interpolate`/${args.errorPage}`,
+                  responseCode: 404,
+                },
+              ]
             : [
-              {
-                errorCode: 403,
-                responsePagePath: interpolate`/${indexPage}`,
-                responseCode: 200,
-              },
-              {
-                errorCode: 404,
-                responsePagePath: interpolate`/${indexPage}`,
-                responseCode: 200,
-              },
-            ],
+                {
+                  errorCode: 403,
+                  responsePagePath: interpolate`/${indexPage}`,
+                  responseCode: 200,
+                },
+                {
+                  errorCode: 404,
+                  responsePagePath: interpolate`/${indexPage}`,
+                  responseCode: 200,
+                },
+              ],
           defaultCacheBehavior: {
             targetOriginId: "s3",
             viewerProtocolPolicy: "redirect-to-https",
@@ -576,6 +603,12 @@ export class StaticSite extends Component implements Link.Linkable {
             compress: true,
             // CloudFront's managed CachingOptimized policy
             cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
+            functionAssociations: [
+              {
+                eventType: "viewer-request",
+                functionArn: cloudfrontFunction.arn,
+              },
+            ],
           },
           domain: args.domain,
           wait: !$dev,
@@ -667,7 +700,8 @@ export class StaticSite extends Component implements Link.Linkable {
   public getSSTLink() {
     return {
       properties: {
-        url: this.url,
+        url:
+          this.url?.apply((url) => url || URL_UNAVAILABLE) || URL_UNAVAILABLE,
       },
     };
   }

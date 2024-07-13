@@ -5,9 +5,9 @@ import {
   runtime,
   output,
 } from "@pulumi/pulumi";
-import * as aws from "@pulumi/aws";
 import { prefixName } from "./naming.js";
 import { VisibleError } from "./error.js";
+import { getRegionOutput } from "@pulumi/aws";
 
 /**
  * Helper type to inline nested types
@@ -93,17 +93,19 @@ export class Component extends ComponentResource {
               break;
             case "aws:iam/role:Role":
               overrides = {
-                name: aws
-                  .getRegionOutput(undefined, { provider: args.opts.provider })
-                  .name.apply((region) =>
-                    prefixName(
-                      64,
-                      args.name,
-                      `-${region.toLowerCase().replace(/-/g, "")}`,
-                    ),
+                name: getRegionOutput(undefined, {
+                  provider: args.opts.provider,
+                }).name.apply((region) =>
+                  prefixName(
+                    64,
+                    args.name,
+                    `-${region.toLowerCase().replace(/-/g, "")}`,
                   ),
+                ),
               };
               break;
+            case "aws:apigateway/authorizer:Authorizer":
+            case "aws:apigateway/restApi:RestApi":
             case "aws:apigatewayv2/api:Api":
             case "aws:apigatewayv2/authorizer:Authorizer":
             case "aws:cognito/userPool:UserPool":
@@ -117,6 +119,7 @@ export class Component extends ComponentResource {
               break;
             case "aws:appautoscaling/policy:Policy":
             case "aws:dynamodb/table:Table":
+            case "aws:kinesis/stream:Stream":
             case "aws:ecs/cluster:Cluster":
               overrides = { name: prefixName(255, args.name) };
               break;
@@ -151,6 +154,7 @@ export class Component extends ComponentResource {
             case "cloudflare:index/d1Database:D1Database":
             case "cloudflare:index/r2Bucket:R2Bucket":
             case "cloudflare:index/workerScript:WorkerScript":
+            case "cloudflare:index/queue:Queue":
               overrides = {
                 name: prefixName(64, args.name).toLowerCase(),
               };
@@ -174,6 +178,11 @@ export class Component extends ComponentResource {
             // resources not prefixed
             case "aws:acm/certificate:Certificate":
             case "aws:acm/certificateValidation:CertificateValidation":
+            case "aws:apigateway/deployment:Deployment":
+            case "aws:apigateway/integration:Integration":
+            case "aws:apigateway/method:Method":
+            case "aws:apigateway/resource:Resource":
+            case "aws:apigateway/stage:Stage":
             case "aws:apigatewayv2/apiMapping:ApiMapping":
             case "aws:apigatewayv2/domainName:DomainName":
             case "aws:apigatewayv2/integration:Integration":
