@@ -1,4 +1,9 @@
-import pulumi, { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
+import {
+  ComponentResourceOptions,
+  all,
+  jsonStringify,
+  output,
+} from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
@@ -30,10 +35,13 @@ export interface QueueArgs {
   /**
    * Sets up a dead-letter queue to which Amazon SQS moves messages after the value of `retryLimit` is exceeded.
    */
-  deadLetterQueue?: {
-    arn: Input<string>,
-    retryLimit: Input<number>
-  }
+  dlq?: Input<
+    | string
+    | {
+        queue: Input<string>;
+        retry: Input<number>;
+      }
+  >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -168,6 +176,7 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
 
     const parent = this;
     const fifo = normalizeFifo();
+    const dlq = normalizeDlq();
 
     const queue = createQueue();
 
@@ -178,23 +187,28 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
       return output(args?.fifo).apply((v) => v ?? false);
     }
 
+    function normalizeDlq() {
+      if (args?.dlq === undefined) return;
+
+      return output(args?.dlq).apply((v) =>
+        typeof v === "string" ? { queue: v, retry: 3 } : v,
+      );
+    }
+
     function createQueue() {
-      return all([args?.deadLetterQueue]).apply(([deadLetterQueue]) =>{
-        const deadLetterQueueArgs = deadLetterQueue ? {
-          redrivePolicy: pulumi.jsonStringify({
-            deadLetterTargetArn: deadLetterQueue.arn,
-            maxReceiveCount: deadLetterQueue.retryLimit
-          }),
-        } : {};
-        return new aws.sqs.Queue(
-            `${name}Queue`,
-            transform(args?.transform?.queue, {
-              fifoQueue: fifo,
-              ...deadLetterQueueArgs
+      return new aws.sqs.Queue(
+        `${name}Queue`,
+        transform(args?.transform?.queue, {
+          fifoQueue: fifo,
+          redrivePolicy:
+            dlq &&
+            jsonStringify({
+              deadLetterTargetArn: dlq.queue,
+              maxReceiveCount: dlq.retry,
             }),
-            { parent },
-        );
-      });
+        }),
+        { parent },
+      );
     }
   }
 
