@@ -33,7 +33,27 @@ export interface QueueArgs {
    */
   fifo?: Input<boolean>;
   /**
-   * Sets up a dead-letter queue to which Amazon SQS moves messages after the value of `retryLimit` is exceeded.
+   * Configure a dead-letter queue (DLQ) for this queue. A dead-letter queue is used to store messages that can't be processed successfully by the subscriber function after the retry limit is reached.
+   * @default No dead-letter queue
+   * @example
+   * For example, to create a dead-letter queue and link it to the main queue.
+   * ```js
+   * const deadLetterQueue = new sst.aws.Queue("DeadLetterQueue");
+   *
+   * new sst.aws.Queue("MyQueue", {
+   *   dlq: deadLetterQueue.arn,
+   * });
+   * ```
+   *
+   * By default, the main queue will retry processing the message 3 times before sending it to the dead-letter queue. You can customize the retry limit.
+   * ```js
+   * new sst.aws.Queue("MyQueue", {
+   *   dlq: {
+   *     queue: deadLetterQueue.arn,
+   *     retry: 5,
+   *   }
+   * });
+   * ```
    */
   dlq?: Input<
     | string
