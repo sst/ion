@@ -1,4 +1,4 @@
-import { StandardRetryStrategy } from "@aws-sdk/middleware-retry";
+import { AdaptiveRetryStrategy } from "@smithy/middleware-retry";
 export type {} from "@smithy/types";
 
 type ClientOptions = {
@@ -143,7 +143,7 @@ export const useClient = <C extends any>(
           secretAccessKey: process.env.SST_AWS_SECRET_ACCESS_KEY,
         }
       : undefined,
-    retryStrategy: new StandardRetryStrategy(async () => 10000, {
+    retryStrategy: new AdaptiveRetryStrategy(async () => 10000, {
       retryDecider: (e: any) => {
         // Handle no internet connection => retry
         if (e.code === "ENOTFOUND") {
