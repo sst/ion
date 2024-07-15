@@ -138,10 +138,7 @@ func NeedsBun() bool {
 		return true
 	}
 	version := strings.TrimSpace(string(output))
-	if version != BUN_VERSION {
-		return true
-	}
-	return false
+	return version != BUN_VERSION
 }
 
 func InstallBun() error {
