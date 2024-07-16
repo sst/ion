@@ -356,8 +356,8 @@ export class Postgres extends Component implements Link.Linkable, AWSLinkable {
   public static get(
     name: string,
     args: {
-      cluster: rds.GetClusterOutputArgs;
-      instance?: rds.GetInstanceOutputArgs;
+      cluster: rds.GetClusterArgs;
+      instance?: rds.GetInstanceArgs;
     },
     opts?: ComponentResourceOptions,
   ) {
