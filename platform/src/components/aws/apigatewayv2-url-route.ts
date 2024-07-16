@@ -49,6 +49,7 @@ export class ApiGatewayV2UrlRoute extends Component {
           apiId: api.id,
           integrationType: "HTTP_PROXY",
           integrationUri: args.url,
+          integrationMethod: "ANY",
         }),
         { parent: self },
       );
