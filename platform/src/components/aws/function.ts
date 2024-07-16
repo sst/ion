@@ -34,6 +34,21 @@ import {
   types,
 } from "@pulumi/aws";
 
+interface ConditionArgs {
+  /**
+   * Name of the [IAM condition operator](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html) to evaluate.
+   */
+  test: Input<string>;
+  /**
+   * Values to evaluate the condition against. If multiple values are provided, the condition matches if at least one of them applies. That is, AWS evaluates multiple values as though using an "OR" boolean operation.
+   */
+  values: Input<string[]>;
+  /**
+   * Name of a [Context Variable](http://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements.html#AvailableKeys) to apply the condition to. Context variables may either be standard AWS variables starting with `aws:` or service-specific variables prefixed with the service name.
+   */
+  variable: Input<string>;
+}
+
 export type FunctionPermissionArgs = {
   /**
    * The [IAM actions](https://docs.aws.amazon.com/service-authorization/latest/reference/reference_policies_actions-resources-contextkeys.html#actions_table) that can be performed.
@@ -57,6 +72,21 @@ export type FunctionPermissionArgs = {
    * ```
    */
   resources: Input<string>[];
+  /**
+   * The [IAM conditions](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition.html) that can be used.
+   * @example
+   *
+   * ```js
+   * {
+   *  conditions: [{
+   *    test: "StringLike",
+   *    variable: "s3:prefix",
+   *    values: ["", "home/", "home/&{aws:username}/"]
+   *  }]
+   * }
+   *```
+   */
+  conditions?: Input<Prettify<ConditionArgs>[]>;
 };
 
 interface FunctionUrlCorsArgs {
