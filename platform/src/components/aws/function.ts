@@ -430,6 +430,10 @@ export interface FunctionArgs {
      * @default `forever`
      */
     retention?: Input<keyof typeof RETENTION>;
+    /**
+     * The Function logs [format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html).
+     */
+    format?: Input<"Text" | "JSON">;
   }>;
   /**
    * The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
@@ -1017,6 +1021,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
       return output(args.logging).apply((logging) => ({
         ...logging,
         retention: logging?.retention ?? "forever",
+        format: logging?.format ?? "Text",
       }));
     }
 
@@ -1406,7 +1411,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
         },
         architectures,
         loggingConfig: {
-          logFormat: "Text",
+          logFormat: logging.apply((logging) => logging.format),
           logGroup: logGroup.name,
         },
         vpcConfig: args.vpc && {
