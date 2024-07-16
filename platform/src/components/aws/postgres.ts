@@ -395,6 +395,7 @@ function getSSTAWSPermissions(
 
 class PostgresRef extends Component implements Link.Linkable, AWSLinkable {
   private cluster: Output<rds.GetClusterResult>;
+  private instance: Output<rds.GetInstanceResult>;
 
   constructor(
     name: string,
@@ -403,6 +404,7 @@ class PostgresRef extends Component implements Link.Linkable, AWSLinkable {
   ) {
     super(__pulumiType + "Ref", name, args, opts);
     this.cluster = rds.getClusterOutput(args, opts);
+    this.instance = rds.getInstanceOutput(args, opts);
   }
   /**
    * The ARN of the RDS Cluster.
@@ -425,6 +427,13 @@ class PostgresRef extends Component implements Link.Linkable, AWSLinkable {
     return this.cluster.databaseName;
   }
 
+  public get nodes() {
+    return {
+      cluster: this.cluster,
+      instance: this.instance,
+    };
+  }
+
   /** @internal */
   public getSSTLink() {
     return getSSTLink(this.cluster);
@@ -432,22 +441,7 @@ class PostgresRef extends Component implements Link.Linkable, AWSLinkable {
 
   /** @internal */
   public getSSTAWSPermissions() {
-    return [
-      {
-        actions: ["secretsmanager:GetSecretValue"],
-        resources: [this.cluster.masterUserSecrets[0].secretArn],
-      },
-      {
-        actions: [
-          "rds-data:BatchExecuteStatement",
-          "rds-data:BeginTransaction",
-          "rds-data:CommitTransaction",
-          "rds-data:ExecuteStatement",
-          "rds-data:RollbackTransaction",
-        ],
-        resources: [this.cluster.arn],
-      },
-    ];
+    return getSSTAWSPermissions(this.cluster);
   }
 }
 
