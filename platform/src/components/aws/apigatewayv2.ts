@@ -721,14 +721,14 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
    * Here's how you add a simple route.
    *
    * ```js
-   * api.urlRoute("GET /", "sst.dev");
+   * api.urlRoute("GET /", "https://google.com");
    * ```
    *
    * Enable auth for a route.
    *
    * ```js
-   * api.urlRoute("GET /", "sst.dev")
-   * api.urlRoute("POST /", "sst.dev", {
+   * api.urlRoute("GET /", "https://google.com")
+   * api.urlRoute("POST /", "https://google.com", {
    *   auth: {
    *     iam: true
    *   }
