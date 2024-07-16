@@ -355,7 +355,10 @@ export class Postgres extends Component implements Link.Linkable, AWSLinkable {
   /** @internal */
   public static get(
     name: string,
-    args: rds.GetClusterArgs,
+    args: {
+      cluster: rds.GetClusterOutputArgs;
+      instance?: rds.GetInstanceOutputArgs;
+    },
     opts?: ComponentResourceOptions,
   ) {
     return new PostgresRef(name, args, opts);
@@ -395,16 +398,21 @@ function getSSTAWSPermissions(
 
 class PostgresRef extends Component implements Link.Linkable, AWSLinkable {
   private cluster: Output<rds.GetClusterResult>;
-  private instance: Output<rds.GetInstanceResult>;
+  private instance?: Output<rds.GetInstanceResult>;
 
   constructor(
     name: string,
-    args: rds.GetClusterOutputArgs,
+    args: {
+      cluster: rds.GetClusterOutputArgs;
+      instance?: rds.GetInstanceOutputArgs;
+    },
     opts?: ComponentResourceOptions,
   ) {
     super(__pulumiType + "Ref", name, args, opts);
-    this.cluster = rds.getClusterOutput(args, opts);
-    this.instance = rds.getInstanceOutput(args, opts);
+    this.cluster = rds.getClusterOutput(args.cluster, opts);
+    this.instance = args.instance
+      ? rds.getInstanceOutput(args.instance, opts)
+      : undefined;
   }
   /**
    * The ARN of the RDS Cluster.
