@@ -33,6 +33,24 @@ export interface QueueArgs {
    */
   fifo?: Input<boolean>;
   /**
+   * When a consumer processes a message from an Amazon SQS queue, the message remains in the queue until the consumer explicitly deletes it,
+   * as SQS does not automatically remove messages due to its distributed nature.
+   *
+   * To avoid other consumers from processing the same message, SQS sets a visibility timeout, during which the message is inaccessible to other consumers;
+   * this timeout defaults to 30 seconds but can range from 0 seconds to 12 hours.
+   *
+   * It is expressed in 'seconds' and the default is 30 seconds.
+   *
+   * @default `30`
+   * @example
+   * ```js
+   * {
+   *    visibilityTimeout: 60
+   * }
+   * ```
+   */
+  visibilityTimeout?: Input<number>
+  /**
    * Optionally add a dead-letter queue or DLQ for this queue.
    *
    * A dead-letter queue is used to store messages that can't be processed successfully by the
@@ -235,6 +253,7 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
         `${name}Queue`,
         transform(args?.transform?.queue, {
           fifoQueue: fifo,
+          visibilityTimeoutSeconds: args?.visibilityTimeout ?? 30,
           redrivePolicy:
             dlq &&
             jsonStringify({
