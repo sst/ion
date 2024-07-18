@@ -97,7 +97,7 @@ export module Link {
     });
   }
 
-  export function makeLinkable<T>(
+  export function linkable<T>(
     obj: { new (...args: any[]): T },
     cb: (resource: T) => Definition,
   ) {

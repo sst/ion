@@ -54,7 +54,7 @@ export function binding<T extends Binding["type"]>(
   >["properties"],
 ) {
   return {
-    type: "cloudflare.binding",
+    type: "cloudflare.binding" as const,
     binding: type,
     properties,
   };

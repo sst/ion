@@ -4,8 +4,5 @@ export * as vercel from "./vercel";
 export * from "./secret";
 export * from "./resource";
 
-import { Link as LinkModule } from "./link.js";
-export const linkable = LinkModule.makeLinkable;
-
-/** @deprecated Use sst.linkable and sst.aws.linkable instead */
-export const Link = LinkModule;
+import { Link } from "./link.js";
+export const linkable = Link.linkable;
