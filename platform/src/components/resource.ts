@@ -2,14 +2,17 @@ import { output } from "@pulumi/pulumi";
 import { Link } from "./link";
 import { Component } from "./component";
 
-export class Resource extends Component implements Link.Linkable {
-  private _properties: any;
+export class Resource<T extends Record<string, any>>
+  extends Component
+  implements Link.Linkable
+{
+  private _properties: T;
   private _name: string;
   private _include: NonNullable<Link.Definition["include"]>;
 
   constructor(
     name: string,
-    properties: any,
+    properties: T,
     ...include: NonNullable<Link.Definition["include"]>
   ) {
     super(
@@ -30,7 +33,7 @@ export class Resource extends Component implements Link.Linkable {
   }
 
   public get properties() {
-    return this._properties;
+    return this._properties as T;
   }
 
   /** @internal */
