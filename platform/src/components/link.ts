@@ -8,8 +8,10 @@ import {
 } from "@pulumi/pulumi";
 
 export module Link {
-  export interface Definition {
-    properties: Input<Record<string, any>>;
+  export interface Definition<
+    Properties extends Record<string, any> = Record<string, any>,
+  > {
+    properties: Properties;
     include?: {
       type: string;
       [key: string]: any;
@@ -96,10 +98,14 @@ export module Link {
     });
   }
 
+  /** @deprecated
+   * Use sst.Linkable.wrap instead.
+   */
   export function linkable<T>(
     obj: { new (...args: any[]): T },
     cb: (resource: T) => Definition,
   ) {
+    console.warn("sst.linkable is deprecated. Use sst.Linkable.wrap instead.");
     obj.prototype.getSSTLink = function () {
       return cb(this);
     };

@@ -6,7 +6,7 @@ export const URL_UNAVAILABLE = "URL_UNAVAILABLE_IN_DEV_MODE";
 /** @deprecated
  * instead try
  * ```
- * sst.linkable(MyResource, (resource) => ({
+ * sst.Linkable.wrap(MyResource, (resource) => ({
  *   properties: { ... },
  *   with: [
  *     sst.aws.permission({ actions: ["foo:*"], resources: [resource.arn] })
@@ -20,8 +20,8 @@ export function linkable<T>(
 ) {
   throw new VisibleError(
     [
-      "sst.aws.linkable is deprecated. Use sst.linkable instead.",
-      "sst.linkable(MyResource, (resource) => ({",
+      "sst.aws.linkable is deprecated. Use sst.Linkable.wrap instead.",
+      "sst.Linkable.wrap(MyResource, (resource) => ({",
       "  properties: { ... },",
       "  with: [",
       '    sst.aws.permission({ actions: ["foo:*"], resources: [resource.arn] })',

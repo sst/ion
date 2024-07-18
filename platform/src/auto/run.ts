@@ -10,8 +10,8 @@ import {
 
 import { VisibleError } from "../components/error";
 import { dynamodb } from "@pulumi/aws";
-import { linkable } from "../components";
-import { permission } from "../components/aws/permission";
+import { Linkable } from "../components";
+import { permission } from "../components/aws/permission.js";
 
 export async function run(program: automation.PulumiFn) {
   process.chdir($cli.paths.root);
@@ -20,7 +20,7 @@ export async function run(program: automation.PulumiFn) {
   addTransformationToEnsureUniqueComponentNames();
   addTransformationToCheckBucketsHaveMultiplePolicies();
 
-  linkable(dynamodb.Table, (item) => ({
+  Linkable.wrap(dynamodb.Table, (item) => ({
     properties: { tableName: item.name },
     include: [
       permission({

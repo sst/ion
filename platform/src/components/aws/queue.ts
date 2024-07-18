@@ -13,7 +13,7 @@ import { hashStringToPrettyString, sanitizeToPascalCase } from "../naming";
 import { parseQueueArn } from "./helpers/arn";
 import { QueueLambdaSubscriber } from "./queue-lambda-subscriber";
 import { lambda, sqs } from "@pulumi/aws";
-import { permission } from "./permission";
+import { permission } from "./permission.js";
 
 export interface QueueArgs {
   /**
