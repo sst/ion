@@ -33,7 +33,7 @@ export interface SnsTopicArgs {
    */
   transform?: {
     /**
-     * Transform the SNS topic resource.
+     * Transform the SNS Topic resource.
      */
     topic?: Transform<sns.TopicArgs>;
   };
@@ -51,7 +51,7 @@ export interface SnsTopicSubscriberArgs {
    * :::
    *
    * @example
-   * For example, if your SNS topic message contains this in a JSON format.
+   * For example, if your SNS Topic message contains this in a JSON format.
    * ```js
    * {
    *   store: "example_corp",
@@ -89,14 +89,14 @@ export interface SnsTopicSubscriberArgs {
    */
   transform?: {
     /**
-     * Transform the SNS topic Subscription resource.
+     * Transform the SNS Topic Subscription resource.
      */
     subscription?: Transform<sns.TopicSubscriptionArgs>;
   };
 }
 
 /**
- * The `SnsTopic` component lets you add an [Amazon SNS topic](https://docs.aws.amazon.com/sns/latest/dg/sns-create-topic.html) to your app.
+ * The `SnsTopic` component lets you add an [Amazon SNS Topic](https://docs.aws.amazon.com/sns/latest/dg/sns-create-topic.html) to your app.
  *
  * :::note
  * The difference between an `SnsTopic` and a `Queue` is that with a topic you can deliver messages to multiple subscribers.
@@ -106,7 +106,7 @@ export interface SnsTopicSubscriberArgs {
  *
  * #### Create a topic
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * const topic = new sst.aws.SnsTopic("MyTopic");
  * ```
  *
@@ -114,7 +114,7 @@ export interface SnsTopicSubscriberArgs {
  *
  * You can optionally make it a FIFO topic.
  *
- * ```ts {2}
+ * ```ts {2} title="sst.config.ts"
  * new sst.aws.SnsTopic("MyTopic", {
  *   fifo: true
  * });
@@ -122,7 +122,7 @@ export interface SnsTopicSubscriberArgs {
  *
  * #### Add a subscriber
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * topic.subscribe("src/subscriber.handler");
  * ```
  *
@@ -130,7 +130,7 @@ export interface SnsTopicSubscriberArgs {
  *
  * You can link the topic to other resources, like a function or your Next.js app.
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * new sst.aws.Nextjs("MyWeb", {
  *   link: [topic]
  * });
@@ -185,14 +185,14 @@ export class SnsTopic extends Component implements Link.Linkable, AWSLinkable {
   }
 
   /**
-   * The ARN of the SNS topic.
+   * The ARN of the SNS Topic.
    */
   public get arn() {
     return this.topic.arn;
   }
 
   /**
-   * The name of the SNS topic.
+   * The name of the SNS Topic.
    */
   public get name() {
     return this.topic.name;
@@ -204,27 +204,27 @@ export class SnsTopic extends Component implements Link.Linkable, AWSLinkable {
   public get nodes() {
     return {
       /**
-       * The Amazon SNS topic.
+       * The Amazon SNS Topic.
        */
       topic: this.topic,
     };
   }
 
   /**
-   * Subscribe to this SNS topic.
+   * Subscribe to this SNS Topic.
    *
    * @param subscriber The function that'll be notified.
    * @param args Configure the subscription.
    *
    * @example
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * topic.subscribe("src/subscriber.handler");
    * ```
    *
    * Add a filter to the subscription.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * topic.subscribe("src/subscriber.handler", {
    *   filter: {
    *     price_usd: [{numeric: [">=", 100]}]
@@ -234,7 +234,7 @@ export class SnsTopic extends Component implements Link.Linkable, AWSLinkable {
    *
    * Customize the subscriber function.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * topic.subscribe({
    *   handler: "src/subscriber.handler",
    *   timeout: "60 seconds"
@@ -254,29 +254,29 @@ export class SnsTopic extends Component implements Link.Linkable, AWSLinkable {
   }
 
   /**
-   * Subscribe to an SNS topic that was not created in your app.
+   * Subscribe to an SNS Topic that was not created in your app.
    *
-   * @param topicArn The ARN of the SNS topic to subscribe to.
+   * @param topicArn The ARN of the SNS Topic to subscribe to.
    * @param subscriber The function that'll be notified.
    * @param args Configure the subscription.
    *
    * @example
    *
-   * For example, let's say you have an existing SNS topic with the following ARN.
+   * For example, let's say you have an existing SNS Topic with the following ARN.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * const topicArn = "arn:aws:sns:us-east-1:123456789012:MyTopic";
    * ```
    *
    * You can subscribe to it by passing in the ARN.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * sst.aws.SnsTopic.subscribe(topicArn, "src/subscriber.handler");
    * ```
    *
    * Add a filter to the subscription.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * sst.aws.SnsTopic.subscribe(topicArn, "src/subscriber.handler", {
    *   filter: {
    *     price_usd: [{numeric: [">=", 100]}]
@@ -286,7 +286,7 @@ export class SnsTopic extends Component implements Link.Linkable, AWSLinkable {
    *
    * Customize the subscriber function.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * sst.aws.SnsTopic.subscribe(topicArn, {
    *   handler: "src/subscriber.handler",
    *   timeout: "60 seconds"
@@ -332,7 +332,7 @@ export class SnsTopic extends Component implements Link.Linkable, AWSLinkable {
   }
 
   /**
-   * Subscribe to this SNS topic with an SQS queue.
+   * Subscribe to this SNS Topic with an SQS Queue.
    *
    * @param queueArn The ARN of the queue that'll be notified.
    * @param args Configure the subscription.
@@ -341,19 +341,19 @@ export class SnsTopic extends Component implements Link.Linkable, AWSLinkable {
    *
    * For example, let's say you have a queue.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * const queue = sst.aws.Queue("MyQueue");
    * ```
    *
    * You can subscribe to this topic with it.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * topic.subscribeQueue(queue.arn);
    * ```
    *
    * Add a filter to the subscription.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * topic.subscribeQueue(queue.arn, {
    *   filter: {
    *     price_usd: [{numeric: [">=", 100]}]
@@ -374,30 +374,30 @@ export class SnsTopic extends Component implements Link.Linkable, AWSLinkable {
   }
 
   /**
-   * Subscribe to an existing SNS topic with a previously created SQS queue.
+   * Subscribe to an existing SNS Topic with a previously created SQS Queue.
    *
-   * @param topicArn The ARN of the SNS topic to subscribe to.
+   * @param topicArn The ARN of the SNS Topic to subscribe to.
    * @param queueArn The ARN of the queue that'll be notified.
    * @param args Configure the subscription.
    *
    * @example
    *
-   * For example, let's say you have an existing SNS topic and SQS queue with the following ARNs.
+   * For example, let's say you have an existing SNS Topic and SQS Queue with the following ARNs.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * const topicArn = "arn:aws:sns:us-east-1:123456789012:MyTopic";
    * const queueArn = "arn:aws:sqs:us-east-1:123456789012:MyQueue";
    * ```
    *
    * You can subscribe to the topic with the queue.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * sst.aws.SnsTopic.subscribeQueue(topicArn, queueArn);
    * ```
    *
    * Add a filter to the subscription.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * sst.aws.SnsTopic.subscribeQueue(topicArn, queueArn, {
    *   filter: {
    *     price_usd: [{numeric: [">=", 100]}]

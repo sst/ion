@@ -332,7 +332,7 @@ export interface NextjsArgs extends SsrSiteArgs {
      * The amount of memory allocated to the image optimization function.
      * Takes values between 128 MB and 10240 MB in 1 MB increments.
      *
-     * @default `"1024 MB"`
+     * @default `"1536 MB"`
      * @example
      * ```js
      * {
@@ -344,10 +344,13 @@ export interface NextjsArgs extends SsrSiteArgs {
      */
     memory?: Size;
     /**
-     * If set to true, already computed image will return 304 Not Modified.
-     * This means that image needs to be **immutable**, the etag will be computed
-     * based on the image href, format and width and the next BUILD_ID.
-     * @default false
+     * If set to true, a previously computed image will return _304 Not Modified_.
+     * This means that image needs to be **immutable**.
+     *
+     * The etag will be computed based on the image href, format and width and the next
+     * BUILD_ID.
+     *
+     * @default `false`
      * @example
      * ```js
      * {
@@ -376,11 +379,18 @@ export interface NextjsArgs extends SsrSiteArgs {
    */
   vpc?: SsrSiteArgs["vpc"];
   /**
-   * Configure the Next.js app to use an existing CloudFront cache policy. By default,
-   * a new cache policy is created. Note that CloudFront has a limit of 20 cache
-   * policies per account. This allows you to reuse an existing policy instead of
-   * creating a new one.
+   * Configure the Next.js app to use an existing CloudFront cache policy.
+   *
+   * :::note
+   * CloudFront has a limit of 20 cache policies per account, though you can request a limit
+   * increase.
+   * :::
+   *
+   * By default, a new cache policy is created for it. This allows you to reuse an existing
+   * policy instead of creating a new one.
+   *
    * @default A new cache plolicy is created
+   *
    * @example
    * ```js
    * {
@@ -402,7 +412,7 @@ export interface NextjsArgs extends SsrSiteArgs {
  *
  * Deploy the Next.js app that's in the project root.
  *
- * ```js
+ * ```js title="sst.config.ts"
  * new sst.aws.Nextjs("MyWeb");
  * ```
  *
@@ -410,7 +420,7 @@ export interface NextjsArgs extends SsrSiteArgs {
  *
  * Deploys a Next.js app in the `my-next-app/` directory.
  *
- * ```js {2}
+ * ```js {2} title="sst.config.ts"
  * new sst.aws.Nextjs("MyWeb", {
  *   path: "my-next-app/"
  * });
@@ -420,7 +430,7 @@ export interface NextjsArgs extends SsrSiteArgs {
  *
  * Set a custom domain for your Next.js app.
  *
- * ```js {2}
+ * ```js {2} title="sst.config.ts"
  * new sst.aws.Nextjs("MyWeb", {
  *   domain: "my-app.com"
  * });
@@ -430,7 +440,7 @@ export interface NextjsArgs extends SsrSiteArgs {
  *
  * Redirect `www.my-app.com` to `my-app.com`.
  *
- * ```js {4}
+ * ```js {4} title="sst.config.ts"
  * new sst.aws.Nextjs("MyWeb", {
  *   domain: {
  *     name: "my-app.com",
@@ -444,7 +454,7 @@ export interface NextjsArgs extends SsrSiteArgs {
  * [Link resources](/docs/linking/) to your Next.js app. This will grant permissions
  * to the resources and allow you to access it in your app.
  *
- * ```ts {4}
+ * ```ts {4} title="sst.config.ts"
  * const bucket = new sst.aws.Bucket("MyBucket");
  *
  * new sst.aws.Nextjs("MyWeb", {
@@ -759,39 +769,39 @@ export class Nextjs extends Component implements Link.Linkable {
               },
               ...(revalidationQueueArn
                 ? [
-                  {
-                    actions: [
-                      "sqs:SendMessage",
-                      "sqs:GetQueueAttributes",
-                      "sqs:GetQueueUrl",
-                    ],
-                    resources: [revalidationQueueArn],
-                  },
-                ]
+                    {
+                      actions: [
+                        "sqs:SendMessage",
+                        "sqs:GetQueueAttributes",
+                        "sqs:GetQueueUrl",
+                      ],
+                      resources: [revalidationQueueArn],
+                    },
+                  ]
                 : []),
               ...(revalidationTableArn
                 ? [
-                  {
-                    actions: [
-                      "dynamodb:BatchGetItem",
-                      "dynamodb:GetRecords",
-                      "dynamodb:GetShardIterator",
-                      "dynamodb:Query",
-                      "dynamodb:GetItem",
-                      "dynamodb:Scan",
-                      "dynamodb:ConditionCheckItem",
-                      "dynamodb:BatchWriteItem",
-                      "dynamodb:PutItem",
-                      "dynamodb:UpdateItem",
-                      "dynamodb:DeleteItem",
-                      "dynamodb:DescribeTable",
-                    ],
-                    resources: [
-                      revalidationTableArn,
-                      `${revalidationTableArn}/*`,
-                    ],
-                  },
-                ]
+                    {
+                      actions: [
+                        "dynamodb:BatchGetItem",
+                        "dynamodb:GetRecords",
+                        "dynamodb:GetShardIterator",
+                        "dynamodb:Query",
+                        "dynamodb:GetItem",
+                        "dynamodb:Scan",
+                        "dynamodb:ConditionCheckItem",
+                        "dynamodb:BatchWriteItem",
+                        "dynamodb:PutItem",
+                        "dynamodb:UpdateItem",
+                        "dynamodb:DeleteItem",
+                        "dynamodb:DescribeTable",
+                      ],
+                      resources: [
+                        revalidationTableArn,
+                        `${revalidationTableArn}/*`,
+                      ],
+                    },
+                  ]
                 : []),
             ],
           };
@@ -1356,8 +1366,7 @@ if(request.headers["cloudfront-viewer-longitude"]) {
   public getSSTLink() {
     return {
       properties: {
-        url:
-          this.url?.apply((url) => url || URL_UNAVAILABLE) || URL_UNAVAILABLE,
+        url: output(this.url).apply((url) => url || URL_UNAVAILABLE),
       },
     };
   }

@@ -18,7 +18,7 @@ your app.
 
 #### Minimal example
 
-```ts
+```ts title="sst.config.ts"
 const bucket = new sst.aws.Bucket("MyBucket");
 ```
 
@@ -26,7 +26,7 @@ const bucket = new sst.aws.Bucket("MyBucket");
 
 Enable `public` read access for all the files in the bucket. Useful for hosting public files.
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Bucket("MyBucket", {
   public: true
 });
@@ -34,7 +34,7 @@ new sst.aws.Bucket("MyBucket", {
 
 #### Add a subscriber
 
-```ts
+```ts title="sst.config.ts"
 bucket.subscribe("src/subscriber.handler");
 ```
 
@@ -42,7 +42,7 @@ bucket.subscribe("src/subscriber.handler");
 
 You can link the bucket to other resources, like a function or your Next.js app.
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Nextjs("MyWeb", {
   link: [bucket]
 });
@@ -369,7 +369,8 @@ The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
 <Segment>
 <Section type="parameters">
 - <p><code class="key">name</code> <code class="primitive">string</code></p>
-The generated name of the S3 Bucket.
+
+  The generated name of the S3 Bucket.
 </Section>
 </Segment>
 
@@ -396,16 +397,16 @@ Configure the subscription.
 </InlineSection>
 Subscribe to events from this bucket.
 
-```js
+```js title="sst.config.ts"
 bucket.subscribe("src/subscriber.handler");
 ```
 
-Subscribe to specific S3 events.
+Subscribe to specific S3 events. The `link` ensures the subscriber can access the bucket.
 
-```js
+```js title="sst.config.ts" "link: [bucket]"
 bucket.subscribe({
   handler: "src/subscriber.handler",
-  link: [bucket] // ensures subscriber can access bucket files
+  link: [bucket]
 }, {
   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
 });
@@ -413,7 +414,7 @@ bucket.subscribe({
 
 Subscribe to specific S3 events from a specific folder.
 
-```js
+```js title="sst.config.ts" {2}
 bucket.subscribe("src/subscriber.handler", {
   filterPrefix: "images/",
   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
@@ -422,7 +423,7 @@ bucket.subscribe("src/subscriber.handler", {
 
 Customize the subscriber function.
 
-```js
+```js title="sst.config.ts"
 bucket.subscribe({
   handler: "src/subscriber.handler",
   timeout: "60 seconds",
@@ -455,19 +456,19 @@ Subscribe to events of an S3 bucket that was not created in your app.
 
 For example, let's say you have an existing S3 bucket with the following ARN.
 
-```js
+```js title="sst.config.ts"
 const bucketArn = "arn:aws:s3:::my-bucket";
 ```
 
 You can subscribe to it by passing in the ARN.
 
-```js
+```js title="sst.config.ts"
 sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler");
 ```
 
 Subscribe to specific S3 events.
 
-```js
+```js title="sst.config.ts"
 sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler", {
   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
 });
@@ -475,7 +476,7 @@ sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler", {
 
 Subscribe to specific S3 events from a specific folder.
 
-```js
+```js title="sst.config.ts" {2}
 sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler", {
   filterPrefix: "images/",
   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
@@ -484,7 +485,7 @@ sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler", {
 
 Customize the subscriber function.
 
-```js
+```js title="sst.config.ts"
 sst.aws.Bucket.subscribe(bucketArn, {
   handler: "src/subscriber.handler",
   timeout: "60 seconds",
@@ -504,7 +505,7 @@ sst.aws.Bucket.subscribe(bucketArn, {
 <InlineSection>
 **Default** All S3 events
 </InlineSection>
-The S3 event types that will trigger the notification.
+A list of S3 event types that'll trigger the notification.
 
 ```js
 {
@@ -521,7 +522,7 @@ The S3 event types that will trigger the notification.
 </Section>
 An S3 object key prefix that will trigger the notification.
 
-All the objects in the `images/` folder.
+To filter for all the objects in the `images/` folder.
 ```js
 {
   filterPrefix: "images/"
@@ -537,7 +538,7 @@ All the objects in the `images/` folder.
 </Section>
 An S3 object key suffix that will trigger the notification.
 
-All the objects with the `.jpg` suffix.
+To filter for all the objects with the `.jpg` suffix.
 ```js
 {
  filterSuffix: ".jpg"

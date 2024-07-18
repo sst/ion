@@ -28,13 +28,36 @@ import {
 
 export interface ApiGatewayV1Args {
   /**
-   * Configure the [API Gateway endpoint](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-api-endpoint-types.html).
+   * Configure the [API Gateway REST API endpoint](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-api-endpoint-types.html).
+   *
+   * By default, it's an `edge` endpoint, meaning that a CloudFront distribution is created
+   * for the API. This could help in cases where requests are geographically distributed.
+   *
+   * On the other hand, `regional` endpoints are deployed in a specific AWS region and are
+   * intended to be accessed directly by clients within or near that region.
+   *
+   * And a `private` endpoints allow access to the API only from within a specified
+   * Amazon VPC (Virtual Private Cloud) using VPC endpoints. These endpoints do not expose
+   * the API to the public internet.
+   *
    * @default `{type: "edge"}`
    * @example
+   *
+   * To create a regional endpoint.
    * ```js
    * {
    *   endpoint: {
    *     type: "regional"
+   *   }
+   * }
+   * ```
+   *
+   * And to create a private endpoint.
+   * ```js
+   * {
+   *   endpoint: {
+   *     type: "private",
+   *     vpcEndpointIds: ["vpce-0dccab6fb1e828f36"]
    *   }
    * }
    * ```
@@ -45,7 +68,7 @@ export interface ApiGatewayV1Args {
      */
     type: "edge" | "regional" | "private";
     /**
-     * The VPC endpoint IDs for the private endpoint.
+     * The VPC endpoint IDs for the `private` endpoint.
      */
     vpcEndpointIds?: Input<Input<string>[]>;
   }>;
@@ -110,7 +133,7 @@ export interface ApiGatewayV1Args {
      *     route: {
      *       handler: {
      *         memory: "2048 MB"
-     *       },
+     *       }
      *     }
      *   }
      * }
@@ -149,41 +172,38 @@ export interface ApiGatewayV1AuthorizerArgs {
    * @example
    * ```js
    * {
-   *   name: "myAuthorizer",
-   *   tokenFunction: "src/authorizer.index",
+   *   name: "myAuthorizer"
    * }
    * ```
    */
   name: string;
   /**
-   * The Lambda TOKEN authorizer function.
+   * The Lambda token authorizer function. Takes the handler path or the function args.
    * @example
    * ```js
    * {
-   *   name: "myAuthorizer",
-   *   tokenFunction: "src/authorizer.index",
+   *   tokenFunction: "src/authorizer.index"
    * }
    * ```
    */
   tokenFunction?: Input<string | FunctionArgs>;
   /**
-   * The Lambda REQUEST authorizer function.
+   * The Lambda request authorizer function. Takes the handler path or the function args.
    * @example
    * ```js
    * {
-   *   name: "myAuthorizer",
-   *   requestFunction: "src/authorizer.index",
+   *   requestFunction: "src/authorizer.index"
    * }
    * ```
    */
   requestFunction?: Input<string | FunctionArgs>;
   /**
-   * A list of user pools used for the authorizer.
+   * A list of user pools used as the authorizer.
    * @example
    * ```js
    * {
    *   name: "myAuthorizer",
-   *   userPools: [userPool.arn],
+   *   userPools: [userPool.arn]
    * }
    * ```
    *
@@ -243,7 +263,9 @@ export interface ApiGatewayV1RouteArgs {
    */
   auth?: Input<{
     /**
-     * Enable IAM authorization for a given API route. When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
+     * Enable IAM authorization for a given API route.
+     *
+     * When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
      */
     iam?: Input<true>;
     /**
@@ -263,7 +285,7 @@ export interface ApiGatewayV1RouteArgs {
      * const userPool = new aws.cognito.UserPool();
      * const myAuthorizer = api.addAuthorizer({
      *   name: "MyAuthorizer",
-     *   userPools: [userPool.arn],
+     *   userPools: [userPool.arn]
      * });
      * ```
      */
@@ -279,7 +301,7 @@ export interface ApiGatewayV1RouteArgs {
      *   auth: {
      *     cognito: {
      *       authorizer: myAuthorizer.id,
-     *       scopes: ["read:profile", "write:profile"],
+     *       scopes: ["read:profile", "write:profile"]
      *     }
      *   }
      * }
@@ -289,9 +311,10 @@ export interface ApiGatewayV1RouteArgs {
      *
      * ```js
      * const userPool = new aws.cognito.UserPool();
+     *
      * const myAuthorizer = api.addAuthorizer({
      *   name: "MyAuthorizer",
-     *   userPools: [userPool.arn],
+     *   userPools: [userPool.arn]
      * });
      * ```
      */
@@ -329,15 +352,16 @@ export interface ApiGatewayV1RouteArgs {
  *
  * #### Create the API
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * const api = new sst.aws.ApiGatewayV1("MyApi");
  * ```
  *
  * #### Add routes
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * api.route("GET /", "src/get.handler");
  * api.route("POST /", "src/post.handler");
+ *
  * api.deploy();
  * ```
  *
@@ -347,11 +371,23 @@ export interface ApiGatewayV1RouteArgs {
  *
  * #### Configure the routes
  *
- * You can configure the route and its handler function.
+ * You can configure the route.
  *
- * ```ts
- * api.route("GET /", "src/get.handler", { auth: { iam: true } });
- * api.route("POST /", { handler: "src/post.handler", memory: "2048 MB" });
+ * ```ts title="sst.config.ts"
+ * api.route("GET /", "src/get.handler", {
+ *   auth: { iam: true }
+ * });
+ * ```
+ *
+ * #### Configure the route handler
+ *
+ * You can configure the route handler function.
+ *
+ * ```ts title="sst.config.ts"
+ * api.route("POST /", {
+ *   handler: "src/post.handler",
+ *   memory: "2048 MB"
+ * });
  * ```
  *
  * #### Set defaults for all routes
@@ -359,14 +395,14 @@ export interface ApiGatewayV1RouteArgs {
  * You can use the `transform` to set some defaults for all your routes. For example,
  * instead of setting the `memory` for each route.
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * api.route("GET /", { handler: "src/get.handler", memory: "2048 MB" });
  * api.route("POST /", { handler: "src/post.handler", memory: "2048 MB" });
  * ```
  *
  * You can set it through the `transform`.
  *
- * ```ts {5}
+ * ```ts {5} title="sst.config.ts"
  * new sst.aws.ApiGatewayV1("MyApi", {
  *   transform: {
  *     route: {
@@ -488,51 +524,51 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
    * The `{proxy+}` is a greedy segment, it matches all its child paths.
    * :::
    *
+   * When a request comes in, the API Gateway will look for the most specific match.
+   *
    * :::note
    * You cannot have duplicate routes.
    * :::
-   *
-   * When a request comes in, the API Gateway will look for the most specific match.
    *
    * @param route The path for the route.
    * @param handler The function that'll be invoked.
    * @param args Configure the route.
    *
    * @example
-   * Here's how you add a simple route.
+   * Add a simple route.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("GET /", "src/get.handler");
    * ```
    *
    * Match any HTTP method.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("ANY /", "src/route.handler");
    * ```
    *
    * Add a default route.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("GET /", "src/get.handler")
    * api.route($default, "src/default.handler");
    * ```
    *
    * Add a parameterized route.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("GET /notes/{id}", "src/get.handler");
    * ```
    *
    * Add a greedy route.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("GET /notes/{proxy+}", "src/greedy.handler");
    * ```
    *
    * Enable auth for a route.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("GET /", "src/get.handler")
    * api.route("POST /", "src/post.handler", {
    *   auth: {
@@ -543,7 +579,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
    *
    * Customize the route handler.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("GET /", {
    *   handler: "src/get.handler",
    *   memory: "2048 MB"
@@ -645,41 +681,42 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
    *
    * @param args Configure the authorizer.
    * @example
-   * Here's how you add a Lambda TOKEN authorizer.
+   * Add a Lambda token authorizer.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.addAuthorizer({
    *   name: "myAuthorizer",
-   *   tokenFunction: "src/authorizer.index",
+   *   tokenFunction: "src/authorizer.index"
    * });
    * ```
    *
    * Add a Lambda REQUEST authorizer.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.addAuthorizer({
    *   name: "myAuthorizer",
-   *   requestFunction: "src/authorizer.index",
+   *   requestFunction: "src/authorizer.index"
    * });
    * ```
    *
    * Add a Cognito User Pool authorizer.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * const userPool = new aws.cognito.UserPool();
+   *
    * api.addAuthorizer({
    *   name: "myAuthorizer",
-   *   userPools: [userPool.arn],
+   *   userPools: [userPool.arn]
    * });
    * ```
    *
    * Customize the authorizer.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.addAuthorizer({
    *   name: "myAuthorizer",
    *   tokenFunction: "src/authorizer.index",
-   *   ttl: 30,
+   *   ttl: 30
    * });
    * ```
    */
@@ -700,6 +737,13 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
 
   /**
    * Create a deployment for the API Gateway REST API.
+   *
+   * :::note
+   * You need to call this after you've added all your routes.
+   * :::
+   *
+   * Due to the way API Gateway V1 is created internally, you'll need to call this method after
+   * you've added all your routes.
    */
   public deploy() {
     const name = this.constructorName;

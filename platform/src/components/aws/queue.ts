@@ -33,24 +33,32 @@ export interface QueueArgs {
    */
   fifo?: Input<boolean>;
   /**
-   * Configure a dead-letter queue (DLQ) for this queue. A dead-letter queue is used to store messages that can't be processed successfully by the subscriber function after the retry limit is reached.
-   * @default No dead-letter queue
+   * Optionally add a dead-letter queue or DLQ for this queue.
+   *
+   * A dead-letter queue is used to store messages that can't be processed successfully by the
+   * subscriber function after the `retry` limit is reached.
+   *
+   * This takes either the ARN of the dead-letter queue or an object to configure how the
+   * dead-letter queue is used.
+   *
    * @example
-   * For example, to create a dead-letter queue and link it to the main queue.
-   * ```js
-   * const deadLetterQueue = new sst.aws.Queue("DeadLetterQueue");
+   * For example, here's how you can create a dead-letter queue and link it to the main queue.
+   *
+   * ```ts title="sst.config.ts" {4}
+   * const deadLetterQueue = new sst.aws.Queue("MyDLQ");
    *
    * new sst.aws.Queue("MyQueue", {
    *   dlq: deadLetterQueue.arn,
    * });
    * ```
    *
-   * By default, the main queue will retry processing the message 3 times before sending it to the dead-letter queue. You can customize the retry limit.
-   * ```js
+   * By default, the main queue will retry processing the message 3 times before sending it to the dead-letter queue. You can customize this.
+   *
+   * ```ts title="sst.config.ts" {3}
    * new sst.aws.Queue("MyQueue", {
    *   dlq: {
-   *     queue: deadLetterQueue.arn,
    *     retry: 5,
+   *     queue: deadLetterQueue.arn,
    *   }
    * });
    * ```
@@ -58,9 +66,16 @@ export interface QueueArgs {
   dlq?: Input<
     | string
     | {
-        queue: Input<string>;
-        retry: Input<number>;
-      }
+      /**
+       * The ARN of the dead-letter queue.
+       */
+      queue: Input<string>;
+      /**
+       * The number of times the main queue will retry the message before sending it to the dead-letter queue.
+       * @default `3`
+       */
+      retry: Input<number>;
+    }
   >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -68,7 +83,7 @@ export interface QueueArgs {
    */
   transform?: {
     /**
-     * Transform the SQS queue resource.
+     * Transform the SQS Queue resource.
      */
     queue?: Transform<sqs.QueueArgs>;
   };
@@ -142,7 +157,7 @@ export interface QueueSubscriberArgs {
  *
  * #### Create a queue
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * const queue = new sst.aws.Queue("MyQueue");
  * ```
  *
@@ -150,7 +165,7 @@ export interface QueueSubscriberArgs {
  *
  * You can optionally make it a FIFO queue.
  *
- * ```ts {2}
+ * ```ts {2} title="sst.config.ts"
  * new sst.aws.Queue("MyQueue", {
  *   fifo: true
  * });
@@ -158,7 +173,7 @@ export interface QueueSubscriberArgs {
  *
  * #### Add a subscriber
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * queue.subscribe("src/subscriber.handler");
  * ```
  *
@@ -166,7 +181,7 @@ export interface QueueSubscriberArgs {
  *
  * You can link the queue to other resources, like a function or your Next.js app.
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * new sst.aws.Nextjs("MyWeb", {
  *   link: [queue]
  * });
@@ -233,14 +248,14 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
   }
 
   /**
-   * The ARN of the SQS queue.
+   * The ARN of the SQS Queue.
    */
   public get arn() {
     return this.queue.arn;
   }
 
   /**
-   * The SQS queue URL.
+   * The SQS Queue URL.
    */
   public get url() {
     return this.queue.url;
@@ -252,7 +267,7 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
   public get nodes() {
     return {
       /**
-       * The Amazon SQS queue.
+       * The Amazon SQS Queue.
        */
       queue: this.queue,
     };
@@ -266,13 +281,13 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
    *
    * @example
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * queue.subscribe("src/subscriber.handler");
    * ```
    *
    * Add a filter to the subscription.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * queue.subscribe("src/subscriber.handler", {
    *   filters: [
    *     {
@@ -286,7 +301,7 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
    *
    * Customize the subscriber function.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * queue.subscribe({
    *   handler: "src/subscriber.handler",
    *   timeout: "60 seconds"
@@ -300,7 +315,7 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
   ) {
     if (this.isSubscribed)
       throw new VisibleError(
-        `Cannot subscribe to the "${this.constructorName}" queue multiple times. An SQS queue can only have one subscriber.`,
+        `Cannot subscribe to the "${this.constructorName}" queue multiple times. An SQS Queue can only have one subscriber.`,
       );
     this.isSubscribed = true;
 
@@ -314,29 +329,29 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
   }
 
   /**
-   * Subscribe to an SQS queue that was not created in your app.
+   * Subscribe to an SQS Queue that was not created in your app.
    *
-   * @param queueArn The ARN of the SQS queue to subscribe to.
+   * @param queueArn The ARN of the SQS Queue to subscribe to.
    * @param subscriber The function that'll be notified.
    * @param args Configure the subscription.
    *
    * @example
    *
-   * For example, let's say you have an existing SQS queue with the following ARN.
+   * For example, let's say you have an existing SQS Queue with the following ARN.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * const queueArn = "arn:aws:sqs:us-east-1:123456789012:MyQueue";
    * ```
    *
    * You can subscribe to it by passing in the ARN.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * sst.aws.Queue.subscribe(queueArn, "src/subscriber.handler");
    * ```
    *
    * Add a filter to the subscription.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * sst.aws.Queue.subscribe(queueArn, "src/subscriber.handler", {
    *   filters: [
    *     {
@@ -350,7 +365,7 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
    *
    * Customize the subscriber function.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * sst.aws.Queue.subscribe(queueArn, {
    *   handler: "src/subscriber.handler",
    *   timeout: "60 seconds"

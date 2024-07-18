@@ -213,7 +213,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  *
  * Simply uploads the current directory as a static site.
  *
- * ```js
+ * ```js title="sst.config.ts"
  * new sst.aws.StaticSite("MyWeb");
  * ```
  *
@@ -221,7 +221,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  *
  * Change the `path` that should be uploaded.
  *
- * ```js
+ * ```js title="sst.config.ts"
  * new sst.aws.StaticSite("MyWeb", {
  *   path: "path/to/site"
  * });
@@ -247,7 +247,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  *
  * Use [Vite](https://vitejs.dev) to deploy a React/Vue/Svelte/etc. SPA by specifying the `build` config.
  *
- * ```js
+ * ```js title="sst.config.ts"
  * new sst.aws.StaticSite("MyWeb", {
  *   build: {
  *     command: "npm run build",
@@ -260,7 +260,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  *
  * Use [Jekyll](https://jekyllrb.com) to deploy a static site.
  *
- * ```js
+ * ```js title="sst.config.ts"
  * new sst.aws.StaticSite("MyWeb", {
  *   errorPage: "404.html",
  *   build: {
@@ -274,7 +274,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  *
  * Use [Gatsby](https://www.gatsbyjs.com) to deploy a static site.
  *
- * ```js
+ * ```js title="sst.config.ts"
  * new sst.aws.StaticSite("MyWeb", {
  *   errorPage: "404.html",
  *   build: {
@@ -288,7 +288,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  *
  * Use [Angular](https://angular.dev) to deploy a SPA.
  *
- * ```js
+ * ```js title="sst.config.ts"
  * new sst.aws.StaticSite("MyWeb", {
  *   build: {
  *     command: "ng build --output-path dist",
@@ -301,7 +301,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  *
  * Set a custom domain for your site.
  *
- * ```js {2}
+ * ```js {2} title="sst.config.ts"
  * new sst.aws.StaticSite("MyWeb", {
  *   domain: "my-app.com"
  * });
@@ -311,7 +311,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  *
  * Redirect `www.my-app.com` to `my-app.com`.
  *
- * ```js {4}
+ * ```js {4} title="sst.config.ts"
  * new sst.aws.StaticSite("MyWeb", {
  *   domain: {
  *     name: "my-app.com",
@@ -330,7 +330,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
  *
  * For some static site generators like Vite, [environment variables](https://vitejs.dev/guide/env-and-mode) prefixed with `VITE_` can be accessed in the browser.
  *
- * ```ts {5-7}
+ * ```ts {5-7} title="sst.config.ts"
  * const bucket = new sst.aws.Bucket("MyBucket");
  *
  * new sst.aws.StaticSite("MyWeb", {
@@ -700,8 +700,7 @@ export class StaticSite extends Component implements Link.Linkable {
   public getSSTLink() {
     return {
       properties: {
-        url:
-          this.url?.apply((url) => url || URL_UNAVAILABLE) || URL_UNAVAILABLE,
+        url: output(this.url).apply((url) => url || URL_UNAVAILABLE),
       },
     };
   }

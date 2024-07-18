@@ -26,8 +26,8 @@ export interface DataSourceArgs extends AppSyncDataSourceArgs {
  * The `AppSyncDataSource` component is internally used by the `AppSync` component to add
  * data sources to [AWS AppSync](https://docs.aws.amazon.com/appsync/latest/devguide/what-is-appsync.html).
  *
- * :::caution
- * This component is not intended for public use.
+ * :::note
+ * This component is not intended to be created directly.
  * :::
  *
  * You'll find this component returned by the `addDataSource` method of the `AppSync` component.
@@ -135,27 +135,27 @@ export class AppSyncDataSource extends Component {
                     : []),
                   ...(args.elasticSearch
                     ? [
-                        {
-                          actions: ["es:*"],
-                          resources: [args.elasticSearch],
-                        },
-                      ]
+                      {
+                        actions: ["es:*"],
+                        resources: [args.elasticSearch],
+                      },
+                    ]
                     : []),
                   ...(args.eventBridge
                     ? [
-                        {
-                          actions: ["events:*"],
-                          resources: [args.eventBridge],
-                        },
-                      ]
+                      {
+                        actions: ["events:*"],
+                        resources: [args.eventBridge],
+                      },
+                    ]
                     : []),
                   ...(args.openSearch
                     ? [
-                        {
-                          actions: ["opensearch:*"],
-                          resources: [args.openSearch],
-                        },
-                      ]
+                      {
+                        actions: ["opensearch:*"],
+                        resources: [args.openSearch],
+                      },
+                    ]
                     : []),
                 ],
               }).json,
@@ -177,10 +177,10 @@ export class AppSyncDataSource extends Component {
           lambdaConfig: lambda ? { functionArn: lambda.arn } : undefined,
           dynamodbConfig: args.dynamodb
             ? {
-                tableName: output(args.dynamodb).apply(
-                  (arn) => parseDynamoArn(arn).tableName,
-                ),
-              }
+              tableName: output(args.dynamodb).apply(
+                (arn) => parseDynamoArn(arn).tableName,
+              ),
+            }
             : undefined,
           elasticsearchConfig: args.elasticSearch
             ? { endpoint: args.elasticSearch }
@@ -194,11 +194,11 @@ export class AppSyncDataSource extends Component {
             : undefined,
           relationalDatabaseConfig: args.rds
             ? {
-                httpEndpointConfig: {
-                  dbClusterIdentifier: output(args.rds).cluster,
-                  awsSecretStoreArn: output(args.rds).credentials,
-                },
-              }
+              httpEndpointConfig: {
+                dbClusterIdentifier: output(args.rds).cluster,
+                awsSecretStoreArn: output(args.rds).credentials,
+              },
+            }
             : undefined,
         }),
         { parent: self },
@@ -234,7 +234,7 @@ export class AppSyncDataSource extends Component {
         return self.lambda;
       },
       /**
-       * The DataSource service IAM role.
+       * The DataSource service's IAM role.
        */
       get serviceRole() {
         if (!self.serviceRole)
