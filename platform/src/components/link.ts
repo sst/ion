@@ -6,7 +6,6 @@ import {
   all,
   ComponentResource,
 } from "@pulumi/pulumi";
-import { FunctionPermissionArgs } from "./aws/function.js";
 
 export module Link {
   export interface Definition {
