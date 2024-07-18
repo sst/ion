@@ -44,3 +44,31 @@ export class Resource<T extends Record<string, any>>
     };
   }
 }
+
+
+
+new sst.Linkable("MyThing", {
+  properties: {
+    instanceId: rdsInstance.id,
+    clusterId: rdsCluster.clusterId,
+  },
+  include: [
+    sst.aws.permission({
+      actions: ["foo:*"],
+      resources: [rdsInstance.arn],
+    })
+  ]
+})
+
+sst.Linkable.wrap(Thing, (resource) => ({
+  properties: { ... },
+  include: [
+    sst.aws.permission({ actions: ["foo:*"], resources: [resource.arn] })
+  ]
+}))
+
+// sst shell <script> --stage=production
+// command.dev: go run main.go
+// sst run --stage=production --target=SSH go run main.go
+//
+// sst dev <cmd> <- this should be rare

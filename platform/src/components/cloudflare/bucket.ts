@@ -2,7 +2,7 @@ import { ComponentResourceOptions } from "@pulumi/pulumi";
 import * as cloudflare from "@pulumi/cloudflare";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link.js";
-import { binding } from "./binding";
+import { binding } from "./binding.js";
 
 export interface BucketArgs {
   /**
