@@ -13,9 +13,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/pulumi/pulumi/sdk/v3"
 )
 
-const PULUMI_VERSION = "v3.115.2"
+var PULUMI_VERSION = "v" + sdk.Version.String()
+
 const BUN_VERSION = "1.1.0"
 
 var configDir = (func() string {
@@ -47,11 +50,7 @@ func NeedsPulumi() bool {
 	}
 
 	version := strings.TrimSpace(string(output))
-	if version != PULUMI_VERSION {
-		return true
-	}
-
-	return false
+	return version != PULUMI_VERSION
 }
 
 func InstallPulumi() error {
@@ -139,10 +138,7 @@ func NeedsBun() bool {
 		return true
 	}
 	version := strings.TrimSpace(string(output))
-	if version != BUN_VERSION {
-		return true
-	}
-	return false
+	return version != BUN_VERSION
 }
 
 func InstallBun() error {

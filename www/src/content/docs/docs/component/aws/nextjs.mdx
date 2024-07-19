@@ -3,7 +3,7 @@ title: Nextjs
 description: Reference doc for the `sst.aws.Nextjs` component.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/nextjs.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/components/aws/nextjs.ts" */}
 
 import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../../src/components/tsdoc/Section.astro';
@@ -21,7 +21,7 @@ output to a format that can be deployed to AWS.
 
 Deploy the Next.js app that's in the project root.
 
-```js
+```js title="sst.config.ts"
 new sst.aws.Nextjs("MyWeb");
 ```
 
@@ -29,7 +29,7 @@ new sst.aws.Nextjs("MyWeb");
 
 Deploys a Next.js app in the `my-next-app/` directory.
 
-```js {2}
+```js {2} title="sst.config.ts"
 new sst.aws.Nextjs("MyWeb", {
   path: "my-next-app/"
 });
@@ -39,7 +39,7 @@ new sst.aws.Nextjs("MyWeb", {
 
 Set a custom domain for your Next.js app.
 
-```js {2}
+```js {2} title="sst.config.ts"
 new sst.aws.Nextjs("MyWeb", {
   domain: "my-app.com"
 });
@@ -49,7 +49,7 @@ new sst.aws.Nextjs("MyWeb", {
 
 Redirect `www.my-app.com` to `my-app.com`.
 
-```js {4}
+```js {4} title="sst.config.ts"
 new sst.aws.Nextjs("MyWeb", {
   domain: {
     name: "my-app.com",
@@ -63,7 +63,7 @@ new sst.aws.Nextjs("MyWeb", {
 [Link resources](/docs/linking/) to your Next.js app. This will grant permissions
 to the resources and allow you to access it in your app.
 
-```ts {4}
+```ts {4} title="sst.config.ts"
 const bucket = new sst.aws.Bucket("MyBucket");
 
 new sst.aws.Nextjs("MyWeb", {
@@ -304,6 +304,33 @@ If you want to use a custom `build` script from your `package.json`.
 ```js
 {
   buildCommand: "npm run build"
+}
+```
+</Segment>
+### cachePolicy?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** A new cache plolicy is created
+</InlineSection>
+Configure the Next.js app to use an existing CloudFront cache policy.
+
+:::note
+CloudFront has a limit of 20 cache policies per account, though you can request a limit
+increase.
+:::
+
+By default, a new cache policy is created for it. This allows you to reuse an existing
+policy instead of creating a new one.
+
+```js
+{
+  cachePolicy: "658327ea-f89d-4fab-a63d-7e88639e58f6"
 }
 ```
 </Segment>
@@ -572,7 +599,7 @@ Configure the Lambda function used for image optimization.
 </Section>
 
 <InlineSection>
-**Default** <code class="primitive">"1024 MB"</code>
+**Default** <code class="primitive">"1536 MB"</code>
 </InlineSection>
 The amount of memory allocated to the image optimization function.
 Takes values between 128 MB and 10240 MB in 1 MB increments.
@@ -594,11 +621,13 @@ Takes values between 128 MB and 10240 MB in 1 MB increments.
 </Section>
 
 <InlineSection>
-**Default** false
+**Default** <code class="primitive">false</code>
 </InlineSection>
-If set to true, already computed image will return 304 Not Modified.
-This means that image needs to be **immutable**, the etag will be computed
-based on the image href, format and width and the next BUILD_ID.
+If set to true, a previously computed image will return _304 Not Modified_.
+This means that image needs to be **immutable**.
+
+The etag will be computed based on the image href, format and width and the next
+BUILD_ID.
 
 ```js
 {
@@ -606,6 +635,7 @@ based on the image href, format and width and the next BUILD_ID.
     staticEtag: true,
   }
 }
+```
 </Segment>
 ### invalidation?
 <Segment>
@@ -735,7 +765,7 @@ Configure the [OpenNext](https://open-next.js.org) version used to build the Nex
 This does not automatically update to the latest OpenNext version. It remains pinned to the version of SST you have.
 :::
 
-By default, this is pinned to the version of OpenNext that was released with the SST version you are using. You can [find this in the source](https://github.com/sst/ion/blob/dev/pkg/platform/src/components/aws/nextjs.ts) under `DEFAULT_OPEN_NEXT_VERSION`.
+By default, this is pinned to the version of OpenNext that was released with the SST version you are using. You can [find this in the source](https://github.com/sst/ion/blob/dev/platform/src/components/aws/nextjs.ts) under `DEFAULT_OPEN_NEXT_VERSION`.
 
 ```js
 {
@@ -850,6 +880,66 @@ The resourcess specified using the [IAM ARN format](https://docs.aws.amazon.com/
 }
 ```
 </Segment>
+### server?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">architecture?</code>](#server-architecture)</p>
+- <p>[<code class="key">memory?</code>](#server-memory)</p>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">&lcub;architecture: "x86_64", memory: "1024 MB"&rcub;</code>
+</InlineSection>
+Configure the Lambda function used for server.
+
+</Segment>
+<NestedTitle id="server-architecture" Tag="h4" parent="server.">architecture?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="symbol">&ldquo;</code><code class="primitive">x86_64</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">arm64</code><code class="symbol">&rdquo;</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"x86_64"</code>
+</InlineSection>
+The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
+of the server function.
+
+```js
+{
+  server: {
+    architecture: "arm64"
+  }
+}
+```
+</Segment>
+<NestedTitle id="server-memory" Tag="h4" parent="server.">memory?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="symbol">&ldquo;</code><code class="primitive">$\{number\} MB</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">$\{number\} GB</code><code class="symbol">&rdquo;</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"1024 MB"</code>
+</InlineSection>
+The amount of memory allocated to the server function.
+Takes values between 128 MB and 10240 MB in 1 MB increments.
+
+```js
+{
+  server: {
+    memory: "2048 MB"
+  }
+}
+```
+</Segment>
 ### transform?
 <Segment>
 <Section type="parameters">
@@ -858,6 +948,7 @@ The resourcess specified using the [IAM ARN format](https://docs.aws.amazon.com/
 </InlineSection>
 - <p>[<code class="key">assets?</code>](#transform-assets)</p>
 - <p>[<code class="key">cdn?</code>](#transform-cdn)</p>
+- <p>[<code class="key">imageOptimization?</code>](#transform-imageoptimization)</p>
 - <p>[<code class="key">server?</code>](#transform-server)</p>
 </Section>
 [Transform](/docs/components#transform) how this component creates its underlying
@@ -882,6 +973,16 @@ Transform the Bucket resource used for uploading the assets.
 </InlineSection>
 </Section>
 Transform the CloudFront CDN resource.
+
+</Segment>
+<NestedTitle id="transform-imageoptimization" Tag="h4" parent="transform.">imageOptimization?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+</InlineSection>
+</Section>
+Transform the image optimization Function resource.
 
 </Segment>
 <NestedTitle id="transform-server" Tag="h4" parent="transform.">server?</NestedTitle>
@@ -1015,11 +1116,12 @@ The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
 ### Links
 <Segment>
 <Section type="parameters">
-- <p><code class="key">url</code> <code class="primitive">string</code><code class="symbol"> | </code><code class="primitive">string</code></p>
-The URL of the Next.js app.
+- <p><code class="key">url</code> <code class="primitive">string</code></p>
 
-If the `domain` is set, this is the URL with the custom domain.
-Otherwise, it's the autogenerated CloudFront URL.
+  The URL of the Next.js app.
+  
+  If the `domain` is set, this is the URL with the custom domain.
+  Otherwise, it's the autogenerated CloudFront URL.
 </Section>
 </Segment>
 </div>

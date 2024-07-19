@@ -42,6 +42,7 @@ const sidebar = [
     label: "Concepts",
     items: [
       { label: "Live", link: "/docs/live/" },
+      { label: "State", link: "/docs/state/" },
       { label: "Linking", link: "/docs/linking/" },
       { label: "Console", link: "/docs/console/" },
       { label: "Providers", link: "/docs/providers/" },
@@ -157,6 +158,10 @@ const sidebar = [
       {
         label: "CognitoUserPoolClient",
         link: "/docs/component/aws/cognito-user-pool-client/",
+      },
+      {
+        label: "ApiGatewayV2UrlRoute",
+        link: "/docs/component/aws/apigatewayv2-url-route/",
       },
       {
         label: "ApiGatewayV1Authorizer",

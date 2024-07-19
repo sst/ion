@@ -10,7 +10,7 @@ export const github  = config.github;
 
 SST is a framework that makes it easy to build modern full-stack applications on your own infrastructure.
 
-What makes SST different is that your _entire_ app is **defined in code** — in a single `sst.config.ts` file. This includes your databases, buckets, queues, your Stripe webhooks, or anything else you need.
+What makes SST different is that your _entire_ app is **defined in code** — in a single `sst.config.ts` file. This includes your databases, buckets, queues, your Stripe webhooks, or any one of the **150+ providers**.
 
 With SST, **everything is automated**.
 
@@ -137,7 +137,7 @@ The above are called **Components**. They are a way of defining the features of 
 
 In the above examples, they create the necessary infrastructure in your AWS account. All without using the AWS Console.
 
-Learn more about [Components](/docs/components/).
+Read more about [Components](/docs/components/).
 
 ---
 
@@ -176,9 +176,9 @@ Read more about [transforms](/docs/components#transforms).
 
 SST has components for AWS and Cloudflare that make these services easier to use.
 
-But it also supports **any Pulumi or Terraform component** directly in your `sst.config.ts`. This is because components in SST are built on Pulumi components.
+However it also supports components from any one of the 150+ Pulumi/Terraform providers. This is because components in SST are built on Pulumi components.
 
-For example, you can even use Vercel for your frontends.
+For example, you can use Vercel for your frontends.
 
 ```ts title="sst.config.ts"
 new vercel.Project("MyFrontend", {
@@ -186,7 +186,7 @@ new vercel.Project("MyFrontend", {
 });
 ```
 
-Read more about [providers](/docs/providers) and check out the full list in the [Pulumi Registry](https://www.pulumi.com/registry/)
+Read more about [Providers](/docs/providers) and check out the full list in the [Directory](/docs/providers#directory)
 
 ---
 
@@ -212,7 +212,7 @@ import { Resource } from "sst";
 console.log(Resource.MyBucket.name);
 ```
 
-Learn more about [resource linking](/docs/linking/).
+Read more about [resource linking](/docs/linking/).
 
 ---
 
@@ -256,13 +256,19 @@ my-sst-app
 └─ infra
 ```
 
-Learn more about our [monorepo setup](/docs/examples/#aws-monorepo).
+Read more about our [monorepo setup](/docs/examples/#aws-monorepo).
 
 ---
 
 ## CLI
 
-To make this all work, SST comes with a [CLI](/docs/reference/cli/) that you install globally.
+To make this all work, SST comes with a [CLI](/docs/reference/cli/). You can install it as a part of your Node project.
+
+```bash "sst@ion"
+npm install sst@ion
+```
+
+Or if you are not using Node, you can install it globally.
 
 ```bash
 curl -fsSL https://ion.sst.dev/install | bash
@@ -272,7 +278,7 @@ curl -fsSL https://ion.sst.dev/install | bash
 SST currently supports **macOS, Linux, and WSL**. Support for Windows is on the roadmap.
 :::
 
-The CLI currently supports macOS, Linux, and WSL.
+The CLI currently supports macOS, Linux, and WSL. Read more about the [CLI](/docs/reference/cli/).
 
 ---
 
@@ -287,7 +293,7 @@ sst dev
 It lets you make and test changes to your functions live, without having to redeploy them.
 
 :::tip
-The `sst dev` command runs your functions _**live**_, letting you test changes to your functions in milliseconds. [Learn more](/docs/live/).
+The `sst dev` command runs your functions _**live**_, letting you test changes to your functions in milliseconds. [Read more](/docs/live/).
 :::
 
 You can also use this command to start your frontend locally, and it'll automatically load your linked resources in your frontend's environment.
@@ -334,7 +340,7 @@ npx sst deploy --stage dev
 npx sst deploy --stage pr-123
 ```
 
-This lets you create separate environments for your app. Learn more about [stages](/docs/reference/cli#stage).
+This lets you create separate environments for your app. Read more about [stages](/docs/reference/cli#stage).
 
 ---
 
@@ -344,7 +350,7 @@ Once you are ready to go to production, you can use the [SST Console](/docs/cons
 
 ![SST Console](../../../assets/docs/sst-console-home.png)
 
-Learn more about the [Console](/docs/console/).
+Read more about the [Console](/docs/console/).
 
 ---
 

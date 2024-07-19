@@ -3,7 +3,7 @@ title: Config
 description: Reference doc for the `sst.config.ts`.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/config.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/config.ts" */}
 
 import Segment from '../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../src/components/tsdoc/Section.astro';
@@ -25,19 +25,23 @@ You specify it using the `$config` function. This takes an object of type [`Conf
 /// <reference path="./.sst/platform/config.d.ts" />
 
 export default $config({
+  // Your app's config
   app(input) {
     return {
       name: "my-sst-app",
       home: "aws"
     };
   },
+  // Your app's resources
   async run() {
     new sst.aws.Bucket("MyBucket");
   }
 });
 ```
 
-The `Config` object takes two functions: [`app`](#app-2) and [`run`](#run).
+The `Config` object takes two functions:
+1. [`app`](#app-2) — Your config
+2. [`run`](#run) — Your resources
 
 The `app` function is evaluated right when your app loads. It's used to define the app config and its providers.
 
@@ -53,6 +57,13 @@ The [Global](/docs/reference/global/) library can help you with your app config 
 :::
 
 The run function also has access to a list of [Global](/docs/reference/global/) `$` variables and functions. These serve as the context for your app config.
+
+:::caution
+Do not `import` the provider packages in your `sst.config.ts`.
+:::
+
+Since SST manages importing your provider packages, it's recommended not to add any imports
+in your `sst.config.ts`.
 </Section>
 
 ---
@@ -374,17 +385,8 @@ This means that you don't want to change the name of your app without removing t
 <InlineSection>
 **Default** The `home` provider.
 </InlineSection>
-The providers that are being used in this app. SST supports all [Pulumi's providers](https://www.pulumi.com/registry/). This allows you to use the components from these providers in your app.
-
-For example, if you use the [AWS Classic](https://www.pulumi.com/registry/packages/aws/) provider, you can use the `aws` components in your app.
-
-```ts
-import * as aws from "@pulumi/aws";
-
-new aws.s3.BucketV2("b", {
-  bucket: "mybucket"
-});
-```
+The providers that are being used in this app. This allows you to use the components from these providers in your app.
+Check out the full list in the [Directory](/docs/providers#directory).
 
 :::note
 By default, your `home` provider is included in the `providers` list.
@@ -508,7 +510,7 @@ version: ">= 0.0.300"
 </Section>
 The stage this app is running on. This is a string that can be passed in through the CLI.
 
-:::tip
+:::caution
 Changing the stage will redeploy your app to a new stage with new resources. The old resources will still be around in the old stage.
 :::
 

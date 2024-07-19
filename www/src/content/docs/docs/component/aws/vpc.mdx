@@ -3,7 +3,7 @@ title: Vpc
 description: Reference doc for the `sst.aws.Vpc` component.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/vpc.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/components/aws/vpc.ts" */}
 
 import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../../src/components/tsdoc/Section.astro';
@@ -37,13 +37,13 @@ Gateway per month. Make sure to [review the pricing](https://aws.amazon.com/vpc/
 
 #### Create a VPC
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Vpc("MyVPC");
 ```
 
 #### Create it with 3 Availability Zones
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Vpc("MyVPC", {
   az: 3,
 });

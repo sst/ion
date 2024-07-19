@@ -3,7 +3,7 @@ title: BucketLambdaSubscriber
 description: Reference doc for the `sst.aws.BucketLambdaSubscriber` component.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/bucket-lambda-subscriber.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/components/aws/bucket-lambda-subscriber.ts" */}
 
 import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../../src/components/tsdoc/Section.astro';
@@ -16,8 +16,8 @@ import InlineSection from '../../../../../../src/components/tsdoc/InlineSection.
 The `BucketLambdaSubscriber` component is internally used by the `Bucket` component to
 add bucket notifications to [AWS S3 Bucket](https://aws.amazon.com/s3/).
 
-:::caution
-This component is not intended for public use.
+:::note
+This component is not intended to be created directly.
 :::
 
 You'll find this component returned by the `subscribe` method of the `Bucket` component.
@@ -128,7 +128,7 @@ The name of the bucket.
 <InlineSection>
 **Default** All S3 events
 </InlineSection>
-The S3 event types that will trigger the notification.
+A list of S3 event types that'll trigger the notification.
 
 ```js
 {
@@ -145,7 +145,7 @@ The S3 event types that will trigger the notification.
 </Section>
 An S3 object key prefix that will trigger the notification.
 
-All the objects in the `images/` folder.
+To filter for all the objects in the `images/` folder.
 ```js
 {
   filterPrefix: "images/"
@@ -161,7 +161,7 @@ All the objects in the `images/` folder.
 </Section>
 An S3 object key suffix that will trigger the notification.
 
-All the objects with the `.jpg` suffix.
+To filter for all the objects with the `.jpg` suffix.
 ```js
 {
  filterSuffix: ".jpg"
@@ -185,7 +185,7 @@ The subscriber function.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The subscriber id.
+The subscriber ID.
 
 </Segment>
 ### transform?

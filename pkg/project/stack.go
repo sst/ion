@@ -386,7 +386,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 	defer func() {
 		complete, err := getCompletedEvent(ctx, stack)
 		if err != nil {
-			panic(err)
+			return
 		}
 		complete.Finished = finished
 		complete.Errors = errors
@@ -432,13 +432,13 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 
 		multi := io.MultiWriter(typesFile, oldTypesFile)
 
-		multi.Write([]byte(`/* tslint:disable */` + "\n"))
-		multi.Write([]byte(`/* eslint-disable */` + "\n"))
-		multi.Write([]byte(`import "sst"` + "\n"))
-		multi.Write([]byte(`declare module "sst" {` + "\n"))
+		multi.Write([]byte("/* tslint:disable */\n"))
+		multi.Write([]byte("/* eslint-disable */\n"))
+		multi.Write([]byte("import \"sst\"\n"))
+		multi.Write([]byte("declare module \"sst\" {\n"))
 		multi.Write([]byte("  export interface Resource " + inferTypes(complete.Links, "  ") + "\n"))
-		multi.Write([]byte("}" + "\n"))
-		multi.Write([]byte("export {}"))
+		multi.Write([]byte("}\n"))
+		multi.Write([]byte("export {}\n"))
 
 		for _, receiver := range complete.Receivers {
 			envPathHint, err := fs.FindUp(filepath.Join(s.project.PathRoot(), receiver.Directory), "tsconfig.json")
@@ -451,19 +451,19 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 				continue
 			}
 			file, _ := os.Create(envPath)
-			file.Write([]byte(`/* tslint:disable */` + "\n"))
-			file.Write([]byte(`/* eslint-disable */` + "\n"))
+			file.WriteString("/* tslint:disable */\n")
+			file.WriteString("/* eslint-disable */\n")
 			if rel != typesFileName {
-				file.WriteString(`/// <reference path="` + rel + `" />` + "\n")
+				file.WriteString("/// <reference path=\"" + rel + "\" />\n")
 			}
 			defer file.Close()
 
 			if receiver.Cloudflare != nil {
 				if rel == typesFileName {
-					file.Write([]byte(`import "sst"` + "\n"))
-					file.Write([]byte(`declare module "sst" {` + "\n"))
-					file.Write([]byte("  export interface Resource " + inferTypes(complete.Links, "  ") + "\n"))
-					file.Write([]byte("}" + "\n"))
+					file.WriteString("import \"sst\"\n")
+					file.WriteString("declare module \"sst\" {\n")
+					file.WriteString("  export interface Resource " + inferTypes(complete.Links, "  ") + "\n")
+					file.WriteString("}" + "\n")
 				}
 				bindings := map[string]interface{}{}
 				for _, link := range receiver.Links {
@@ -472,12 +472,13 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 					}
 				}
 				if len(bindings) > 0 {
-					file.Write([]byte("// cloudflare \n"))
-					file.Write([]byte(`declare module "sst" {` + "\n"))
-					file.Write([]byte("  export interface Resource " + inferTypes(bindings, "  ") + "\n"))
-					file.Write([]byte("}" + "\n"))
+					file.WriteString("// cloudflare \n")
+					file.WriteString("declare module \"sst\" {\n")
+					file.WriteString("  export interface Resource " + inferTypes(bindings, "  ") + "\n")
+					file.WriteString("}\n")
 				}
 			}
+			file.WriteString("export {}\n")
 		}
 
 		provider.PutLinks(s.project.home, s.project.app.Name, s.project.app.Stage, complete.Links)
@@ -852,16 +853,13 @@ func getCompletedEvent(ctx context.Context, stack auto.Stack) (*CompleteEvent, e
 		if hint, ok := outputs["_hint"].(string); ok {
 			complete.Hints[string(resource.URN)] = hint
 		}
-	}
 
-	outputs := decrypt(deployment.Resources[0].Outputs).(map[string]interface{})
-	linksOutput, ok := outputs["_links"]
-	if ok {
-		for key, value := range linksOutput.(map[string]interface{}) {
-			complete.Links[key] = value
+		if resource.Type == "sst:sst:LinkRef" && outputs["target"] != nil && outputs["properties"] != nil {
+			complete.Links[outputs["target"].(string)] = outputs["properties"].(map[string]interface{})
 		}
 	}
 
+	outputs := decrypt(deployment.Resources[0].Outputs).(map[string]interface{})
 	for key, value := range outputs {
 		if strings.HasPrefix(key, "_") {
 			continue

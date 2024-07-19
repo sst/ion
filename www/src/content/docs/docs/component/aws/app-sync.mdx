@@ -3,7 +3,7 @@ title: AppSync
 description: Reference doc for the `sst.aws.AppSync` component.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/app-sync.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/components/aws/app-sync.ts" */}
 
 import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../../src/components/tsdoc/Section.astro';
@@ -17,7 +17,7 @@ The `AppSync` component lets you add an [Amazon AppSync GraphQL API](https://doc
 
 #### Create a GraphQL API
 
-```ts
+```ts title="sst.config.ts"
 const api = new sst.aws.AppSync("MyApi", {
   schema: "schema.graphql",
 });
@@ -25,7 +25,7 @@ const api = new sst.aws.AppSync("MyApi", {
 
 #### Add a data source
 
-```ts
+```ts title="sst.config.ts"
 const lambdaDS = api.addDataSource({
   name: "lambdaDS",
   lambda: "src/lambda.handler",
@@ -34,7 +34,7 @@ const lambdaDS = api.addDataSource({
 
 #### Add a resolver
 
-```ts
+```ts title="sst.config.ts"
 api.addResolver("Query user", {
   dataSource: lambdaDS.name,
 });
@@ -273,7 +273,7 @@ Transform the AppSync domain name resource.
 **Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The GraphQL API id.
+The GraphQL API ID.
 </Segment>
 
 ### nodes
@@ -314,7 +314,8 @@ The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
 <Segment>
 <Section type="parameters">
 - <p><code class="key">url</code> <code class="primitive">string</code></p>
-The URL of the GraphQL API.
+
+  The URL of the GraphQL API.
 </Section>
 </Segment>
 
@@ -341,7 +342,7 @@ Add a data source to this AppSync API.
 
 Add a Lambda function as a data source.
 
-```js
+```js title="sst.config.ts"
 api.addDataSource({
   name: "lambdaDS",
   lambda: "src/lambda.handler"
@@ -350,7 +351,7 @@ api.addDataSource({
 
 Customize the Lambda function.
 
-```js
+```js title="sst.config.ts"
 api.addDataSource({
   name: "lambdaDS",
   lambda: {
@@ -362,7 +363,7 @@ api.addDataSource({
 
 Add a DynamoDB table as a data source.
 
-```js
+```js title="sst.config.ts"
 api.addDataSource({
   name: "dynamoDS",
   dynamodb: "arn:aws:dynamodb:us-east-1:123456789012:table/my-table"
@@ -391,7 +392,7 @@ Add a function to this AppSync API.
 
 Add a function using a Lambda data source.
 
-```js
+```js title="sst.config.ts"
 api.addFunction({
   name: "myFunction",
   dataSource: "lambdaDS",
@@ -400,7 +401,7 @@ api.addFunction({
 
 Add a function using a DynamoDB data source.
 
-```js
+```js title="sst.config.ts"
 api.addResolver("Query user", {
   name: "myFunction",
   dataSource: "dynamoDS",
@@ -438,7 +439,7 @@ Add a resolver to this AppSync API.
 
 Add a resolver using a Lambda data source.
 
-```js
+```js title="sst.config.ts"
 api.addResolver("Query user", {
   dataSource: "lambdaDS",
 });
@@ -446,7 +447,7 @@ api.addResolver("Query user", {
 
 Add a resolver using a DynamoDB data source.
 
-```js
+```js title="sst.config.ts"
 api.addResolver("Query user", {
   dataSource: "dynamoDS",
   requestTemplate: `{
@@ -461,7 +462,7 @@ api.addResolver("Query user", {
 
 Add a pipeline resolver.
 
-```js
+```js title="sst.config.ts"
 api.addResolver("Query user", {
   functions: [
     "MyFunction1",
@@ -491,7 +492,6 @@ The ARN for the DynamoDB table.
 
 ```js
 {
-  name: "dynamoDS",
   dynamodb: "arn:aws:dynamodb:us-east-1:123456789012:table/my-table"
 }
 ```
@@ -507,7 +507,6 @@ The ARN for the Elasticsearch domain.
 
 ```js
 {
-  name: "elasticSearchDS",
   elasticSearch: "arn:aws:es:us-east-1:123456789012:domain/my-domain"
 }
 ```
@@ -523,7 +522,6 @@ The ARN for the EventBridge event bus.
 
 ```js
 {
-  name: "eventBridgeDS",
   eventBridge: "arn:aws:events:us-east-1:123456789012:event-bus/my-event-bus"
 }
 ```
@@ -539,7 +537,6 @@ The URL for the HTTP endpoint.
 
 ```js
 {
-  name: "httpDS",
   http: "https://api.example.com"
 }
 ```
@@ -551,12 +548,22 @@ The URL for the HTTP endpoint.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol"> | </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The ARN for the Lambda function.
+The handler for the Lambda function.
 
 ```js
 {
-  name: "lambdaDS",
-  lambda: "arn:aws:lambda:us-east-1:123456789012:function:my-function"
+  lambda: "src/lambda.handler"
+}
+```
+
+Or the function args.
+
+```js
+{
+  lambda: {
+    handler: "src/lambda.handler",
+    timeout: "60 seconds"
+  }
 }
 ```
 </Segment>
@@ -571,8 +578,7 @@ The name of the data source.
 
 ```js
 {
-  name: "lambdaDS",
-  lambda: "arn:aws:lambda:us-east-1:123456789012:function:my-function"
+  name: "lambdaDS"
 }
 ```
 </Segment>
@@ -587,7 +593,6 @@ The ARN for the OpenSearch domain.
 
 ```js
 {
-  name: "openSearchDS",
   openSearch: "arn:aws:opensearch:us-east-1:123456789012:domain/my-domain"
 }
 ```
@@ -601,11 +606,10 @@ The ARN for the OpenSearch domain.
 - <p>[<code class="key">cluster</code>](#rds-cluster)</p>
 - <p>[<code class="key">credentials</code>](#rds-credentials)</p>
 </Section>
-Configuring RDS data source.
+Configure the RDS data source.
 
 ```js
 {
-  name: "rdsDS",
   rds: {
     cluster: "arn:aws:rds:us-east-1:123456789012:cluster:my-cluster",
     credentials: "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-secret"
@@ -690,7 +694,7 @@ The function code that contains the request and response functions.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The data source this resolver is using. This only applies for "unit" resolvers.
+The data source this resolver is using.
 
 ```js
 {
@@ -709,7 +713,7 @@ The name of the AppSync function.
 
 ```js
 {
-  name: "myFunction",
+  name: "myFunction"
 }
 ```
 </Segment>
@@ -724,7 +728,6 @@ The function request mapping template.
 
 ```js
 {
-  dataSource: "dynamoDS",
   requestTemplate: `{
     "version": "2018-05-29",
     "operation": "Scan",
@@ -743,7 +746,6 @@ The function response mapping template.
 
 ```js
 {
-  dataSource: "dynamoDS",
   responseTemplate: `{
     "users": $utils.toJson($context.result.items)
   }`,
@@ -796,7 +798,7 @@ The function code that contains the request and response functions.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The data source this resolver is using. This only applies for "unit" resolvers.
+The data source this resolver is using. This only applies for `unit` resolvers.
 
 ```js
 {
@@ -811,7 +813,7 @@ The data source this resolver is using. This only applies for "unit" resolvers.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">[]</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The functions this resolver is using. This only applies for "pipeline" resolvers.
+The functions this resolver is using. This only applies for `pipeline` resolvers.
 
 ```js
 {
@@ -845,16 +847,15 @@ The type of the resolver.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-For "unit" resolvers, this is the request mapping template. And for "pipeline"
+For `unit` resolvers, this is the request mapping template. And for `pipeline`
 resolvers, this is the before mapping template.
 
 ```js
 {
-  dataSource: "dynamoDS",
   requestTemplate: `{
     "version": "2017-02-28",
-    "operation": "Scan",
-  }`,
+    "operation": "Scan"
+  }`
 }
 ```
 </Segment>
@@ -865,15 +866,14 @@ resolvers, this is the before mapping template.
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-For "unit" resolvers, this is the response mapping template. And for "pipeline"
+For `unit` resolvers, this is the response mapping template. And for `pipeline`
 resolvers, this is the after mapping template.
 
 ```js
 {
-  dataSource: "dynamoDS",
   responseTemplate: `{
     "users": $utils.toJson($context.result.items)
-  }`,
+  }`
 }
 ```
 </Segment>
