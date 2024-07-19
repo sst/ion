@@ -325,7 +325,7 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 	slog.Info("built stack")
 
 	go func() {
-		completed, err := getCompletedEvent(ctx, stack)
+		completed, err := getCompletedEvent(ctx, ws, s.project.app.Stage)
 		if err != nil {
 			return
 		}
@@ -431,9 +431,7 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 	}()
 
 	defer func() {
-		slog.Info("parsing state")
-		defer slog.Info("done parsing state")
-		complete, err := getCompletedEvent(context.Background(), stack)
+		complete, err := getCompletedEvent(ctx, ws, s.project.app.Stage)
 		if err != nil {
 			return
 		}
@@ -532,7 +530,15 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 			file.WriteString("export {}\n")
 		}
 
+<<<<<<< HEAD
 		provider.PutLinks(p.home, p.app.Name, p.app.Stage, complete.Links)
+=======
+		provider.PutLinks(s.project.home, s.project.app.Name, s.project.app.Stage, complete.Links)
+		provider.PutDev(s.project.home, s.project.app.Name, s.project.app.Stage, map[string]any{
+			"links": complete.Links,
+			"devs":  complete.Devs,
+		})
+>>>>>>> 296158cf (sync)
 	}()
 
 	slog.Info("running stack command", "cmd", input.Command)
@@ -717,8 +723,8 @@ func (o upOptionFunc) ApplyOption(opts *optup.Options) {
 	o(opts)
 }
 
-func getCompletedEvent(ctx context.Context, stack auto.Stack) (*CompleteEvent, error) {
-	exported, err := stack.Export(ctx)
+func getCompletedEvent(ctx context.Context, ws auto.Workspace, stage string) (*CompleteEvent, error) {
+	exported, err := ws.ExportStack(ctx, stage)
 	if err != nil {
 		return nil, err
 	}
@@ -784,6 +790,7 @@ func getCompletedEvent(ctx context.Context, stack auto.Stack) (*CompleteEvent, e
 
 	return complete, nil
 }
+<<<<<<< HEAD
 
 func getNotNilFields(v interface{}) []interface{} {
 	result := []interface{}{}
@@ -811,4 +818,43 @@ func getNotNilFields(v interface{}) []interface{} {
 	}
 
 	return result
+=======
+func (s *stack) GetCompleted(ctx context.Context) (*CompleteEvent, error) {
+	passphrase, err := provider.Passphrase(s.project.home, s.project.app.Name, s.project.app.Stage)
+	if err != nil {
+		return nil, err
+	}
+	_, err = s.PullState()
+	if err != nil {
+		return nil, err
+	}
+	pulumi, err := auto.NewPulumiCommand(&auto.PulumiCommandOptions{
+		Root:             filepath.Join(global.BinPath(), ".."),
+		SkipVersionCheck: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ws, err := auto.NewLocalWorkspace(ctx,
+		auto.Pulumi(pulumi),
+		auto.WorkDir(s.project.PathWorkingDir()),
+		auto.PulumiHome(global.ConfigDir()),
+		auto.Project(workspace.Project{
+			Name:    tokens.PackageName(s.project.app.Name),
+			Runtime: workspace.NewProjectRuntimeInfo("nodejs", nil),
+			Backend: &workspace.ProjectBackend{
+				URL: fmt.Sprintf("file://%v", s.project.PathWorkingDir()),
+			},
+		}),
+		auto.EnvVars(
+			map[string]string{
+				"PULUMI_CONFIG_PASSPHRASE": passphrase,
+			},
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return getCompletedEvent(ctx, ws, s.project.app.Stage)
+>>>>>>> 296158cf (sync)
 }

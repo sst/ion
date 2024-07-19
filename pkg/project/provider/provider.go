@@ -133,6 +133,11 @@ func PutLinks(backend Home, app, stage string, data map[string]interface{}) erro
 	return putData(backend, "link", app, stage, true, data)
 }
 
+func PutDev(backend Home, app, stage string, data interface{}) error {
+	slog.Info("putting dev", "app", app, "stage", stage)
+	return putData(backend, "dev", app, stage, true, data)
+}
+
 func PutSummary(backend Home, app, stage, updateID string, summary Summary) error {
 	slog.Info("putting summary", "app", app, "stage", stage)
 	return putData(backend, "summary", app, stage+"/"+updateID, false, summary)

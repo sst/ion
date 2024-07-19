@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -836,6 +835,16 @@ var root = &cli.Command{
 					},
 				},
 			},
+			Flags: []cli.Flag{
+				{
+					Name: "target",
+					Type: "string",
+					Description: cli.Description{
+						Short: "Site or service to target",
+						Long:  "Site or service to target",
+					},
+				},
+			},
 			Description: cli.Description{
 				Short: "Run a command with linked resources",
 				Long: strings.Join([]string{
@@ -891,80 +900,7 @@ var root = &cli.Command{
 					},
 				},
 			},
-			Run: func(c *cli.Cli) error {
-				p, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer p.Cleanup()
-
-				backend := p.Backend()
-				links, err := provider.GetLinks(backend, p.App().Name, p.App().Stage)
-				if err != nil {
-					return err
-				}
-				var args []string
-				for _, arg := range c.Arguments() {
-					args = append(args, strings.Fields(arg)...)
-				}
-				cwd, _ := os.Getwd()
-				currentDir := cwd
-				for {
-					newPath := filepath.Join(currentDir, "node_modules", ".bin") + string(os.PathListSeparator) + os.Getenv("PATH")
-					os.Setenv("PATH", newPath)
-					parentDir := filepath.Dir(currentDir)
-					if parentDir == currentDir {
-						break
-					}
-					currentDir = parentDir
-				}
-				if len(args) == 0 {
-					args = append(args, "sh")
-				}
-				cmd := exec.Command(
-					args[0],
-					args[1:]...,
-				)
-				// Get the environment variables
-				envs := os.Environ()
-
-				// Filter the environment variables to exclude AWS_PROFILE
-				filteredEnvs := make([]string, 0, len(envs))
-				for _, val := range envs {
-					if !strings.HasPrefix(val, "AWS_PROFILE=") {
-						filteredEnvs = append(filteredEnvs, val)
-					}
-				}
-				cmd.Env = append(cmd.Env,
-					filteredEnvs...,
-				)
-				cmd.Env = append(cmd.Env,
-					fmt.Sprintf("PS1=%s/%s> ", p.App().Name, p.App().Stage),
-				)
-
-				for resource, value := range links {
-					jsonValue, err := json.Marshal(value)
-					if err != nil {
-						return err
-					}
-					envVar := fmt.Sprintf("SST_RESOURCE_%s=%s", resource, jsonValue)
-					cmd.Env = append(cmd.Env, envVar)
-				}
-				cmd.Env = append(cmd.Env, fmt.Sprintf(`SST_RESOURCE_App={"name": "%s", "stage": "%s" }`, p.App().Name, p.App().Stage))
-
-				for key, val := range p.Env() {
-					key = strings.ReplaceAll(key, "SST_", "")
-					cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, val))
-				}
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				cmd.Stdin = os.Stdin
-				err = cmd.Run()
-				if err != nil {
-					return util.NewReadableError(err, err.Error())
-				}
-				return nil
-			},
+			Run: CmdShell,
 		},
 		{
 			Name: "remove",

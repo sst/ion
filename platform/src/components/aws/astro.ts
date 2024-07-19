@@ -353,6 +353,14 @@ export class Astro extends Component implements Link.Linkable {
     const parent = this;
     const { sitePath, partition } = prepare(args, opts);
 
+    const dev = {
+      directory: sitePath,
+      links: output(args.link || [])
+        .apply(Link.build)
+        .apply((links) => links.map((link) => link.name)),
+      environment: args.environment,
+      command: "npm run dev",
+    };
     if ($dev) {
       const server = createDevServer(parent, name, args);
       this.registerOutputs({
@@ -372,15 +380,10 @@ export class Astro extends Component implements Link.Linkable {
           environment: args.environment,
         },
         _dev: {
-          directory: sitePath,
-          links: output(args.link || [])
-            .apply(Link.build)
-            .apply((links) => links.map((link) => link.name)),
+          ...dev,
           aws: {
             role: server.nodes.role.arn,
           },
-          environment: args.environment,
-          command: "npm run dev",
         },
       });
       return;
@@ -415,6 +418,12 @@ export class Astro extends Component implements Link.Linkable {
         url: distribution.apply((d) => d.domainUrl ?? d.url),
         edge: plan.edge,
         server: serverFunction.arn,
+      },
+      _dev: {
+        ...dev,
+        aws: {
+          role: serverFunction.nodes.role.arn,
+        },
       },
     });
 

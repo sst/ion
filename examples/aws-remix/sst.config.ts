@@ -14,6 +14,9 @@ export default $config({
     });
     new sst.aws.Remix("MyWeb", {
       link: [bucket],
+      environment: {
+        FOO: "bar",
+      },
     });
   },
 });
