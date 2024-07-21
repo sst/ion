@@ -14,6 +14,7 @@ import { parseQueueArn } from "./helpers/arn";
 import { QueueLambdaSubscriber } from "./queue-lambda-subscriber";
 import { AWSLinkable } from "./linkable";
 import { lambda, sqs } from "@pulumi/aws";
+import { DurationHours, toSeconds } from "../duration";
 
 export interface QueueArgs {
   /**
@@ -33,23 +34,22 @@ export interface QueueArgs {
    */
   fifo?: Input<boolean>;
   /**
-   * When a consumer processes a message from an Amazon SQS queue, the message remains in the queue until the consumer explicitly deletes it,
-   * as SQS does not automatically remove messages due to its distributed nature.
+   * Visibility timeout is a period of time during which a message is temporarily
+   * invisible to other consumers after a consumer has retrieved it from the queue.
+   * This mechanism prevents other consumers from processing the same message
+   * concurrently, ensuring that each message is processed only once.
    *
-   * To avoid other consumers from processing the same message, SQS sets a visibility timeout, during which the message is inaccessible to other consumers;
-   * this timeout defaults to 30 seconds but can range from 0 seconds to 12 hours.
+   * This timeout can range from 0 seconds to 12 hours.
    *
-   * It is expressed in 'seconds' and the default is 30 seconds.
-   *
-   * @default `30`
+   * @default `"30 seconds"`
    * @example
    * ```js
    * {
-   *    visibilityTimeout: 60
+   *   visibilityTimeout: "1 hour"
    * }
    * ```
    */
-  visibilityTimeout?: Input<number>
+  visibilityTimeout?: Input<DurationHours>;
   /**
    * Optionally add a dead-letter queue or DLQ for this queue.
    *
@@ -84,16 +84,16 @@ export interface QueueArgs {
   dlq?: Input<
     | string
     | {
-      /**
-       * The ARN of the dead-letter queue.
-       */
-      queue: Input<string>;
-      /**
-       * The number of times the main queue will retry the message before sending it to the dead-letter queue.
-       * @default `3`
-       */
-      retry: Input<number>;
-    }
+        /**
+         * The ARN of the dead-letter queue.
+         */
+        queue: Input<string>;
+        /**
+         * The number of times the main queue will retry the message before sending it to the dead-letter queue.
+         * @default `3`
+         */
+        retry: Input<number>;
+      }
   >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -230,6 +230,7 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
     const parent = this;
     const fifo = normalizeFifo();
     const dlq = normalizeDlq();
+    const visibilityTimeout = normalizeVisibilityTimeout();
 
     const queue = createQueue();
 
@@ -248,12 +249,18 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
       );
     }
 
+    function normalizeVisibilityTimeout() {
+      return output(args?.visibilityTimeout).apply((v) => v ?? "30 seconds");
+    }
+
     function createQueue() {
       return new sqs.Queue(
         `${name}Queue`,
         transform(args?.transform?.queue, {
           fifoQueue: fifo,
-          visibilityTimeoutSeconds: args?.visibilityTimeout ?? 30,
+          visibilityTimeoutSeconds: visibilityTimeout.apply((v) =>
+            toSeconds(v),
+          ),
           redrivePolicy:
             dlq &&
             jsonStringify({
