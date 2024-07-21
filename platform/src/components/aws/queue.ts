@@ -12,9 +12,9 @@ import { VisibleError } from "../error";
 import { hashStringToPrettyString, sanitizeToPascalCase } from "../naming";
 import { parseQueueArn } from "./helpers/arn";
 import { QueueLambdaSubscriber } from "./queue-lambda-subscriber";
-import { AWSLinkable } from "./linkable";
 import { lambda, sqs } from "@pulumi/aws";
 import { DurationHours, toSeconds } from "../duration";
+import { permission } from "./permission.js";
 
 export interface QueueArgs {
   /**
@@ -101,7 +101,7 @@ export interface QueueArgs {
    */
   transform?: {
     /**
-     * Transform the SQS queue resource.
+     * Transform the SQS Queue resource.
      */
     queue?: Transform<sqs.QueueArgs>;
   };
@@ -219,7 +219,7 @@ export interface QueueSubscriberArgs {
  * }));
  * ```
  */
-export class Queue extends Component implements Link.Linkable, AWSLinkable {
+export class Queue extends Component implements Link.Linkable {
   private constructorName: string;
   private queue: sqs.Queue;
   private isSubscribed: boolean = false;
@@ -274,14 +274,14 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
   }
 
   /**
-   * The ARN of the SQS queue.
+   * The ARN of the SQS Queue.
    */
   public get arn() {
     return this.queue.arn;
   }
 
   /**
-   * The SQS queue URL.
+   * The SQS Queue URL.
    */
   public get url() {
     return this.queue.url;
@@ -293,7 +293,7 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
   public get nodes() {
     return {
       /**
-       * The Amazon SQS queue.
+       * The Amazon SQS Queue.
        */
       queue: this.queue,
     };
@@ -341,7 +341,7 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
   ) {
     if (this.isSubscribed)
       throw new VisibleError(
-        `Cannot subscribe to the "${this.constructorName}" queue multiple times. An SQS queue can only have one subscriber.`,
+        `Cannot subscribe to the "${this.constructorName}" queue multiple times. An SQS Queue can only have one subscriber.`,
       );
     this.isSubscribed = true;
 
@@ -355,15 +355,15 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
   }
 
   /**
-   * Subscribe to an SQS queue that was not created in your app.
+   * Subscribe to an SQS Queue that was not created in your app.
    *
-   * @param queueArn The ARN of the SQS queue to subscribe to.
+   * @param queueArn The ARN of the SQS Queue to subscribe to.
    * @param subscriber The function that'll be notified.
    * @param args Configure the subscription.
    *
    * @example
    *
-   * For example, let's say you have an existing SQS queue with the following ARN.
+   * For example, let's say you have an existing SQS Queue with the following ARN.
    *
    * ```js title="sst.config.ts"
    * const queueArn = "arn:aws:sqs:us-east-1:123456789012:MyQueue";
@@ -441,17 +441,13 @@ export class Queue extends Component implements Link.Linkable, AWSLinkable {
       properties: {
         url: this.url,
       },
+      include: [
+        permission({
+          actions: ["sqs:*"],
+          resources: [this.arn],
+        }),
+      ],
     };
-  }
-
-  /** @internal */
-  public getSSTAWSPermissions() {
-    return [
-      {
-        actions: ["sqs:*"],
-        resources: [this.arn],
-      },
-    ];
   }
 }
 

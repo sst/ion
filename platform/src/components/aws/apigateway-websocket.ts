@@ -20,8 +20,8 @@ import { dns as awsDns } from "./dns.js";
 import { ApiGatewayV2DomainArgs } from "./helpers/apigatewayv2-domain";
 import { ApiGatewayWebSocketRoute } from "./apigateway-websocket-route";
 import { setupApiGatewayAccount } from "./helpers/apigateway-account";
-import { AWSLinkable } from "./linkable";
 import { apigatewayv2, cloudwatch } from "@pulumi/aws";
+import { permission } from "./permission";
 
 export interface ApiGatewayWebSocketArgs {
   /**
@@ -177,13 +177,13 @@ export interface ApiGatewayWebSocketRouteArgs {
  *
  * #### Create the API
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * const api = new sst.aws.ApiGatewayWebSocket("MyApi");
  * ```
  *
  * #### Add a custom domain
  *
- * ```js {2}
+ * ```js {2} title="sst.config.ts"
  * new sst.aws.ApiGatewayWebSocket("MyApi", {
  *   domain: "api.example.com"
  * });
@@ -191,17 +191,14 @@ export interface ApiGatewayWebSocketRouteArgs {
  *
  * #### Add routes
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * api.route("$connect", "src/connect.handler");
  * api.route("$disconnect", "src/disconnect.handler");
  * api.route("$default", "src/default.handler");
  * api.route("sendMessage", "src/sendMessage.handler");
  * ```
  */
-export class ApiGatewayWebSocket
-  extends Component
-  implements Link.Linkable, AWSLinkable
-{
+export class ApiGatewayWebSocket extends Component implements Link.Linkable {
   private constructorName: string;
   private constructorArgs: ApiGatewayWebSocketArgs;
   private api: apigatewayv2.Api;
@@ -464,7 +461,7 @@ export class ApiGatewayWebSocket
   public get nodes() {
     return {
       /**
-       * The Amazon API Gateway HTTP API
+       * The Amazon API Gateway V2 API.
        */
       api: this.api,
       /**
@@ -478,12 +475,12 @@ export class ApiGatewayWebSocket
    * Add a route to the API Gateway WebSocket API.
    *
    * There are three predefined routes:
-   * - $connect: when the client connects to the API
-   * - $disconnect: when the client or the server disconnects from the API
-   * - $default: the default or catch-all route
+   * - `$connect`: When the client connects to the API.
+   * - `$disconnect`: When the client or the server disconnects from the API.
+   * - `$default`: The default or catch-all route.
    *
    * In addition, you can create custom routes. When a request comes in, the API Gateway
-   * will look the specific route defined by the user. If no route matches, the `$default`
+   * will look for the specific route defined by the user. If no route matches, the `$default`
    * route will be invoked.
    *
    * @param route The path for the route.
@@ -491,21 +488,21 @@ export class ApiGatewayWebSocket
    * @param args Configure the route.
    *
    * @example
-   * Here's how you add a simple route.
+   * Add a simple route.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("sendMessage", "src/sendMessage.handler");
    * ```
    *
-   * Add a default route.
+   * Add a predefined route.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("$default", "src/default.handler");
    * ```
    *
    * Enable auth for a route.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("sendMessage", "src/sendMessage.handler", {
    *   auth: {
    *     iam: true
@@ -515,7 +512,7 @@ export class ApiGatewayWebSocket
    *
    * Customize the route handler.
    *
-   * ```js
+   * ```js title="sst.config.ts"
    * api.route("sendMessage", {
    *   handler: "src/sendMessage.handler",
    *   memory: "2048 MB"
@@ -554,17 +551,13 @@ export class ApiGatewayWebSocket
         url: this.url,
         managementEndpoint: this.managementEndpoint,
       },
+      include: [
+        permission({
+          actions: ["execute-api:ManageConnections"],
+          resources: [interpolate`${this.api.executionArn}/*/*/@connections/*`],
+        }),
+      ],
     };
-  }
-
-  /** @internal */
-  public getSSTAWSPermissions() {
-    return [
-      {
-        actions: ["execute-api:ManageConnections"],
-        resources: [interpolate`${this.api.executionArn}/*/*/@connections/*`],
-      },
-    ];
   }
 }
 

@@ -352,7 +352,7 @@ async function generateGlobalConfigDoc(module: TypeDoc.DeclarationReflection) {
       renderSourceMessage("platform/src/global.d.ts"),
       renderImports(outputFilePath),
       renderBodyBegin(),
-      renderAbout(module),
+      renderAbout(useModuleComment(module)),
       renderVariables(module),
       renderFunctions(module, useModuleFunctions(module), {
         title: "Functions",
@@ -375,7 +375,7 @@ async function generateConfigDoc(module: TypeDoc.DeclarationReflection) {
       renderSourceMessage(sourceFile),
       renderImports(outputFilePath),
       renderBodyBegin(),
-      renderAbout(module),
+      renderAbout(useModuleComment(module)),
       renderInterfacesAtH2Level(module, { filter: (c) => c.name === "Config" }),
       renderInterfacesAtH2Level(module, { filter: (c) => c.name !== "Config" }),
       renderBodyEnd(),
@@ -406,7 +406,7 @@ async function generateDnsDoc(module: TypeDoc.DeclarationReflection) {
       renderSourceMessage(sourceFile),
       renderImports(outputFilePath),
       renderBodyBegin(),
-      renderAbout(module),
+      renderAbout(useModuleComment(module)),
       renderFunctions(module, useModuleFunctions(module), {
         title: "Functions",
       }),
@@ -446,7 +446,7 @@ async function generateComponentDoc(
       renderSourceMessage(sourceFile),
       renderImports(outputFilePath),
       renderBodyBegin(),
-      renderAbout(component),
+      renderAbout(useClassComment(component)),
       renderConstructor(component),
       renderInterfacesAtH2Level(component, {
         filter: (c) => c.name === `${className}Args`,
@@ -456,7 +456,16 @@ async function generateComponentDoc(
         const lines = [
           ...renderLinks(component),
           ...renderCloudflareBindings(component),
-          ...(sdk ? renderFunctions(sdk, useModuleFunctions(sdk)) : []),
+          ...(sdk && sdk.name === "realtime"
+            ? renderAbout(useModuleComment(sdk))
+            : []),
+          ...(sdk
+            ? renderFunctions(
+              sdk,
+              useModuleFunctions(sdk),
+              sdk.name === "realtime" ? { prefix: sdk.name } : undefined
+            )
+            : []),
           ...(sdk ? renderInterfacesAtH3Level(sdk) : []),
         ];
         return lines.length
@@ -464,7 +473,9 @@ async function generateComponentDoc(
             ``,
             `## SDK`,
             ``,
-            `The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.`,
+            `Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.`,
+            ``,
+            `---`,
             ...lines,
           ]
           : [];
@@ -945,7 +956,7 @@ function renderVariables(module: TypeDoc.DeclarationReflection) {
 function renderFunctions(
   module: TypeDoc.DeclarationReflection,
   fns: TypeDoc.DeclarationReflection[],
-  opts?: { title?: string }
+  opts?: { title?: string; prefix?: string }
 ) {
   const lines: string[] = [];
 
@@ -961,6 +972,7 @@ function renderFunctions(
     lines.push(
       `<Section type="signature">`,
       "```ts",
+      (opts?.prefix ? `${opts.prefix}.` : "") +
       renderSignature(f.signatures![0]),
       "```",
       `</Section>`
@@ -1010,12 +1022,9 @@ function renderFunctions(
   return lines;
 }
 
-function renderAbout(module: TypeDoc.DeclarationReflection) {
+function renderAbout(comment: TypeDoc.Comment) {
   console.debug(` - about`);
   const lines = [];
-  const comment = isModuleComponent(module)
-    ? useClassComment(module)
-    : useModuleComment(module);
 
   lines.push(``, `<Section type="about">`);
 
@@ -1184,25 +1193,19 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
   const method = useClassMethodByName(module, "getSSTLink");
   if (!method) return lines;
 
-  // Validate getSSTLink() return type
+  // Get `getSSTLink()` return type
   const returnType = method.signatures![0].type as TypeDoc.ReflectionType;
-  if (
-    returnType.declaration.children?.length !== 1 ||
-    returnType.declaration.children?.[0].name !== "properties"
-  ) {
-    throw new Error(
-      "Failed to render links b/c getSSTLink() return value does not match { properties }"
-    );
-  }
-  const propertiesType = returnType.declaration.children[0]
-    .type as TypeDoc.ReflectionType;
-  if (!propertiesType.declaration.children?.length) {
-    throw new Error(
-      "Failed to render links b/c getSSTLink() returned 0 link values"
-    );
-  }
+  if (!returnType.declaration) return lines;
 
-  const links = propertiesType.declaration.children.filter(
+  // Get `getSSTLink().properties` type
+  const properties = returnType.declaration.children?.find(
+    (c) => c.name === "properties"
+  );
+  if (!properties) return lines;
+
+  // Filter out private `properties`
+  const propertiesType = properties.type as TypeDoc.ReflectionType;
+  const links = (propertiesType.declaration.children || []).filter(
     (c) => !c.comment?.modifierTags.has("@internal")
   );
   if (!links.length) return lines;
@@ -1210,6 +1213,7 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
   lines.push(
     ``,
     `### Links`,
+    `This is accessible through the \`Resource\` object in the [SDK](/docs/reference/sdk/#links).`,
     `<Segment>`,
     `<Section type="parameters">`,
     ...links.flatMap((link) => {
@@ -1271,8 +1275,28 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
 
 function renderCloudflareBindings(module: TypeDoc.DeclarationReflection) {
   const lines: string[] = [];
-  const method = useClassMethodByName(module, "getCloudflareBinding");
+  const method = useClassMethodByName(module, "getSSTLink");
   if (!method) return lines;
+
+  // Get `getSSTLink()` return type
+  const returnType = method.signatures![0].type as TypeDoc.ReflectionType;
+  if (!returnType.declaration) return lines;
+
+  // Get `getSSTLink().include` type
+  const include = returnType.declaration.children?.find(
+    (c) => c.name === "include"
+  );
+  if (!include) return lines;
+
+  // Filter out `getSSTLink().include[].type` is `cloudflare.binding`
+  const includeArrayType = include.type as TypeDoc.ArrayType;
+  const includeType = includeArrayType.elementType as TypeDoc.ReflectionType;
+  const isCloudflareBinding = includeType.declaration.children?.some(
+    (c) =>
+      c.name === "type" &&
+      (c.type as TypeDoc.LiteralType)?.value === "cloudflare.binding"
+  );
+  if (!isCloudflareBinding) return lines;
 
   lines.push(
     ``,

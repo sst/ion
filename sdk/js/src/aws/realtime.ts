@@ -1,5 +1,13 @@
 import { Context, IoTCustomAuthorizerEvent } from "aws-lambda";
 
+/**
+ * The `realtime` client SDK is available through the following.
+ *
+ * @example
+ * ```js title="src/authorizer.ts"
+ * import { realtime } from "sst/aws/realtime";
+ * ```
+ */
 export module realtime {
   export interface AuthResult {
     /**
@@ -45,17 +53,14 @@ export module realtime {
    *
    * @example
    * ```js title="src/authorizer.ts" "realtime.authorizer"
-   * import { Resource } from "sst/aws";
-   * import { realtime } from "sst/aws/realtime";
-   *
    * export const handler = realtime.authorizer(async (token) => {
    *   // Validate the token
    *   console.log(token);
    *
    *   // Return the topics to subscribe and publish
    *   return {
-   *     subscribe: [`${Resource.App.name}/${Resource.App.stage}/chat/room1`],
-   *     publish: [`${Resource.App.name}/${Resource.App.stage}/chat/room1`],
+   *     subscribe: ["*"],
+   *     publish: ["*"],
    *   };
    * });
    * ```
@@ -65,7 +70,7 @@ export module realtime {
       const [, , , region, accountId] = context.invokedFunctionArn.split(":");
       const token = Buffer.from(
         evt.protocolData.mqtt?.password ?? "",
-        "base64",
+        "base64"
       ).toString();
       const ret = await input(token);
       return {
@@ -88,7 +93,7 @@ export module realtime {
                     Action: "iot:Receive",
                     Effect: "Allow",
                     Resource: ret.subscribe.map(
-                      (t) => `arn:aws:iot:${region}:${accountId}:topic/${t}`,
+                      (t) => `arn:aws:iot:${region}:${accountId}:topic/${t}`
                     ),
                   },
                 ]
@@ -100,7 +105,7 @@ export module realtime {
                     Effect: "Allow",
                     Resource: ret.subscribe.map(
                       (t) =>
-                        `arn:aws:iot:${region}:${accountId}:topicfilter/${t}`,
+                        `arn:aws:iot:${region}:${accountId}:topicfilter/${t}`
                     ),
                   },
                 ]
@@ -111,7 +116,7 @@ export module realtime {
                     Action: "iot:Publish",
                     Effect: "Allow",
                     Resource: ret.publish.map(
-                      (t) => `arn:aws:iot:${region}:${accountId}:topic/${t}`,
+                      (t) => `arn:aws:iot:${region}:${accountId}:topic/${t}`
                     ),
                   },
                 ]

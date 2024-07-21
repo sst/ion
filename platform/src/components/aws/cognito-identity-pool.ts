@@ -4,12 +4,12 @@ import { FunctionArgs } from "./function.js";
 import { Input } from "../input";
 import { Link } from "../link";
 import { prefixName } from "../naming";
-import { AWSLinkable } from "./linkable";
 import { cognito, getRegionOutput, iam } from "@pulumi/aws";
+import { permission } from "./permission";
 
 export interface CognitoIdentityPoolArgs {
   /**
-   * Configure Cognito user pools as identity providers to your identity pool.
+   * Configure Cognito User Pools as identity providers to your identity pool.
    * @example
    * ```ts
    * {
@@ -17,8 +17,8 @@ export interface CognitoIdentityPoolArgs {
    *     {
    *       userPool: "us-east-1_QY6Ly46JH",
    *       client: "6va5jg3cgtrd170sgokikjm5m6"
-   *     },
-   *   ],
+   *     }
+   *   ]
    * }
    * ```
    */
@@ -29,7 +29,7 @@ export interface CognitoIdentityPoolArgs {
        */
       userPool: Input<string>;
       /**
-       * The Cognito user pool client ID.
+       * The Cognito User Pool client ID.
        */
       client: Input<string>;
     }>[]
@@ -91,9 +91,9 @@ export interface CognitoIdentityPoolArgs {
 /**
  * The `CognitoIdentityPool` component lets you add a [Amazon Cognito identity pool](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-identity.html) to your app.
  *
- * #### Creating the identity pool
+ * #### Create the identity pool
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * new sst.aws.CognitoIdentityPool("MyIdentityPool", {
  *   userPools: [
  *     {
@@ -106,7 +106,7 @@ export interface CognitoIdentityPoolArgs {
  *
  * #### Configure permissions for authenticated users
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * new sst.aws.CognitoIdentityPool("MyIdentityPool", {
  *   userPools: [
  *     {
@@ -125,10 +125,7 @@ export interface CognitoIdentityPoolArgs {
  * });
  * ```
  */
-export class CognitoIdentityPool
-  extends Component
-  implements Link.Linkable, AWSLinkable
-{
+export class CognitoIdentityPool extends Component implements Link.Linkable {
   private identityPool: cognito.IdentityPool;
   private authRole: iam.Role;
   private unauthRole: iam.Role;
@@ -326,17 +323,13 @@ export class CognitoIdentityPool
       properties: {
         id: this.id,
       },
+      include: [
+        permission({
+          actions: ["cognito-identity:*"],
+          resources: [this.identityPool.arn],
+        }),
+      ],
     };
-  }
-
-  /** @internal */
-  public getSSTAWSPermissions() {
-    return [
-      {
-        actions: ["cognito-identity:*"],
-        resources: [this.identityPool.arn],
-      },
-    ];
   }
 }
 

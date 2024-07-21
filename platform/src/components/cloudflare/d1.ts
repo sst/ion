@@ -2,6 +2,7 @@ import { ComponentResourceOptions } from "@pulumi/pulumi";
 import * as cloudflare from "@pulumi/cloudflare";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
+import { binding } from "./binding";
 
 export interface D1Args {
   /**
@@ -24,7 +25,7 @@ export interface D1Args {
  *
  * #### Minimal example
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * const db = new sst.cloudflare.D1("MyDatabase");
  * ```
  *
@@ -32,7 +33,7 @@ export interface D1Args {
  *
  * You can link the db to a worker.
  *
- * ```ts {3}
+ * ```ts {3} title="sst.config.ts"
  * new sst.cloudflare.Worker("MyWorker", {
  *   handler: "./index.ts",
  *   link: [db],
@@ -42,7 +43,7 @@ export interface D1Args {
  *
  * Once linked, you can use the SDK to interact with the db.
  *
- * ```ts title="index.ts" {3}
+ * ```ts title="index.ts" {1} "Resource.MyDatabase.prepare"
  * import { Resource } from "sst";
  *
  * await Resource.MyDatabase.prepare(
@@ -50,7 +51,7 @@ export interface D1Args {
  * ).first();
  * ```
  */
-export class D1 extends Component implements Link.Cloudflare.Linkable {
+export class D1 extends Component implements Link.Linkable {
   private database: cloudflare.D1Database;
 
   constructor(name: string, args?: D1Args, opts?: ComponentResourceOptions) {
@@ -75,11 +76,11 @@ export class D1 extends Component implements Link.Cloudflare.Linkable {
   }
 
   /**
-   * when you link a D1 database, the database will be available to the worker and you can
-   * query it using the [API methods documented here](https://developers.cloudflare.com/d1/build-with-d1/d1-client-api/).
+   * When you link a D1 database, the database will be available to the worker and you can
+   * query it using its [API methods](https://developers.cloudflare.com/d1/build-with-d1/d1-client-api/).
    *
    * @example
-   * ```ts title="index.ts" {3}
+   * ```ts title="index.ts" {1} "Resource.MyDatabase.prepare"
    * import { Resource } from "sst";
    *
    * await Resource.MyDatabase.prepare(
@@ -89,17 +90,19 @@ export class D1 extends Component implements Link.Cloudflare.Linkable {
    *
    * @internal
    */
-  getCloudflareBinding(): Link.Cloudflare.Binding {
+  getSSTLink() {
     return {
-      type: "d1DatabaseBindings",
-      properties: {
-        databaseId: this.database.id,
-      },
+      properties: {},
+      include: [
+        binding("d1DatabaseBindings", {
+          databaseId: this.database.id,
+        }),
+      ],
     };
   }
 
   /**
-   * The generated id of the D1 database.
+   * The generated ID of the D1 database.
    */
   public get id() {
     return this.database.id;

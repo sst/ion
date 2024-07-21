@@ -19,7 +19,6 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optrefresh"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 	"github.com/sst/ion/internal/fs"
@@ -27,10 +26,6 @@ import (
 	"github.com/sst/ion/pkg/js"
 	"github.com/sst/ion/pkg/project/provider"
 )
-
-type stack struct {
-	project *Project
-}
 
 type StackEvent struct {
 	events.EngineEvent
@@ -104,16 +99,24 @@ type Warp struct {
 type Warps map[string]Warp
 
 type CompleteEvent struct {
-	Links     Links
-	Warps     Warps
-	Receivers Receivers
-	Devs      Devs
-	Outputs   map[string]interface{}
-	Hints     map[string]string
-	Errors    []Error
-	Finished  bool
-	Old       bool
-	Resources []apitype.ResourceV3
+	Links       Links
+	Warps       Warps
+	Receivers   Receivers
+	Devs        Devs
+	Outputs     map[string]interface{}
+	Hints       map[string]string
+	Errors      []Error
+	Finished    bool
+	Old         bool
+	Resources   []apitype.ResourceV3
+	ImportDiffs []ImportDiff
+}
+
+type ImportDiff struct {
+	URN   string
+	Input string
+	Old   interface{}
+	New   interface{}
 }
 
 type StackCommandEvent struct {
@@ -131,24 +134,24 @@ var ErrStackRunFailed = fmt.Errorf("stack run had errors")
 var ErrStageNotFound = fmt.Errorf("stage not found")
 var ErrPassphraseInvalid = fmt.Errorf("passphrase invalid")
 
-func (s *stack) Run(ctx context.Context, input *StackInput) error {
+func (p *Project) Run(ctx context.Context, input *StackInput) error {
 	slog.Info("running stack command", "cmd", input.Command)
 
 	updateID := cuid2.Generate()
-	err := s.Lock(updateID, input.Command)
+	err := p.Lock(updateID, input.Command)
 	if err != nil {
 		if err == provider.ErrLockExists {
 			input.OnEvent(&StackEvent{ConcurrentUpdateEvent: &ConcurrentUpdateEvent{}})
 		}
 		return err
 	}
-	defer s.Unlock()
+	defer p.Unlock()
 
 	input.OnEvent(&StackEvent{StackCommandEvent: &StackCommandEvent{
 		Command: input.Command,
 	}})
 
-	_, err = s.PullState()
+	_, err = p.PullState()
 	if err != nil {
 		if errors.Is(err, provider.ErrStateNotFound) {
 			if input.Command != "deploy" {
@@ -158,20 +161,20 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 			return err
 		}
 	}
-	defer s.PushState(updateID)
+	defer p.PushState(updateID)
 
-	passphrase, err := provider.Passphrase(s.project.home, s.project.app.Name, s.project.app.Stage)
+	passphrase, err := provider.Passphrase(p.home, p.app.Name, p.app.Stage)
 	if err != nil {
 		return err
 	}
 
-	secrets, err := provider.GetSecrets(s.project.home, s.project.app.Name, s.project.app.Stage)
+	secrets, err := provider.GetSecrets(p.home, p.app.Name, p.app.Stage)
 	if err != nil {
 		return ErrPassphraseInvalid
 	}
 
 	env := map[string]string{}
-	for key, value := range s.project.Env() {
+	for key, value := range p.Env() {
 		env[key] = value
 	}
 	for _, value := range os.Environ() {
@@ -191,34 +194,34 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 		"dev":     input.Dev,
 		"paths": map[string]string{
 			"home":     global.ConfigDir(),
-			"root":     s.project.PathRoot(),
-			"work":     s.project.PathWorkingDir(),
-			"platform": s.project.PathPlatformDir(),
+			"root":     p.PathRoot(),
+			"work":     p.PathWorkingDir(),
+			"platform": p.PathPlatformDir(),
 		},
 	}
 	cliBytes, err := json.Marshal(cli)
 	if err != nil {
 		return err
 	}
-	appBytes, err := json.Marshal(s.project.app)
+	appBytes, err := json.Marshal(p.app)
 	if err != nil {
 		return err
 	}
 
 	providerShim := []string{}
-	for _, entry := range s.project.lock {
+	for _, entry := range p.lock {
 		providerShim = append(providerShim, fmt.Sprintf("import * as %s from '%s'", entry.Alias, entry.Package))
 		providerShim = append(providerShim, fmt.Sprintf("globalThis.%s = %s", entry.Alias, entry.Alias))
 	}
 
 	buildResult, err := js.Build(js.EvalOptions{
-		Dir: s.project.PathRoot(),
+		Dir: p.PathRoot(),
 		Define: map[string]string{
 			"$app": string(appBytes),
 			"$cli": string(cliBytes),
 			"$dev": fmt.Sprintf("%v", input.Dev),
 		},
-		Inject: []string{filepath.Join(s.project.PathWorkingDir(), "platform/src/shim/run.js")},
+		Inject: []string{filepath.Join(p.PathWorkingDir(), "platform/src/shim/run.js")},
 		Code: fmt.Sprintf(`
       import { run } from "%v";
       %v
@@ -226,9 +229,9 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
       const result = await run(mod.run)
       export default result
     `,
-			filepath.Join(s.project.PathWorkingDir(), "platform/src/auto/run.ts"),
+			filepath.Join(p.PathWorkingDir(), "platform/src/auto/run.ts"),
 			strings.Join(providerShim, "\n"),
-			s.project.PathRoot(),
+			p.PathRoot(),
 		),
 	})
 	if err != nil {
@@ -269,13 +272,13 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 	}
 	ws, err := auto.NewLocalWorkspace(ctx,
 		auto.Pulumi(pulumi),
-		auto.WorkDir(s.project.PathWorkingDir()),
+		auto.WorkDir(p.PathWorkingDir()),
 		auto.PulumiHome(global.ConfigDir()),
 		auto.Project(workspace.Project{
-			Name:    tokens.PackageName(s.project.app.Name),
+			Name:    tokens.PackageName(p.app.Name),
 			Runtime: workspace.NewProjectRuntimeInfo("nodejs", nil),
 			Backend: &workspace.ProjectBackend{
-				URL: fmt.Sprintf("file://%v", s.project.PathWorkingDir()),
+				URL: fmt.Sprintf("file://%v", p.PathWorkingDir()),
 			},
 			Main: outfile,
 		}),
@@ -289,7 +292,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 	slog.Info("built workspace")
 
 	stack, err := auto.UpsertStack(ctx,
-		s.project.app.Stage,
+		p.app.Stage,
 		ws,
 	)
 	if err != nil {
@@ -310,7 +313,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 	}()
 
 	config := auto.ConfigMap{}
-	for provider, args := range s.project.app.Providers {
+	for provider, args := range p.app.Providers {
 		for key, value := range args.(map[string]interface{}) {
 			switch v := value.(type) {
 			case map[string]interface{}:
@@ -335,7 +338,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 	slog.Info("built config")
 
 	stream := make(chan events.EngineEvent)
-	eventlog, err := os.Create(filepath.Join(s.project.PathWorkingDir(), "event.log"))
+	eventlog, err := os.Create(filepath.Join(p.PathWorkingDir(), "event.log"))
 	if err != nil {
 		return err
 	}
@@ -343,6 +346,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 
 	errors := []Error{}
 	finished := false
+	importDiffs := []ImportDiff{}
 
 	go func() {
 		for {
@@ -365,6 +369,21 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 						Message: event.DiagnosticEvent.Message,
 						URN:     event.DiagnosticEvent.URN,
 					})
+				}
+
+				if event.ResOpFailedEvent != nil {
+					if event.ResOpFailedEvent.Metadata.Op == apitype.OpImport {
+						for _, name := range event.ResOpFailedEvent.Metadata.Diffs {
+							old := event.ResOpFailedEvent.Metadata.Old.Inputs[name]
+							next := event.ResOpFailedEvent.Metadata.New.Inputs[name]
+							importDiffs = append(importDiffs, ImportDiff{
+								URN:   event.ResOpFailedEvent.Metadata.URN,
+								Input: name,
+								Old:   old,
+								New:   next,
+							})
+						}
+					}
 				}
 
 				input.OnEvent(&StackEvent{EngineEvent: event})
@@ -390,6 +409,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 		}
 		complete.Finished = finished
 		complete.Errors = errors
+		complete.ImportDiffs = importDiffs
 		defer input.OnEvent(&StackEvent{CompleteEvent: complete})
 
 		cloudflareBindings := map[string]string{}
@@ -422,26 +442,26 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 		}
 
 		typesFileName := "sst-env.d.ts"
-		typesFilePath := filepath.Join(s.project.PathRoot(), typesFileName)
+		typesFilePath := filepath.Join(p.PathRoot(), typesFileName)
 		typesFile, _ := os.Create(typesFilePath)
 		defer typesFile.Close()
 
-		oldTypesFilePath := filepath.Join(s.project.PathWorkingDir(), "types.generated.ts")
+		oldTypesFilePath := filepath.Join(p.PathWorkingDir(), "types.generated.ts")
 		oldTypesFile, _ := os.Create(oldTypesFilePath)
 		defer oldTypesFile.Close()
 
 		multi := io.MultiWriter(typesFile, oldTypesFile)
 
-		multi.Write([]byte(`/* tslint:disable */` + "\n"))
-		multi.Write([]byte(`/* eslint-disable */` + "\n"))
-		multi.Write([]byte(`import "sst"` + "\n"))
-		multi.Write([]byte(`declare module "sst" {` + "\n"))
+		multi.Write([]byte("/* tslint:disable */\n"))
+		multi.Write([]byte("/* eslint-disable */\n"))
+		multi.Write([]byte("import \"sst\"\n"))
+		multi.Write([]byte("declare module \"sst\" {\n"))
 		multi.Write([]byte("  export interface Resource " + inferTypes(complete.Links, "  ") + "\n"))
-		multi.Write([]byte("}" + "\n"))
-		multi.Write([]byte("export {}"))
+		multi.Write([]byte("}\n"))
+		multi.Write([]byte("export {}\n"))
 
 		for _, receiver := range complete.Receivers {
-			envPathHint, err := fs.FindUp(filepath.Join(s.project.PathRoot(), receiver.Directory), "tsconfig.json")
+			envPathHint, err := fs.FindUp(filepath.Join(p.PathRoot(), receiver.Directory), "tsconfig.json")
 			if err != nil {
 				continue
 			}
@@ -451,19 +471,19 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 				continue
 			}
 			file, _ := os.Create(envPath)
-			file.Write([]byte(`/* tslint:disable */` + "\n"))
-			file.Write([]byte(`/* eslint-disable */` + "\n"))
+			file.WriteString("/* tslint:disable */\n")
+			file.WriteString("/* eslint-disable */\n")
 			if rel != typesFileName {
-				file.WriteString(`/// <reference path="` + rel + `" />` + "\n")
+				file.WriteString("/// <reference path=\"" + rel + "\" />\n")
 			}
 			defer file.Close()
 
 			if receiver.Cloudflare != nil {
 				if rel == typesFileName {
-					file.Write([]byte(`import "sst"` + "\n"))
-					file.Write([]byte(`declare module "sst" {` + "\n"))
-					file.Write([]byte("  export interface Resource " + inferTypes(complete.Links, "  ") + "\n"))
-					file.Write([]byte("}" + "\n"))
+					file.WriteString("import \"sst\"\n")
+					file.WriteString("declare module \"sst\" {\n")
+					file.WriteString("  export interface Resource " + inferTypes(complete.Links, "  ") + "\n")
+					file.WriteString("}" + "\n")
 				}
 				bindings := map[string]interface{}{}
 				for _, link := range receiver.Links {
@@ -472,22 +492,23 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 					}
 				}
 				if len(bindings) > 0 {
-					file.Write([]byte("// cloudflare \n"))
-					file.Write([]byte(`declare module "sst" {` + "\n"))
-					file.Write([]byte("  export interface Resource " + inferTypes(bindings, "  ") + "\n"))
-					file.Write([]byte("}" + "\n"))
+					file.WriteString("// cloudflare \n")
+					file.WriteString("declare module \"sst\" {\n")
+					file.WriteString("  export interface Resource " + inferTypes(bindings, "  ") + "\n")
+					file.WriteString("}\n")
 				}
 			}
+			file.WriteString("export {}\n")
 		}
 
-		provider.PutLinks(s.project.home, s.project.app.Name, s.project.app.Stage, complete.Links)
+		provider.PutLinks(p.home, p.app.Name, p.app.Stage, complete.Links)
 	}()
 
 	slog.Info("running stack command", "cmd", input.Command)
 	var summary auto.UpdateSummary
 	defer func() {
 		var parsed provider.Summary
-		parsed.Version = s.project.Version()
+		parsed.Version = p.Version()
 		parsed.UpdateID = updateID
 		parsed.TimeStarted = summary.StartTime
 		parsed.TimeCompleted = time.Now().Format(time.RFC3339)
@@ -515,7 +536,7 @@ func (s *stack) Run(ctx context.Context, input *StackInput) error {
 			})
 		}
 
-		provider.PutSummary(s.project.home, s.project.app.Name, s.project.app.Stage, updateID, parsed)
+		provider.PutSummary(p.home, p.app.Name, p.app.Stage, updateID, parsed)
 	}()
 
 	switch input.Command {
@@ -568,146 +589,12 @@ type ImportOptions struct {
 	Parent string
 }
 
-func (s *stack) Import(ctx context.Context, input *ImportOptions) error {
-	urnPrefix := fmt.Sprintf("urn:pulumi:%v::%v::", s.project.app.Stage, s.project.app.Name)
-	urnFinal := input.Type + "::" + input.Name
-	urn, err := resource.ParseURN(urnPrefix + urnFinal)
-	if err != nil {
-		return err
-	}
-	var parent resource.URN
-	if input.Parent != "" {
-		splits := strings.Split(input.Parent, "::")
-		parentType := splits[0]
-		parentName := splits[1]
-		urn, err = resource.ParseURN(urnPrefix + parentType + "$" + urnFinal)
-		if err != nil {
-			return err
-		}
-		parent, err = resource.ParseURN(urnPrefix + parentType + "::" + parentName)
-	}
-
-	updateID := cuid2.Generate()
-	err = provider.Lock(s.project.home, updateID, "import", s.project.app.Name, s.project.app.Stage)
-	if err != nil {
-		return err
-	}
-	defer provider.Unlock(s.project.home, s.project.app.Name, s.project.app.Stage)
-
-	_, err = s.PullState()
-	if err != nil {
-		return err
-	}
-
-	passphrase, err := provider.Passphrase(s.project.home, s.project.app.Name, s.project.app.Stage)
-	if err != nil {
-		return err
-	}
-	env := map[string]string{}
-	for key, value := range s.project.Env() {
-		env[key] = value
-	}
-	for _, value := range os.Environ() {
-		pair := strings.SplitN(value, "=", 2)
-		if len(pair) == 2 {
-			env[pair[0]] = pair[1]
-		}
-	}
-	env["PULUMI_CONFIG_PASSPHRASE"] = passphrase
-
-	ws, err := auto.NewLocalWorkspace(ctx,
-		auto.WorkDir(s.project.PathWorkingDir()),
-		auto.PulumiHome(global.ConfigDir()),
-		auto.Project(workspace.Project{
-			Name:    tokens.PackageName(s.project.app.Name),
-			Runtime: workspace.NewProjectRuntimeInfo("nodejs", nil),
-			Backend: &workspace.ProjectBackend{
-				URL: fmt.Sprintf("file://%v", s.project.PathWorkingDir()),
-			},
-		}),
-		auto.EnvVars(env),
-	)
-	if err != nil {
-		return err
-	}
-
-	stack, err := auto.SelectStack(ctx, s.project.app.Stage, ws)
-	if err != nil {
-		return err
-	}
-
-	config := auto.ConfigMap{}
-	for provider, args := range s.project.app.Providers {
-		for key, value := range args.(map[string]interface{}) {
-			if key == "version" {
-				continue
-			}
-			switch v := value.(type) {
-			case string:
-				config[fmt.Sprintf("%v:%v", provider, key)] = auto.ConfigValue{Value: v}
-			case []string:
-				for i, val := range v {
-					config[fmt.Sprintf("%v:%v[%d]", provider, key, i)] = auto.ConfigValue{Value: val}
-				}
-			}
-		}
-	}
-	err = stack.SetAllConfig(ctx, config)
-	if err != nil {
-		return err
-	}
-
-	export, err := stack.Export(ctx)
-	if err != nil {
-		return err
-	}
-
-	var deployment apitype.DeploymentV3
-	err = json.Unmarshal(export.Deployment, &deployment)
-	if err != nil {
-		return err
-	}
-
-	existingIndex := -1
-	for index, resource := range deployment.Resources {
-		if urn == resource.URN {
-			existingIndex = index
-			break
-		}
-	}
-	if existingIndex < 0 {
-		deployment.Resources = append(deployment.Resources, apitype.ResourceV3{})
-		existingIndex = len(deployment.Resources) - 1
-	}
-	deployment.Resources[existingIndex].URN = urn
-	deployment.Resources[existingIndex].Parent = parent
-	deployment.Resources[existingIndex].Custom = true
-	deployment.Resources[existingIndex].ID = resource.ID(input.ID)
-	deployment.Resources[existingIndex].Type, err = tokens.ParseTypeToken(input.Type)
-	if err != nil {
-		return err
-	}
-
-	serialized, err := json.Marshal(deployment)
-	export.Deployment = serialized
-	err = stack.Import(ctx, export)
-	if err != nil {
-		return err
-	}
-
-	_, err = stack.Refresh(ctx, optrefresh.Target([]string{string(urn)}))
-	if err != nil {
-		return err
-	}
-	return s.PushState(updateID)
+func (s *Project) Lock(updateID string, command string) error {
+	return provider.Lock(s.home, updateID, command, s.app.Name, s.app.Stage)
 }
 
-func (s *stack) Lock(updateID string, command string) error {
-	return provider.Lock(s.project.home, updateID, command, s.project.app.Name, s.project.app.Stage)
-}
-
-func (s *stack) Unlock() error {
-	dir := s.project.PathWorkingDir()
+func (s *Project) Unlock() error {
+	dir := s.PathWorkingDir()
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -722,25 +609,25 @@ func (s *stack) Unlock() error {
 		}
 	}
 
-	return provider.Unlock(s.project.home, s.project.app.Name, s.project.app.Stage)
+	return provider.Unlock(s.home, s.app.Name, s.app.Stage)
 }
 
-func (s *stack) PullState() (string, error) {
-	pulumiDir := filepath.Join(s.project.PathWorkingDir(), ".pulumi")
+func (s *Project) PullState() (string, error) {
+	pulumiDir := filepath.Join(s.PathWorkingDir(), ".pulumi")
 	err := os.RemoveAll(pulumiDir)
 	if err != nil {
 		return "", err
 	}
-	appDir := filepath.Join(pulumiDir, "stacks", s.project.app.Name)
+	appDir := filepath.Join(pulumiDir, "stacks", s.app.Name)
 	err = os.MkdirAll(appDir, 0755)
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(appDir, fmt.Sprintf("%v.json", s.project.app.Stage))
+	path := filepath.Join(appDir, fmt.Sprintf("%v.json", s.app.Stage))
 	err = provider.PullState(
-		s.project.home,
-		s.project.app.Name,
-		s.project.app.Stage,
+		s.home,
+		s.app.Name,
+		s.app.Stage,
 		path,
 	)
 	if err != nil {
@@ -749,22 +636,22 @@ func (s *stack) PullState() (string, error) {
 	return path, nil
 }
 
-func (s *stack) PushState(version string) error {
-	pulumiDir := filepath.Join(s.project.PathWorkingDir(), ".pulumi")
+func (s *Project) PushState(version string) error {
+	pulumiDir := filepath.Join(s.PathWorkingDir(), ".pulumi")
 	return provider.PushState(
-		s.project.home,
+		s.home,
 		version,
-		s.project.app.Name,
-		s.project.app.Stage,
-		filepath.Join(pulumiDir, "stacks", s.project.app.Name, fmt.Sprintf("%v.json", s.project.app.Stage)),
+		s.app.Name,
+		s.app.Stage,
+		filepath.Join(pulumiDir, "stacks", s.app.Name, fmt.Sprintf("%v.json", s.app.Stage)),
 	)
 }
 
-func (s *stack) Cancel() error {
+func (s *Project) Cancel() error {
 	return provider.Unlock(
-		s.project.home,
-		s.project.app.Name,
-		s.project.app.Stage,
+		s.home,
+		s.app.Name,
+		s.app.Stage,
 	)
 }
 
@@ -810,15 +697,16 @@ func getCompletedEvent(ctx context.Context, stack auto.Stack) (*CompleteEvent, e
 	var deployment apitype.DeploymentV3
 	json.Unmarshal(exported.Deployment, &deployment)
 	complete := &CompleteEvent{
-		Links:     Links{},
-		Receivers: Receivers{},
-		Devs:      Devs{},
-		Warps:     Warps{},
-		Hints:     map[string]string{},
-		Outputs:   map[string]interface{}{},
-		Errors:    []Error{},
-		Finished:  false,
-		Resources: []apitype.ResourceV3{},
+		Links:       Links{},
+		ImportDiffs: []ImportDiff{},
+		Receivers:   Receivers{},
+		Devs:        Devs{},
+		Warps:       Warps{},
+		Hints:       map[string]string{},
+		Outputs:     map[string]interface{}{},
+		Errors:      []Error{},
+		Finished:    false,
+		Resources:   []apitype.ResourceV3{},
 	}
 	if len(deployment.Resources) == 0 {
 		return complete, nil
@@ -852,16 +740,13 @@ func getCompletedEvent(ctx context.Context, stack auto.Stack) (*CompleteEvent, e
 		if hint, ok := outputs["_hint"].(string); ok {
 			complete.Hints[string(resource.URN)] = hint
 		}
-	}
 
-	outputs := decrypt(deployment.Resources[0].Outputs).(map[string]interface{})
-	linksOutput, ok := outputs["_links"]
-	if ok {
-		for key, value := range linksOutput.(map[string]interface{}) {
-			complete.Links[key] = value
+		if resource.Type == "sst:sst:LinkRef" && outputs["target"] != nil && outputs["properties"] != nil {
+			complete.Links[outputs["target"].(string)] = outputs["properties"].(map[string]interface{})
 		}
 	}
 
+	outputs := decrypt(deployment.Resources[0].Outputs).(map[string]interface{})
 	for key, value := range outputs {
 		if strings.HasPrefix(key, "_") {
 			continue

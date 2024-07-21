@@ -127,16 +127,6 @@ export interface App {
    * The providers that are being used in this app. This allows you to use the components from these providers in your app.
    * Check out the full list in the [Directory](/docs/providers#directory).
    *
-   * For example, if you use the [AWS Classic](https://www.pulumi.com/registry/packages/aws/) provider, you can use the `aws` components in your app.
-   *
-   * ```ts
-   * import * as aws from "@pulumi/aws";
-   *
-   * new aws.s3.BucketV2("b", {
-   *   bucket: "mybucket"
-   * });
-   * ```
-   *
    * :::note
    * By default, your `home` provider is included in the `providers` list.
    * :::
@@ -238,7 +228,7 @@ export interface AppInput {
   /**
    * The stage this app is running on. This is a string that can be passed in through the CLI.
    *
-   * :::tip
+   * :::caution
    * Changing the stage will redeploy your app to a new stage with new resources. The old resources will still be around in the old stage.
    * :::
    *
@@ -284,7 +274,7 @@ export interface Target {
    * :::
    *
    * If a runner with the given config has been been previously created,
-   * it'll be resused. The Console will also automatically remove runners that
+   * it'll be reused. The Console will also automatically remove runners that
    * have not been used for more than 7 days.
    */
   runner?: {
@@ -652,7 +642,11 @@ export interface Config {
      * console: {
      *   autodeploy: {
      *     target(event) {
-     *       if (event.type === "pushed" && event.branch === "main") {
+     *       if (
+     *         event.type === "branch" &&
+     *         event.branch === "main" &&
+     *         event.action === "pushed"
+     *        ) {
      *         return {
      *           stage: "production",
      *           runner: { engine: "codebuild", compute: "large" }
@@ -710,7 +704,7 @@ export interface Config {
        *
        * ```ts
        * target(event) {
-       *   if (event.type === "pushed" && event.branch === "main") {
+       *   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
        *     return { stage: "production" };
        *   }
        * }
@@ -721,8 +715,8 @@ export interface Config {
        *
        * ```ts {2}
        * target(event) {
-       *   if (event.branch === "staging") return;
-       *   if (event.type === "pushed" && event.branch === "main") {
+       *   if (event.type === "branch" && event.branch === "staging") return;
+       *   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
        *     return { stage: "production" };
        *   }
        * }
@@ -742,7 +736,7 @@ export interface Config {
        *
        * ```ts
        * target(event) {
-       *   if (event.type === "pushed" && event.branch === "main") {
+       *   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
        *     return {
        *       stage: "production"
        *       runner: {

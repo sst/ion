@@ -15,8 +15,9 @@ import { WorkerUrl } from "./providers/worker-url.js";
 import { Link } from "../link.js";
 import type { Input } from "../input.js";
 import { ZoneLookup } from "./providers/zone-lookup.js";
-import { isLinkable } from "../aws/linkable.js";
 import { iam } from "@pulumi/aws";
+import { Permission } from "../aws/permission.js";
+import { Binding, binding } from "./binding.js";
 
 export interface WorkerArgs {
   /**
@@ -95,13 +96,13 @@ export interface WorkerArgs {
      *
      * :::tip
      * Check out the _JS tab_ in the code snippets in the esbuild docs for the
-     * [build options](https://esbuild.github.io/api/#build).
+     * [`BuildOptions`](https://esbuild.github.io/api/#build).
      * :::
      *
      */
     esbuild?: Input<BuildOptions>;
     /**
-     * Enable or disable if the worker code is minified when bundled.
+     * Disable if the worker code should be minified when bundled.
      *
      * @default `true`
      *
@@ -136,7 +137,7 @@ export interface WorkerArgs {
   /**
    * Key-value pairs that are set as [Worker environment variables](https://developers.cloudflare.com/workers/configuration/environment-variables/).
    *
-   * They can be accessed in your function through `env.<key>`.
+   * They can be accessed in your worker through `env.<key>`.
    *
    * @example
    *
@@ -173,7 +174,7 @@ export interface WorkerArgs {
  *
  * #### Minimal example
  *
- * ```ts
+ * ```ts title="sst.config.ts"
  * new sst.cloudflare.Worker("MyWorker", {
  *   handler: "src/worker.handler"
  * });
@@ -184,7 +185,7 @@ export interface WorkerArgs {
  * [Link resources](/docs/linking/) to the Worker. This will handle the credentials
  * and allow you to access it in your handler.
  *
- * ```ts {5}
+ * ```ts {5} title="sst.config.ts"
  * const bucket = new sst.aws.Bucket("MyBucket");
  *
  * new sst.cloudflare.Worker("MyWorker", {
@@ -196,7 +197,7 @@ export interface WorkerArgs {
  * You can use the [SDK](/docs/reference/sdk/) to access the linked resources
  * in your handler.
  *
- * ```ts title="src/worker.ts"
+ * ```ts title="src/worker.ts" {3}
  * import { Resource } from "sst";
  *
  * console.log(Resource.MyBucket.name);
@@ -206,7 +207,7 @@ export interface WorkerArgs {
  *
  * Enable worker URLs to invoke the worker over HTTP.
  *
- * ```ts {3}
+ * ```ts {3} title="sst.config.ts"
  * new sst.cloudflare.Worker("MyWorker", {
  *   handler: "src/worker.handler",
  *   url: true
@@ -217,7 +218,7 @@ export interface WorkerArgs {
  *
  * Customize how SST uses [esbuild](https://esbuild.github.io/) to bundle your worker code with the `build` property.
  *
- * ```ts
+ * ```ts title="sst.config.ts" {3-5}
  * new sst.cloudflare.Worker("MyWorker", {
  *   handler: "src/worker.handler",
  *   build: {
@@ -226,10 +227,7 @@ export interface WorkerArgs {
  * });
  * ```
  */
-export class Worker
-  extends Component
-  implements Link.Cloudflare.Linkable, Link.Linkable
-{
+export class Worker extends Component implements Link.Linkable {
   private script: Output<cf.WorkerScript>;
   private workerUrl: WorkerUrl;
   private workerDomain?: cf.WorkerDomain;
@@ -300,47 +298,38 @@ export class Worker
             }),
           },
         ],
-      } as Record<
-        ReturnType<Link.Cloudflare.Linkable["getCloudflareBinding"]>["type"],
-        any[]
-      >;
+      } as Record<Binding["type"], any[]>;
       if (!args.link) return result;
       return output(args.link).apply((links) => {
         for (let link of links) {
-          if (Link.Cloudflare.isLinkable(link)) {
-            const name = output(link.urn).apply(
-              (uri) => uri.split("::").at(-1)!,
-            );
-            const binding = link.getCloudflareBinding();
-            if (!result[binding.type]) result[binding.type] = [];
-            result[binding.type].push({
+          if (!Link.isLinkable(link)) continue;
+          const name = output(link.urn).apply((uri) => uri.split("::").at(-1)!);
+          const item = link.getSSTLink();
+          const b = item.include?.find(
+            (i) => i.type === "cloudflare.binding",
+          ) as ReturnType<typeof binding>;
+          if (b) {
+            if (!result[b.binding]) result[b.binding] = [];
+            result[b.binding].push({
               name,
-              ...binding.properties,
+              ...b.properties,
             });
             continue;
           }
-          if (Link.isLinkable(link)) {
-            const name = output(link.urn).apply(
-              (uri) => uri.split("::").at(-1)!,
-            );
-            if (!result.secretTextBindings) result.secretTextBindings = [];
-            result.secretTextBindings.push({
-              name,
-              text: jsonStringify(link.getSSTLink().properties),
-            });
-          }
+          if (!result.secretTextBindings) result.secretTextBindings = [];
+          result.secretTextBindings.push({
+            name,
+            text: jsonStringify(item.properties),
+          });
         }
         return result;
       });
     }
 
     function createAwsCredentials() {
-      return output(args.link ?? []).apply((links) => {
-        const permissions = links.flatMap((l) => {
-          if (!isLinkable(l)) return [];
-          return l.getSSTAWSPermissions();
-        });
-
+      return output(
+        Link.getInclude<Permission>("aws.permission", args.link),
+      ).apply((permissions) => {
         if (permissions.length === 0) return;
 
         const user = new iam.User(
@@ -489,7 +478,7 @@ export class Worker
   }
 
   /**
-   * When you link a worker (WorkerA) to another worker (WorkerB), it automatically creates
+   * When you link a worker, say WorkerA, to another worker, WorkerB; it automatically creates
    * a service binding between the workers. It allows WorkerA to call WorkerB without going
    * through a publicly-accessible URL.
    *
@@ -500,27 +489,20 @@ export class Worker
    * await Resource.WorkerB.fetch(request);
    * ```
    *
-   * [Learn more about binding Workers.](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/)
+   * Read more about [binding Workers](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/).
    *
    * @internal
    */
-  public getCloudflareBinding(): Link.Cloudflare.Binding {
-    return {
-      type: "serviceBindings",
-      properties: {
-        service: this.script.id,
-      },
-    };
-  }
-
-  /**
-   * @internal
-   */
-  public getSSTLink() {
+  getSSTLink() {
     return {
       properties: {
         url: this.url,
       },
+      include: [
+        binding("serviceBindings", {
+          service: this.script.id,
+        }),
+      ],
     };
   }
 }
