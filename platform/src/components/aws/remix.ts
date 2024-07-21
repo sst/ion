@@ -408,7 +408,8 @@ export class Remix extends Component implements Link.Linkable {
       return;
     }
 
-    const isUsingVite = checkIsUsingVite();
+    const viteConfigFile = getViteConfigFile();
+    const isUsingVite = viteConfigFile !== undefined;
     const { access, bucket } = createBucket(parent, name, partition, args);
     const outputPath = buildApp(name, args, sitePath);
     const buildMeta = loadBuildMetadata();
@@ -445,24 +446,45 @@ export class Remix extends Component implements Link.Linkable {
       return output(args?.edge).apply((edge) => edge ?? false);
     }
 
-    function checkIsUsingVite() {
+    function getViteConfigFile() {
       return sitePath.apply(
-        (sitePath) =>
-          fs.existsSync(path.join(sitePath, "vite.config.ts")) ||
-          fs.existsSync(path.join(sitePath, "vite.config.js")),
+        (sitePath) => {
+          if (fs.existsSync(path.join(sitePath, "vite.config.ts"))) {
+            return "vite.config.ts";
+          }
+          if (fs.existsSync(path.join(sitePath, "vite.config.js"))) {
+            return "vite.config.js";
+          }
+          if (fs.existsSync(path.join(sitePath, "vite.config.mts"))) {
+            return "vite.config.mts";
+          }
+          if (fs.existsSync(path.join(sitePath, "vite.config.mjs"))) {
+            return "vite.config.mjs";
+          }
+          return undefined;
+        }
       );
     }
 
     function loadBuildMetadata() {
-      return all([outputPath, isUsingVite]).apply(
-        ([outputPath, isUsingVite]) => {
+      return all([outputPath, viteConfigFile]).apply(
+        async([outputPath, viteConfigFile]) => {
           // The path for all files that need to be in the "/" directory (static assets)
           // is different when using Vite. These will be located in the "build/client"
-          // path of the output. It will be the "public" folder when using remix config.
-          const assetsPath = isUsingVite
-            ? path.join("build", "client")
-            : "public";
-          const assetsVersionedSubDir = isUsingVite ? undefined : "build";
+          // path of the output by default. It will be the "public" folder when using remix config.
+          let assetsPath = "public"
+          let assetsVersionedSubDir = "build"
+
+          if (viteConfigFile) {
+            // don't make esbuild bundle vite
+            const externalVite = `${'vi' + 'te'}`;
+            const vite = await import(externalVite);
+            const viteConfig = await vite.loadConfigFromFile({ command: 'build', mode: 'production' }, viteConfigFile);
+            const resolvedViteConfig = await vite.resolveConfig(viteConfig.config, "build", "production", "production");
+
+            assetsPath = path.relative(resolvedViteConfig.root, resolvedViteConfig.build.outDir);
+            assetsVersionedSubDir = resolvedViteConfig.build.assetsDir;
+          }
 
           return {
             assetsPath,
