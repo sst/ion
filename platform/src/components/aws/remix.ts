@@ -484,7 +484,7 @@ export class Remix extends Component implements Link.Linkable {
             );
             if (!viteConfig) {
               throw new VisibleError(
-                `Could not load Vite config file "${viteConfigFile}"`,
+                `Failed to load Vite config file "${viteConfigFile}"`,
               );
             }
             // @ts-expect-error __remixPluginContext is not in type ResolvedConfig
