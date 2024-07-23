@@ -410,7 +410,9 @@ export class Remix extends Component implements Link.Linkable {
     }
 
     const viteConfigFile = getViteConfigFile();
-    const isUsingVite = viteConfigFile !== undefined;
+    const isUsingVite = viteConfigFile.apply(
+      (config) => typeof config === "string",
+    );
     const { access, bucket } = createBucket(parent, name, partition, args);
     const outputPath = buildApp(name, args, sitePath);
     const buildMeta = loadBuildMetadata();
@@ -449,18 +451,17 @@ export class Remix extends Component implements Link.Linkable {
 
     function getViteConfigFile() {
       return sitePath.apply((sitePath) => {
-        if (fs.existsSync(path.join(sitePath, "vite.config.ts"))) {
-          return "vite.config.ts";
+        for (const file of [
+          "vite.config.ts",
+          "vite.config.js",
+          "vite.config.mts",
+          "vite.config.mjs",
+        ]) {
+          if (fs.existsSync(path.join(sitePath, file))) {
+            return file;
+          }
         }
-        if (fs.existsSync(path.join(sitePath, "vite.config.js"))) {
-          return "vite.config.js";
-        }
-        if (fs.existsSync(path.join(sitePath, "vite.config.mts"))) {
-          return "vite.config.mts";
-        }
-        if (fs.existsSync(path.join(sitePath, "vite.config.mjs"))) {
-          return "vite.config.mjs";
-        }
+
         return undefined;
       });
     }
@@ -473,6 +474,7 @@ export class Remix extends Component implements Link.Linkable {
           // path of the output by default. It will be the "public" folder when using remix config.
           let assetsPath = "public";
           let assetsVersionedSubDir = "build";
+          let buildPath = path.join(outputPath, "build");
 
           if (viteConfigFile) {
             const vite = await import("vite");
@@ -485,21 +487,29 @@ export class Remix extends Component implements Link.Linkable {
                 `Could not load Vite config file "${viteConfigFile}"`,
               );
             }
-            const resolvedViteConfig = await vite.resolveConfig(
-              viteConfig.config,
-              "build",
-              "production",
-              "production",
-            );
+            // @ts-expect-error __remixPluginContext is not in type ResolvedConfig
+            const { root, build, __remixPluginContext } =
+              await vite.resolveConfig(
+                viteConfig.config,
+                "build",
+                "production",
+              );
 
-            assetsPath = path.relative(
-              resolvedViteConfig.root,
-              resolvedViteConfig.build.outDir,
-            );
-            assetsVersionedSubDir = resolvedViteConfig.build.assetsDir;
+            if (
+              __remixPluginContext.remixConfig.serverBuildFile !== "index.js"
+            ) {
+              throw new VisibleError(
+                `SST does not support a custom "serverBuildFile".`,
+              );
+            }
+
+            buildPath = __remixPluginContext.remixConfig.buildDirectory;
+            assetsPath = path.relative(root, build.outDir);
+            assetsVersionedSubDir = build.assetsDir;
           }
 
           return {
+            buildPath,
             assetsPath,
             assetsVersionedSubDir,
             // create 1 behaviour for each top level asset file/folder
@@ -516,11 +526,11 @@ export class Remix extends Component implements Link.Linkable {
     }
 
     function buildPlan() {
-      return all([isUsingVite, outputPath, edge, buildMeta]).apply(
-        ([isUsingVite, outputPath, edge, buildMeta]) => {
+      return all([isUsingVite, edge, buildMeta]).apply(
+        ([isUsingVite, edge, buildMeta]) => {
           const serverConfig = createServerLambdaBundle(
             isUsingVite,
-            outputPath,
+            buildMeta.buildPath,
             edge,
           );
 
@@ -598,7 +608,7 @@ export class Remix extends Component implements Link.Linkable {
 
     function createServerLambdaBundle(
       isUsingVite: boolean,
-      outputPath: string,
+      buildPath: string,
       isEdge: boolean,
     ) {
       // Create a Lambda@Edge handler for the Remix server bundle.
@@ -620,7 +630,6 @@ export class Remix extends Component implements Link.Linkable {
       // directory.
 
       // Ensure build directory exists
-      const buildPath = path.join(outputPath, "build");
       fs.mkdirSync(buildPath, { recursive: true });
 
       // Copy the server lambda handler and pre-append the build injection based
