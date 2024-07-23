@@ -414,26 +414,36 @@ export interface FunctionArgs {
   injections?: Input<string[]>;
   /**
    * Configure the function logs in CloudWatch.
-   * @default `{retention: "forever"}`
-   * @example
-   * ```js
-   * {
-   *   logging: {
-   *     retention: "1 week"
-   *   }
-   * }
-   * ```
+   * @default `{retention: "forever", format: "text"}`
    */
   logging?: Input<{
     /**
      * The duration the function logs are kept in CloudWatch.
      * @default `forever`
+     * @example
+     * ```js
+     * {
+     *   logging: {
+     *     retention: "1 week"
+     *   }
+     * }
+     * ```
      */
     retention?: Input<keyof typeof RETENTION>;
     /**
-     * The Function logs [format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html).
+     * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
+     * of the Lambda function.
+     * @default `"text"`
+     * @example
+     * ```js
+     * {
+     *   logging: {
+     *     format: "json"
+     *   }
+     * }
+     * ```
      */
-    format?: Input<"Text" | "JSON">;
+    format?: Input<"text" | "json">;
   }>;
   /**
    * The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
@@ -1021,7 +1031,7 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
       return output(args.logging).apply((logging) => ({
         ...logging,
         retention: logging?.retention ?? "forever",
-        format: logging?.format ?? "Text",
+        format: logging?.format ?? "text",
       }));
     }
 
@@ -1411,7 +1421,9 @@ export class Function extends Component implements Link.Linkable, AWSLinkable {
         },
         architectures,
         loggingConfig: {
-          logFormat: logging.apply((logging) => logging.format),
+          logFormat: logging.apply((logging) =>
+            logging.format === "json" ? "JSON" : "Text",
+          ),
           logGroup: logGroup.name,
         },
         vpcConfig: args.vpc && {
