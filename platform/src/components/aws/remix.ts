@@ -19,6 +19,7 @@ import { DevArgs } from "../dev.js";
 import type { Input } from "../input.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { URL_UNAVAILABLE } from "./linkable.js";
+import { VisibleError } from "../error.js";
 
 export interface RemixArgs extends SsrSiteArgs {
   /**
@@ -447,42 +448,54 @@ export class Remix extends Component implements Link.Linkable {
     }
 
     function getViteConfigFile() {
-      return sitePath.apply(
-        (sitePath) => {
-          if (fs.existsSync(path.join(sitePath, "vite.config.ts"))) {
-            return "vite.config.ts";
-          }
-          if (fs.existsSync(path.join(sitePath, "vite.config.js"))) {
-            return "vite.config.js";
-          }
-          if (fs.existsSync(path.join(sitePath, "vite.config.mts"))) {
-            return "vite.config.mts";
-          }
-          if (fs.existsSync(path.join(sitePath, "vite.config.mjs"))) {
-            return "vite.config.mjs";
-          }
-          return undefined;
+      return sitePath.apply((sitePath) => {
+        if (fs.existsSync(path.join(sitePath, "vite.config.ts"))) {
+          return "vite.config.ts";
         }
-      );
+        if (fs.existsSync(path.join(sitePath, "vite.config.js"))) {
+          return "vite.config.js";
+        }
+        if (fs.existsSync(path.join(sitePath, "vite.config.mts"))) {
+          return "vite.config.mts";
+        }
+        if (fs.existsSync(path.join(sitePath, "vite.config.mjs"))) {
+          return "vite.config.mjs";
+        }
+        return undefined;
+      });
     }
 
     function loadBuildMetadata() {
       return all([outputPath, viteConfigFile]).apply(
-        async([outputPath, viteConfigFile]) => {
+        async ([outputPath, viteConfigFile]) => {
           // The path for all files that need to be in the "/" directory (static assets)
           // is different when using Vite. These will be located in the "build/client"
           // path of the output by default. It will be the "public" folder when using remix config.
-          let assetsPath = "public"
-          let assetsVersionedSubDir = "build"
+          let assetsPath = "public";
+          let assetsVersionedSubDir = "build";
 
           if (viteConfigFile) {
-            // don't make esbuild bundle vite
-            const externalVite = `${'vi' + 'te'}`;
-            const vite = await import(externalVite);
-            const viteConfig = await vite.loadConfigFromFile({ command: 'build', mode: 'production' }, viteConfigFile);
-            const resolvedViteConfig = await vite.resolveConfig(viteConfig.config, "build", "production", "production");
+            const vite = await import("vite");
+            const viteConfig = await vite.loadConfigFromFile(
+              { command: "build", mode: "production" },
+              viteConfigFile,
+            );
+            if (!viteConfig) {
+              throw new VisibleError(
+                `Could not load Vite config file "${viteConfigFile}"`,
+              );
+            }
+            const resolvedViteConfig = await vite.resolveConfig(
+              viteConfig.config,
+              "build",
+              "production",
+              "production",
+            );
 
-            assetsPath = path.relative(resolvedViteConfig.root, resolvedViteConfig.build.outDir);
+            assetsPath = path.relative(
+              resolvedViteConfig.root,
+              resolvedViteConfig.build.outDir,
+            );
             assetsVersionedSubDir = resolvedViteConfig.build.assetsDir;
           }
 

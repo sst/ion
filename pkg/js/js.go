@@ -77,6 +77,7 @@ const __dirname = topLevelFileUrlToPath(new topLevelURL(".", import.meta.url))
 			"esbuild",
 			"archiver",
 			"glob",
+			"vite", // The remix component uses vite to resolve the user's vite config file. We don't want to bundle it.
 		},
 		Define:   input.Define,
 		Inject:   input.Inject,
