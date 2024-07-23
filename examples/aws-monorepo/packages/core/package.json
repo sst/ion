@@ -7,7 +7,7 @@
       "./src/*.ts"
     ]
   },
-  "dependencies": {
-    "sst": "^0.1.17"
+  "devDependencies": {
+    "sst": "0.1.17"
   }
 }
