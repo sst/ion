@@ -80,6 +80,9 @@ export class QueueLambdaSubscriber extends Component {
           args.transform?.eventSourceMapping,
           `${name}EventSourceMapping`,
           {
+            functionResponseTypes: args.reportBatchItemFailures && output(args.reportBatchItemFailures).apply((report)=> {
+              if(report) return ['ReportBatchItemFailures'];
+            }),
             eventSourceArn: queue.arn,
             functionName: fn.name,
             filterCriteria: args.filters && {

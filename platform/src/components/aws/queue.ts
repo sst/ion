@@ -156,6 +156,50 @@ export interface QueueSubscriberArgs {
    * ```
    */
   filters?: Input<Input<Record<string, any>>[]>;
+
+  /**
+   *
+   * Activates [ReportBatchItemFailures](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html#services-sqs-batchfailurereporting) for the subscribed Lambda event source mapping.
+   *
+   * When a Lambda function encounters an error while processing a batch of messages, by default, all messages in that batch,
+   * including those successfully processed ones, become visible in the queue again.
+   * This can lead to multiple reprocessings of the same messages.
+   *
+   * To avoid this, you can enable `reportBatchItemFailures` to report failures individually.
+   *
+   * If enabled, the handler function must return a response that includes the message IDs of the failed messages.
+   * This ensures that only the failed messages become visible in the queue again.
+   *
+   * :::tip
+   * Remember to update your Lambda function to handle the `batchItemFailures` response.
+   * :::
+   *
+   * :::tip
+   * This is only useful if your batch size is greater than 1.
+   * For instance, if your batch size of 3, a single Function will process 3 messages at a time.
+   * Without this property activated, the function can only return a success or failure response for the entire batch in an all-or-nothing manner.
+   * :::
+   *
+   * @default false
+   * @example
+   * Suppose you have a batch of five messages with message IDs: id1, id2, id3, id4, and id5.
+   * Your function successfully processes id1, id3, and id5.
+   * To make messages id2 and id4 visible again in your queue, your function should return the following response:
+   * ```json
+   * {
+   *   "batchItemFailures": [
+   *         {
+   *             "itemIdentifier": "id2"
+   *         },
+   *         {
+   *             "itemIdentifier": "id4"
+   *         }
+   *     ]
+   * }
+   * ```
+   *
+   */
+  reportBatchItemFailures?: Input<boolean>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
