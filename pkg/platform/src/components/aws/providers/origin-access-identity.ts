@@ -16,15 +16,16 @@ class Provider implements dynamic.ResourceProvider {
       "/origin-access-identity/cloudfront",
       {
         method: "post",
-        body: JSON.stringify({
-          CloudFrontOriginAccessIdentityConfig: {
-            CallerReference: Date.now().toString(),
-            Comment: "Created by SST",
-          },
-        }),
+        body: [
+          `<?xml version="1.0" encoding="UTF-8"?>`,
+          `<CloudFrontOriginAccessIdentityConfig xmlns="http://cloudfront.amazonaws.com/doc/2020-05-31/">`,
+          `   <CallerReference>${Date.now().toString()}</CallerReference>`,
+          `   <Comment>Created by SST</Comment>`,
+          `</CloudFrontOriginAccessIdentityConfig>`,
+        ].join("\n"),
       },
     );
-    const id = ret.CloudFrontOriginAccessIdentity?.Id!;
+    const id = ret.Id!;
 
     return { id, outs: {} };
   }
