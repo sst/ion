@@ -199,7 +199,7 @@ export interface QueueSubscriberArgs {
    * ```
    *
    */
-  reportBatchItemFailures?: Input<boolean>;
+  reportBatchItemFailures?: Input<true>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
