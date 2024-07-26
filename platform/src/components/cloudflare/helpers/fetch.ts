@@ -4,6 +4,9 @@
 const CLOUDFLARE_API_BASE_URL =
   process.env.CLOUDFLARE_API_BASE_URL ?? "https://api.cloudflare.com/client/v4";
 const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
+const CLOUDFLARE_EMAIL = process.env.CLOUDFLARE_EMAIL;
+const CLOUDFLARE_API_KEY = process.env.CLOUDFLARE_API_KEY;
+const AUTH = getAuth() as any;
 
 export interface FetchError {
   code: number;
@@ -31,7 +34,7 @@ export async function cfFetch<ResultType>(
   const ret = await fetch(`${CLOUDFLARE_API_BASE_URL}${resource}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+      ...AUTH,
       ...init.headers,
     },
   });
@@ -57,4 +60,20 @@ export async function cfFetch<ResultType>(
   // @ts-expect-error attach the messages to the error object
   error.messages = json.messages;
   throw error;
+}
+
+
+function getAuth() {
+  if (CLOUDFLARE_API_TOKEN) {
+    return {
+      Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
+    };
+  } else if (CLOUDFLARE_EMAIL && CLOUDFLARE_API_KEY) {
+    return {
+      "X-Auth-Email": CLOUDFLARE_EMAIL,
+      "X-Auth-Key": CLOUDFLARE_API_KEY,
+    };
+  } else {
+    throw new Error("No Cloudflare API token or email/key pair found.");
+  }
 }
