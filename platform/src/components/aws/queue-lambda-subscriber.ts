@@ -8,6 +8,7 @@ import { Component, transform } from "../component";
 import { Function, FunctionArgs } from "./function";
 import { QueueSubscriberArgs } from "./queue";
 import { lambda } from "@pulumi/aws";
+import { toSeconds } from "../duration";
 
 export interface Args extends QueueSubscriberArgs {
   /**
@@ -45,6 +46,8 @@ export class QueueLambdaSubscriber extends Component {
     const self = this;
     const queue = output(args.queue);
     const fn = createFunction();
+    const batchSize = normalizeBatchSize();
+    const batchWindow = normalizeBatchWindow();
     const eventSourceMapping = createEventSourceMapping();
 
     this.fn = fn;
@@ -74,12 +77,22 @@ export class QueueLambdaSubscriber extends Component {
       );
     }
 
+    function normalizeBatchSize() {
+      return output(args?.batch?.size).apply((s) => s ?? 10);
+    }
+
+    function normalizeBatchWindow() {
+      return args.batch && output(args.batch.window).apply(window=> toSeconds(window));
+    }
+
     function createEventSourceMapping() {
       return new lambda.EventSourceMapping(
         ...transform(
           args.transform?.eventSourceMapping,
           `${name}EventSourceMapping`,
           {
+            batchSize,
+            maximumBatchingWindowInSeconds: batchWindow,
             eventSourceArn: queue.arn,
             functionName: fn.name,
             filterCriteria: args.filters && {

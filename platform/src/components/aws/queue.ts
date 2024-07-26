@@ -84,16 +84,16 @@ export interface QueueArgs {
   dlq?: Input<
     | string
     | {
-        /**
-         * The ARN of the dead-letter queue.
-         */
-        queue: Input<string>;
-        /**
-         * The number of times the main queue will retry the message before sending it to the dead-letter queue.
-         * @default `3`
-         */
-        retry: Input<number>;
-      }
+    /**
+     * The ARN of the dead-letter queue.
+     */
+    queue: Input<string>;
+    /**
+     * The number of times the main queue will retry the message before sending it to the dead-letter queue.
+     * @default `3`
+     */
+    retry: Input<number>;
+  }
   >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -156,6 +156,24 @@ export interface QueueSubscriberArgs {
    * ```
    */
   filters?: Input<Input<Record<string, any>>[]>;
+  /**
+   * The Function batching configuration. Controls the amount of messages and the wait time until consuming a batch.
+   */
+  batch?: {
+    /**
+     * The Maximum number of messages that should be retrieved in a single batch when consuming messages from the queue.
+     *
+     */
+    size: Input<number>;
+    /**
+     * The maximum amount of time that Lambda spends gathering records before invoking the function.
+     *
+     * :::tip
+     * When you set `size` to a value greater than 10, you must set `window` to at least 1 second.
+     * :::
+     */
+    window: Input<DurationHours>;
+  };
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
