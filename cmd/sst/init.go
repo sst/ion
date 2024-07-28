@@ -66,36 +66,35 @@ func CmdInit(cli *cli.Cli) error {
 		fmt.Println("  Next.js detected. This will...")
 		fmt.Println("   - create an sst.config.ts")
 		fmt.Println("   - modify the tsconfig.json")
-		fmt.Println("   - add the sst sdk to package.json")
+		fmt.Println("   - add sst to package.json")
 		template = "nextjs"
 		break
 
 	case slices.ContainsFunc(hints, func(s string) bool { return strings.HasPrefix(s, "astro.config") }):
 		fmt.Println("  Astro detected. This will...")
 		fmt.Println("   - create an sst.config.ts")
-		fmt.Println("   - modify the astro.config.mjs")
-		fmt.Println("   - add the sst sdk to package.json")
+		fmt.Println("   - add sst to package.json")
 		template = "astro"
 		break
 
 	case slices.ContainsFunc(hints, func(s string) bool { return strings.HasPrefix(s, "app.config") }):
 		fmt.Println("  SolidStart detected. This will...")
 		fmt.Println("   - create an sst.config.ts")
-		fmt.Println("   - add the sst sdk to package.json")
+		fmt.Println("   - add sst to package.json")
 		template = "solid-start"
 		break
 
 	case slices.ContainsFunc(hints, func(s string) bool { return strings.HasPrefix(s, "nuxt.config") }):
 		fmt.Println("  Nuxt detected. This will...")
 		fmt.Println("   - create an sst.config.ts")
-		fmt.Println("   - add the sst sdk to package.json")
+		fmt.Println("   - add sst to package.json")
 		template = "nuxt"
 		break
 
 	case slices.ContainsFunc(hints, func(s string) bool { return strings.HasPrefix(s, "svelte.config") }):
 		fmt.Println("  SvelteKit detected. This will...")
 		fmt.Println("   - create an sst.config.ts")
-		fmt.Println("   - add the sst sdk to package.json")
+		fmt.Println("   - add sst to package.json")
 		template = "svelte-kit"
 		break
 
@@ -105,7 +104,7 @@ func CmdInit(cli *cli.Cli) error {
 	}):
 		fmt.Println("  Remix detected. This will...")
 		fmt.Println("   - create an sst.config.ts")
-		fmt.Println("   - add the sst sdk to package.json")
+		fmt.Println("   - add sst to package.json")
 		template = "remix"
 		break
 
@@ -158,15 +157,14 @@ func CmdInit(cli *cli.Cli) error {
 		if err != nil {
 			return util.NewReadableError(err, "")
 		}
+		color.New(color.FgGreen, color.Bold).Print("✓")
+		color.New(color.FgWhite).Println("  Using: " + home)
+		fmt.Println()
 	}
 
 	if template == "js" {
 		template = "js-" + home
 	}
-
-	color.New(color.FgGreen, color.Bold).Print("✓")
-	color.New(color.FgWhite).Println("  Using: " + home)
-	fmt.Println()
 
 	instructions, err := project.Create(template, home)
 	if err != nil {
