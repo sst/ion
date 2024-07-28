@@ -156,6 +156,10 @@ const sidebar = [
         link: "/docs/component/aws/app-sync-data-source/",
       },
       {
+        label: "CognitoIdentityProvider",
+        link: "/docs/component/aws/cognito-identity-provider/",
+      },
+      {
         label: "CognitoUserPoolClient",
         link: "/docs/component/aws/cognito-user-pool-client/",
       },

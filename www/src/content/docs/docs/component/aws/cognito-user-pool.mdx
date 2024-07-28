@@ -40,6 +40,31 @@ new sst.aws.CognitoUserPool("MyUserPool", {
 });
 ```
 
+#### Add a federated identity provider
+
+```ts title="sst.config.ts"
+userPool.addIdentityProvider("Google", {
+  providerType: "Google",
+  providerDetails: {
+    authorize_scopes: "email profile",
+    client_id: secrets.GoogleClientId.value,
+    client_secret: secrets.GoogleClientSecret.value,
+    attributes_url: "https://people.googleapis.com/v1/people/me?personFields=",
+    attributes_url_add_attributes: "true",
+    authorize_url: "https://accounts.google.com/o/oauth2/v2/auth",
+    oidc_issuer: "https://accounts.google.com",
+    token_request_method: "POST",
+    token_url: "https://www.googleapis.com/oauth2/v4/token",
+  },
+  attributeMapping: {
+    email: "email",
+    name: "name",
+    picture: "picture",
+    username: "sub",
+  },
+});
+```
+
 #### Add a client
 
 ```ts title="sst.config.ts"
@@ -419,6 +444,51 @@ Add a client to the user pool.
 
 ```ts
 userPool.addClient("Web");
+```
+</Segment>
+
+### addIdentityProvider
+<Segment>
+<Section type="signature">
+```ts
+addIdentityProvider(name, args)
+```
+</Section>
+
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">name</code> <code class="primitive">string</code></p>
+Name of the identity provider.
+- <p><code class="key">args</code> <code class="primitive">Omit</code><code class="symbol">&lt;</code>[<code class="type">CognitoIdentityProviderArgs</code>](/docs/component/aws/cognito-identity-provider/#cognitoidentityproviderargs), <code class="symbol">&ldquo;</code><code class="primitive">userPool</code><code class="symbol">&rdquo;</code><code class="symbol">&gt;</code></p>
+Configure the identity provider.
+</Section>
+
+<InlineSection>
+**Returns** [<code class="type">CognitoIdentityProvider</code>](/docs/component/aws/cognito-identity-provider/)
+</InlineSection>
+Add a federated identity provider to the user pool.
+
+```ts
+userPool.addIdentityProvider("Google", {
+  providerType: "Google",
+  providerDetails: {
+    authorize_scopes: "email profile",
+    client_id: secrets.GoogleClientId.value,
+    client_secret: secrets.GoogleClientSecret.value,
+    attributes_url: "https://people.googleapis.com/v1/people/me?personFields=",
+    attributes_url_add_attributes: "true",
+    authorize_url: "https://accounts.google.com/o/oauth2/v2/auth",
+    oidc_issuer: "https://accounts.google.com",
+    token_request_method: "POST",
+    token_url: "https://www.googleapis.com/oauth2/v4/token",
+  },
+  attributeMapping: {
+    email: "email",
+    name: "name",
+    picture: "picture",
+    username: "sub",
+  },
+});
 ```
 </Segment>
 

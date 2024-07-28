@@ -210,6 +210,7 @@ export class Component extends ComponentResource {
             case "aws:cloudwatch/eventTarget:EventTarget":
             case "aws:cloudwatch/logGroup:LogGroup":
             case "aws:cognito/identityPoolRoleAttachment:IdentityPoolRoleAttachment":
+            case "aws:cognito/identityProvider:IdentityProvider":
             case "aws:cognito/userPoolClient:UserPoolClient":
             case "aws:lambda/eventSourceMapping:EventSourceMapping":
             case "aws:lambda/functionUrl:FunctionUrl":

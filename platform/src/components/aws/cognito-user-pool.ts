@@ -2,6 +2,10 @@ import { ComponentResourceOptions, all, output } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
 import { Link } from "../link";
+import {
+  CognitoIdentityProvider,
+  type CognitoIdentityProviderArgs,
+} from "./cognito-identity-provider";
 import { CognitoUserPoolClient } from "./cognito-user-pool-client";
 import { Function, FunctionArgs } from "./function.js";
 import { VisibleError } from "../error";
@@ -206,6 +210,31 @@ export interface CognitoUserPoolClientArgs {
  * });
  * ```
  *
+ * #### Add a federated identity provider
+ *
+ * ```ts title="sst.config.ts"
+ * userPool.addIdentityProvider("Google", {
+ *   providerType: "Google",
+ *   providerDetails: {
+ *     authorize_scopes: "email profile",
+ *     client_id: secrets.GoogleClientId.value,
+ *     client_secret: secrets.GoogleClientSecret.value,
+ *     attributes_url: "https://people.googleapis.com/v1/people/me?personFields=",
+ *     attributes_url_add_attributes: "true",
+ *     authorize_url: "https://accounts.google.com/o/oauth2/v2/auth",
+ *     oidc_issuer: "https://accounts.google.com",
+ *     token_request_method: "POST",
+ *     token_url: "https://www.googleapis.com/oauth2/v4/token",
+ *   },
+ *   attributeMapping: {
+ *     email: "email",
+ *     name: "name",
+ *     picture: "picture",
+ *     username: "sub",
+ *   },
+ * });
+ * ```
+ * 
  * #### Add a client
  *
  * ```ts title="sst.config.ts"
@@ -388,6 +417,47 @@ export class CognitoUserPool extends Component implements Link.Linkable {
    */
   public addClient(name: string, args?: CognitoUserPoolClientArgs) {
     return new CognitoUserPoolClient(name, {
+      userPool: this.id,
+      ...args,
+    });
+  }
+
+  /**
+   * Add a federated identity provider to the user pool.
+   *
+   * @param name Name of the identity provider.
+   * @param args Configure the identity provider.
+   *
+   * @example
+   *
+   * ```ts
+   * userPool.addIdentityProvider("Google", {
+   *   providerType: "Google",
+   *   providerDetails: {
+   *     authorize_scopes: "email profile",
+   *     client_id: secrets.GoogleClientId.value,
+   *     client_secret: secrets.GoogleClientSecret.value,
+   *     attributes_url: "https://people.googleapis.com/v1/people/me?personFields=",
+   *     attributes_url_add_attributes: "true",
+   *     authorize_url: "https://accounts.google.com/o/oauth2/v2/auth",
+   *     oidc_issuer: "https://accounts.google.com",
+   *     token_request_method: "POST",
+   *     token_url: "https://www.googleapis.com/oauth2/v4/token",
+   *   },
+   *   attributeMapping: {
+   *     email: "email",
+   *     name: "name",
+   *     picture: "picture",
+   *     username: "sub",
+   *   },
+   * });
+   * ```
+   */
+  public addIdentityProvider(
+    name: string,
+    args: Omit<CognitoIdentityProviderArgs, "userPool">,
+  ) {
+    return new CognitoIdentityProvider(name, {
       userPool: this.id,
       ...args,
     });
