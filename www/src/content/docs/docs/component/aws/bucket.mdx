@@ -3,7 +3,7 @@ title: Bucket
 description: Reference doc for the `sst.aws.Bucket` component.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/bucket.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/components/aws/bucket.ts" */}
 
 import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../../src/components/tsdoc/Section.astro';
@@ -18,7 +18,7 @@ your app.
 
 #### Minimal example
 
-```ts
+```ts title="sst.config.ts"
 const bucket = new sst.aws.Bucket("MyBucket");
 ```
 
@@ -26,7 +26,7 @@ const bucket = new sst.aws.Bucket("MyBucket");
 
 Enable `public` read access for all the files in the bucket. Useful for hosting public files.
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Bucket("MyBucket", {
   public: true
 });
@@ -34,7 +34,7 @@ new sst.aws.Bucket("MyBucket", {
 
 #### Add a subscriber
 
-```ts
+```ts title="sst.config.ts"
 bucket.subscribe("src/subscriber.handler");
 ```
 
@@ -42,7 +42,7 @@ bucket.subscribe("src/subscriber.handler");
 
 You can link the bucket to other resources, like a function or your Next.js app.
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Nextjs("MyWeb", {
   link: [bucket]
 });
@@ -272,7 +272,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">BucketV2Args</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketv2/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketV2Args</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketv2/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">BucketV2Args</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketv2/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketV2Args</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketv2/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the S3 Bucket resource.
@@ -282,7 +282,7 @@ Transform the S3 Bucket resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">BucketCorsConfigurationV2Args</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketcorsconfigurationv2/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketCorsConfigurationV2Args</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketcorsconfigurationv2/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">BucketCorsConfigurationV2Args</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketcorsconfigurationv2/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketCorsConfigurationV2Args</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketcorsconfigurationv2/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the S3 Bucket CORS configuration resource.
@@ -292,7 +292,7 @@ Transform the S3 Bucket CORS configuration resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">BucketPolicyArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketpolicy/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketPolicyArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketpolicy/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">BucketPolicyArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketpolicy/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketPolicyArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketpolicy/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the S3 Bucket Policy resource.
@@ -302,7 +302,7 @@ Transform the S3 Bucket Policy resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">BucketPublicAccessBlockArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketpublicaccessblock/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketPublicAccessBlockArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketpublicaccessblock/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">BucketPublicAccessBlockArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketpublicaccessblock/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketPublicAccessBlockArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketpublicaccessblock/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the public access block resource that's attached to the Bucket.
@@ -363,13 +363,17 @@ The Amazon S3 bucket.
 
 ## SDK
 
-The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
+Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.
+
+---
 
 ### Links
+This is accessible through the `Resource` object in the [SDK](/docs/reference/sdk/#links).
 <Segment>
 <Section type="parameters">
 - <p><code class="key">name</code> <code class="primitive">string</code></p>
-The generated name of the S3 Bucket.
+
+  The generated name of the S3 Bucket.
 </Section>
 </Segment>
 
@@ -396,16 +400,16 @@ Configure the subscription.
 </InlineSection>
 Subscribe to events from this bucket.
 
-```js
+```js title="sst.config.ts"
 bucket.subscribe("src/subscriber.handler");
 ```
 
-Subscribe to specific S3 events.
+Subscribe to specific S3 events. The `link` ensures the subscriber can access the bucket.
 
-```js
+```js title="sst.config.ts" "link: [bucket]"
 bucket.subscribe({
   handler: "src/subscriber.handler",
-  link: [bucket] // ensures subscriber can access bucket files
+  link: [bucket]
 }, {
   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
 });
@@ -413,7 +417,7 @@ bucket.subscribe({
 
 Subscribe to specific S3 events from a specific folder.
 
-```js
+```js title="sst.config.ts" {2}
 bucket.subscribe("src/subscriber.handler", {
   filterPrefix: "images/",
   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
@@ -422,12 +426,47 @@ bucket.subscribe("src/subscriber.handler", {
 
 Customize the subscriber function.
 
-```js
+```js title="sst.config.ts"
 bucket.subscribe({
   handler: "src/subscriber.handler",
   timeout: "60 seconds",
 });
 ```
+</Segment>
+
+### static get
+<Segment>
+<Section type="signature">
+```ts
+Bucket.get(name, bucketName)
+```
+</Section>
+
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">name</code> <code class="primitive">string</code></p>
+The name of the component.
+- <p><code class="key">bucketName</code> <code class="primitive">string</code></p>
+The name of the S3 Bucket.
+</Section>
+
+<InlineSection>
+**Returns** [<code class="type">Bucket</code>](.)
+</InlineSection>
+Reference an existing bucket with the given bucket name. This is useful when you
+created a bucket in one stage and you want to reference it in another stage.
+
+Imagine you created a bucket in the `dev` stage. And in your perosonal stage, ie. `frank`,
+instead of creating a new bucket, you want to reuse the same bucket from `dev`.
+
+```ts title="sst.config.ts"
+const bucket = $app.stage === "frank"
+  ? sst.aws.Bucket.get("MyBucket", "app-dev-mybucket-12345678")
+  : new sst.aws.Bucket("MyBucket");
+```
+
+Here `app-dev-mybucket-12345678` is the autogenerated bucket name for the bucket created
+in the `dev` stage.
 </Segment>
 
 ### static subscribe
@@ -455,19 +494,19 @@ Subscribe to events of an S3 bucket that was not created in your app.
 
 For example, let's say you have an existing S3 bucket with the following ARN.
 
-```js
+```js title="sst.config.ts"
 const bucketArn = "arn:aws:s3:::my-bucket";
 ```
 
 You can subscribe to it by passing in the ARN.
 
-```js
+```js title="sst.config.ts"
 sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler");
 ```
 
 Subscribe to specific S3 events.
 
-```js
+```js title="sst.config.ts"
 sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler", {
   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
 });
@@ -475,7 +514,7 @@ sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler", {
 
 Subscribe to specific S3 events from a specific folder.
 
-```js
+```js title="sst.config.ts" {2}
 sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler", {
   filterPrefix: "images/",
   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
@@ -484,7 +523,7 @@ sst.aws.Bucket.subscribe(bucketArn, "src/subscriber.handler", {
 
 Customize the subscriber function.
 
-```js
+```js title="sst.config.ts"
 sst.aws.Bucket.subscribe(bucketArn, {
   handler: "src/subscriber.handler",
   timeout: "60 seconds",
@@ -504,7 +543,7 @@ sst.aws.Bucket.subscribe(bucketArn, {
 <InlineSection>
 **Default** All S3 events
 </InlineSection>
-The S3 event types that will trigger the notification.
+A list of S3 event types that'll trigger the notification.
 
 ```js
 {
@@ -521,7 +560,7 @@ The S3 event types that will trigger the notification.
 </Section>
 An S3 object key prefix that will trigger the notification.
 
-All the objects in the `images/` folder.
+To filter for all the objects in the `images/` folder.
 ```js
 {
   filterPrefix: "images/"
@@ -537,7 +576,7 @@ All the objects in the `images/` folder.
 </Section>
 An S3 object key suffix that will trigger the notification.
 
-All the objects with the `.jpg` suffix.
+To filter for all the objects with the `.jpg` suffix.
 ```js
 {
  filterSuffix: ".jpg"
@@ -560,7 +599,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">BucketNotificationArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketnotification/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketNotificationArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketnotification/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">BucketNotificationArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketnotification/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketNotificationArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/s3/bucketnotification/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the S3 Bucket Notification resource.

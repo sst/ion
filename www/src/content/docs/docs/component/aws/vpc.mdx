@@ -3,7 +3,7 @@ title: Vpc
 description: Reference doc for the `sst.aws.Vpc` component.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/vpc.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/components/aws/vpc.ts" */}
 
 import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../../src/components/tsdoc/Section.astro';
@@ -37,13 +37,13 @@ Gateway per month. Make sure to [review the pricing](https://aws.amazon.com/vpc/
 
 #### Create a VPC
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Vpc("MyVPC");
 ```
 
 #### Create it with 3 Availability Zones
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Vpc("MyVPC", {
   az: 3,
 });
@@ -114,7 +114,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">EipArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/eip/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EipArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/eip/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">EipArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/eip/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EipArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/eip/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the EC2 Elastic IP resource.
@@ -124,7 +124,7 @@ Transform the EC2 Elastic IP resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">InternetGatewayArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/internetgateway/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">InternetGatewayArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/internetgateway/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">InternetGatewayArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/internetgateway/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">InternetGatewayArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/internetgateway/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the EC2 Internet Gateway resource.
@@ -134,7 +134,7 @@ Transform the EC2 Internet Gateway resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">NatGatewayArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/natgateway/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">NatGatewayArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/natgateway/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">NatGatewayArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/natgateway/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">NatGatewayArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/natgateway/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the EC2 NAT Gateway resource.
@@ -144,7 +144,7 @@ Transform the EC2 NAT Gateway resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">RouteTableArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/routetable/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RouteTableArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/routetable/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">RouteTableArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/routetable/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RouteTableArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/routetable/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the EC2 route table resource for the private subnet.
@@ -154,7 +154,7 @@ Transform the EC2 route table resource for the private subnet.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">SubnetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/subnet/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">SubnetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/subnet/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">SubnetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/subnet/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">SubnetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/subnet/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the EC2 private subnet resource.
@@ -164,7 +164,7 @@ Transform the EC2 private subnet resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">RouteTableArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/routetable/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RouteTableArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/routetable/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">RouteTableArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/routetable/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RouteTableArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/routetable/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the EC2 route table resource for the public subnet.
@@ -174,7 +174,7 @@ Transform the EC2 route table resource for the public subnet.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">SubnetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/subnet/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">SubnetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/subnet/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">SubnetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/subnet/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">SubnetArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/subnet/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the EC2 public subnet resource.
@@ -184,7 +184,7 @@ Transform the EC2 public subnet resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">SecurityGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/securitygroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">SecurityGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/securitygroup/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">SecurityGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/securitygroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">SecurityGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/securitygroup/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the EC2 Security Group resource.
@@ -194,7 +194,7 @@ Transform the EC2 Security Group resource.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">VpcArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/vpc/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">VpcArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/vpc/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">VpcArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/vpc/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">VpcArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/ec2/vpc/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the EC2 VPC resource.
@@ -341,5 +341,41 @@ A list of public subnet IDs in the VPC.
 </InlineSection>
 </Section>
 A list of VPC security group IDs.
+</Segment>
+
+## Methods
+
+### static get
+<Segment>
+<Section type="signature">
+```ts
+Vpc.get(name, vpcID)
+```
+</Section>
+
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">name</code> <code class="primitive">string</code></p>
+The name of the component.
+- <p><code class="key">vpcID</code> <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
+The id of the VPC.
+</Section>
+
+<InlineSection>
+**Returns** [<code class="type">Vpc</code>](.)
+</InlineSection>
+Reference an existing VPC instance with the given VPC ID. This is useful when you
+created a VPC in one stage and you want to reference it in another stage.
+
+Imagine you created a VPC in the `dev` stage. And in your personal stage, ie. `frank`,
+instead of creating a new VPC, you want to reuse the same VPC from `dev`.
+
+```ts title="sst.config.ts"
+const vpc = $app.stage === "frank"
+  ? sst.aws.Vpc.get("MyVPC", "vpc-0be8fa4de860618bb")
+  : new sst.aws.Vpc("MyVPC");
+```
+
+Here `vpc-0be8fa4de860618bb` is the ID of the VPC created in the `dev` stage.
 </Segment>
 </div>

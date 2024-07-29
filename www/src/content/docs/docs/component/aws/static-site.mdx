@@ -3,7 +3,7 @@ title: StaticSite
 description: Reference doc for the `sst.aws.StaticSite` component.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/static-site.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/components/aws/static-site.ts" */}
 
 import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../../src/components/tsdoc/Section.astro';
@@ -21,7 +21,7 @@ It can also `build` your site by running your static site generator, like [Vite]
 
 Simply uploads the current directory as a static site.
 
-```js
+```js title="sst.config.ts"
 new sst.aws.StaticSite("MyWeb");
 ```
 
@@ -29,7 +29,7 @@ new sst.aws.StaticSite("MyWeb");
 
 Change the `path` that should be uploaded.
 
-```js
+```js title="sst.config.ts"
 new sst.aws.StaticSite("MyWeb", {
   path: "path/to/site"
 });
@@ -55,7 +55,7 @@ This will start the Vite dev server and pass in any environment variables that y
 
 Use [Vite](https://vitejs.dev) to deploy a React/Vue/Svelte/etc. SPA by specifying the `build` config.
 
-```js
+```js title="sst.config.ts"
 new sst.aws.StaticSite("MyWeb", {
   build: {
     command: "npm run build",
@@ -68,7 +68,7 @@ new sst.aws.StaticSite("MyWeb", {
 
 Use [Jekyll](https://jekyllrb.com) to deploy a static site.
 
-```js
+```js title="sst.config.ts"
 new sst.aws.StaticSite("MyWeb", {
   errorPage: "404.html",
   build: {
@@ -82,7 +82,7 @@ new sst.aws.StaticSite("MyWeb", {
 
 Use [Gatsby](https://www.gatsbyjs.com) to deploy a static site.
 
-```js
+```js title="sst.config.ts"
 new sst.aws.StaticSite("MyWeb", {
   errorPage: "404.html",
   build: {
@@ -96,7 +96,7 @@ new sst.aws.StaticSite("MyWeb", {
 
 Use [Angular](https://angular.dev) to deploy a SPA.
 
-```js
+```js title="sst.config.ts"
 new sst.aws.StaticSite("MyWeb", {
   build: {
     command: "ng build --output-path dist",
@@ -109,7 +109,7 @@ new sst.aws.StaticSite("MyWeb", {
 
 Set a custom domain for your site.
 
-```js {2}
+```js {2} title="sst.config.ts"
 new sst.aws.StaticSite("MyWeb", {
   domain: "my-app.com"
 });
@@ -119,7 +119,7 @@ new sst.aws.StaticSite("MyWeb", {
 
 Redirect `www.my-app.com` to `my-app.com`.
 
-```js {4}
+```js {4} title="sst.config.ts"
 new sst.aws.StaticSite("MyWeb", {
   domain: {
     name: "my-app.com",
@@ -138,7 +138,7 @@ For Vite, the types for the environment variables are also generated. This can b
 
 For some static site generators like Vite, [environment variables](https://vitejs.dev/guide/env-and-mode) prefixed with `VITE_` can be accessed in the browser.
 
-```ts {5-7}
+```ts {5-7} title="sst.config.ts"
 const bucket = new sst.aws.Bucket("MyBucket");
 
 new sst.aws.StaticSite("MyWeb", {
@@ -401,6 +401,76 @@ The path is relative to the root of your site, `path`.
   }
 }
 ```
+</Segment>
+### dev?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">autostart?</code>](#dev-autostart)</p>
+- <p>[<code class="key">command?</code>](#dev-command)</p>
+- <p>[<code class="key">directory?</code>](#dev-directory)</p>
+- <p>[<code class="key">url?</code>](#dev-url)</p>
+</Section>
+Configure the behavior in the `sst dev` mode.
+
+</Segment>
+<NestedTitle id="dev-autostart" Tag="h4" parent="dev.">autostart?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">true</code>
+</InlineSection>
+Whether to start the dev server automatically.
+
+</Segment>
+<NestedTitle id="dev-command" Tag="h4" parent="dev.">command?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** The `start` script in `package.json`
+</InlineSection>
+The command to run in the `sst dev` mode.
+
+</Segment>
+<NestedTitle id="dev-directory" Tag="h4" parent="dev.">directory?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"."</code>
+</InlineSection>
+Path to the directory to watch for changes.
+
+</Segment>
+<NestedTitle id="dev-url" Tag="h4" parent="dev.">url?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"http://url-unavailable-in-dev.mode"</code>
+</InlineSection>
+The URL in the `sst dev` mode.
+
 </Segment>
 ### domain?
 <Segment>
@@ -812,7 +882,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the Bucket resource used for uploading the assets.
@@ -822,7 +892,7 @@ Transform the Bucket resource used for uploading the assets.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the CloudFront CDN resource.
@@ -882,7 +952,7 @@ The underlying [resources](/docs/components/#nodes) this component creates.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">Bucket</code>](/docs/component/aws/bucket/)
+**Type** <code class="primitive">undefined</code><code class="symbol"> | </code>[<code class="type">Bucket</code>](/docs/component/aws/bucket/)
 </InlineSection>
 </Section>
 The Amazon S3 Bucket that stores the assets.
@@ -891,7 +961,7 @@ The Amazon S3 Bucket that stores the assets.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">Cdn</code>](/docs/component/aws/cdn/)
+**Type** <code class="primitive">undefined</code><code class="symbol"> | </code>[<code class="type">Cdn</code>](/docs/component/aws/cdn/)
 </InlineSection>
 </Section>
 The Amazon CloudFront CDN that serves the site.
@@ -912,16 +982,20 @@ Otherwise, it's the autogenerated CloudFront URL.
 
 ## SDK
 
-The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
+Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.
+
+---
 
 ### Links
+This is accessible through the `Resource` object in the [SDK](/docs/reference/sdk/#links).
 <Segment>
 <Section type="parameters">
 - <p><code class="key">url</code> <code class="primitive">string</code></p>
-The URL of the website.
 
-If the `domain` is set, this is the URL with the custom domain.
-Otherwise, it's the autogenerated CloudFront URL.
+  The URL of the website.
+  
+  If the `domain` is set, this is the URL with the custom domain.
+  Otherwise, it's the autogenerated CloudFront URL.
 </Section>
 </Segment>
 </div>

@@ -15,7 +15,16 @@ import InlineSection from '../../../../../src/components/tsdoc/InlineSection.ast
 <Section type="about">
 The CLI helps you manage your SST apps.
 
-```bash title="Install"
+If you are using SST as a part of your Node project, we recommend installing it locally.
+```bash "sst@ion"
+npm install sst@ion
+```
+:::caution
+You need the `@ion` tag to install the Ion version of SST.
+:::
+---
+If you are not using Node, you can install the CLI globally.
+```bash
 curl -fsSL https://ion.sst.dev/install | bash
 ```
 
@@ -28,7 +37,7 @@ To install a specific version.
 ```bash "VERSION=0.0.403"
 curl -fsSL https://ion.sst.dev/install | VERSION=0.0.403 bash
 ```
-
+---
 #### With a package manager
 
 You can also use a package manager to install the CLI.
@@ -51,19 +60,7 @@ You can also use a package manager to install the CLI.
   The CLI is available as downloadable binaries in the [releases](https://github.com/sst/ion/releases/latest). Download the `.deb` or `.rpm` and install with `sudo dpkg -i` and `sudo rpm -i`.
 
   For Arch Linux, it's available in the [aur](https://aur.archlinux.org/packages/sst-bin).
-
-- **Windows**
-
-  The CLI is available via [Scoop](https://scoop.sh/), and as a downloadable binary in the [releases](https://github.com/sst/ion/releases/latest).
-
-  ```bash
-  scoop bucket add sst https://github.com/sst/scoop-bucket.git
-  scoop install sst
-
-  # Upgrade
-  scoop update sst
-  ```
-
+---
 #### Usage
 
 Once installed you can run the commands using.
@@ -75,9 +72,9 @@ sst [command]
 The CLI takes a few global flags. For example, the deploy command takes the `--stage` flag
 
 ```bash
-sst deploy --stage=production
+sst deploy --stage production
 ```
-
+---
 #### Environment variables
 
 You can access any environment variables set in the CLI in your `sst.config.ts` file. For example, running:
@@ -103,7 +100,7 @@ Will let you access `ENV_VAR` through `process.env.ENV_VAR`.
 Set the stage the CLI is running on.
 
 ```bash frame="none"
-sst [command] --stage=production
+sst [command] --stage production
 ```
 
 The stage is a string that is used to prefix the resources in your app. This allows you to have multiple _environments_ of your app running in the same account.
@@ -150,7 +147,7 @@ Prints help for the given command.
 sst [command] --help
 ```
 
-Or for the global help.
+Or the global help.
 
 ```sh frame="none"
 sst --help
@@ -166,9 +163,21 @@ sst --help
 sst init
 ```
 </Section>
+
+<Section type="parameters">
+#### Flags
+- <p><code class="key">yes</code> <code class="primitive">boolean</code></p>
+Skip interactive confirmation for detected framework.
+</Section>
 Initialize a new project in the current directory. This will create a `sst.config.ts` and `sst install` your providers.
 
 If this is run in a Next.js, Remix, Astro, or SvelteKit project, it'll init SST in drop-in mode.
+
+To skip the interactive confirmation after detecting the framework.
+
+```bash frame="none"
+sst init --yes
+```
 </Segment>
 
 ### dev
@@ -187,33 +196,36 @@ The command to run
 
 <Section type="parameters">
 #### Flags
-- <p><code class="key">silent</code> <code class="primitive">boolean</code></p>
-Do not output function invocation logs
+- <p><code class="key">mode</code> <code class="symbol">&ldquo;</code><code class="primitive">basic</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">mosaic</code><code class="symbol">&rdquo;</code></p>
+Use mode=basic to turn off multiplexer
 </Section>
-Run your app in development mode. Optionally, pass in a command to start your frontend as well.
+Run your app in development mode.
 
 ```bash frame="none"
 sst dev
 ```
 
-You can also pass in a command to start your frontend with it.
+Optionally, pass in a command to start your frontend as well.
 
 ```bash frame="none"
 sst dev next dev
 ```
 
-To pass in a flag to your command, wrap it in quotes.
+To pass in a flag to your command, use --
 
 ```bash frame="none"
-sst dev "next dev --turbo"
+sst dev -- next dev --turbo
 ```
 
 Dev mode does a few things:
 
 1. Starts a local server
-2. Watches your app config and re-deploys your changes
+2. Watches your `sst.config.ts` and re-deploys changes
 3. Run your functions [Live](/docs/live/)
-4. If you pass in a `command`, it'll:
+4. Skip components that should be run locally
+   - `Service`
+   - Frontends like, `Nextjs`, `Remix`, `Astro`, `SvelteKit`, etc.
+5. If you pass in a `command`, it'll:
    - Load your [linked resources](/docs/linking) in the environment
    - And run the command
 
@@ -250,8 +262,32 @@ Deploy your application. By default, it deploys to your personal stage.
 Optionally, deploy your app to a specific stage.
 
 ```bash frame="none"
-sst deploy --stage=production
+sst deploy --stage production
 ```
+Optionally, deploy specific resources by passing in a list of their URNs.
+You can get the URN of a resource from the [Console](/docs/console/#resources).
+
+```bash frame="none"
+sst deploy --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets
+```
+</Segment>
+
+### diff
+<Segment>
+<Section type="signature">
+```sh frame="none"
+sst diff
+```
+</Section>
+
+<Section type="parameters">
+#### Flags
+- <p><code class="key">target</code> <code class="primitive"></code></p>
+Comma seperated list of target URNs.
+- <p><code class="key">dev</code> <code class="primitive">boolean</code></p>
+Compare to sst dev
+</Section>
+See what changes will be made
 </Segment>
 
 ### add
@@ -287,10 +323,7 @@ This command will:
 }
 ```
 
-You can use any provider listed in the [Pulumi Registry](https://www.pulumi.com/registry/).
-The name of a provider comes from the **URL of the provider** in the Pulumi Registry.
-
-For example, `https://www.pulumi.com/registry/packages/aws/` is the URL of the AWS Clasic provider. So the name of the provider here is `aws`.
+You can use any provider listed in the [Directory](/docs/providers#directory).
 
 :::note
 Running `sst add aws` above is the same as manually adding the provider to your config and running `sst install`.
@@ -377,7 +410,7 @@ sst secret set StripeSecret dev_123456789
 Optionally, set the secret in a specific stage.
 
 ```bash frame="none"
-sst secret set StripeSecret prod_123456789 --stage=production
+sst secret set StripeSecret prod_123456789 --stage production
 ```
 
 To set something like an RSA key, you can first save it to a file.
@@ -427,7 +460,7 @@ KEY_2=VALUE2
 Optionally, set the secrets in a specific stage.
 
 ```bash frame="none"
-sst secret load ./prod.env --stage=production
+sst secret load ./prod.env --stage production
 ```
 
 
@@ -455,7 +488,7 @@ sst secret remove StripeSecret
 Optionally, remove a secret in a specific stage.
 
 ```bash frame="none" frame="none"
-sst secret remove StripeSecret --stage=production
+sst secret remove StripeSecret --stage production
 ```
 </Segment>
 <NestedTitle id="secret-list" Tag="h4" parent="secret ">list</NestedTitle>
@@ -470,7 +503,7 @@ Lists all the secrets.
 Optionally, list the secrets in a specific stage.
 
 ```bash frame="none" frame="none"
-sst secret list --stage=production
+sst secret list --stage production
 ```
 </Segment>
 
@@ -555,7 +588,14 @@ This does not remove the SST _state_ and _bootstrap_ resources in your account a
 Optionally, remove your app from a specific stage.
 
 ```bash frame="none" frame="none"
-sst remove --stage=production
+sst remove --stage production
+```
+```
+Optionally, remove specific resources by passing in a list of their URNs.
+You can get the URN of a resource from the [Console](/docs/console/#resources).
+
+```bash frame="none"
+sst remove --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets
 ```
 </Segment>
 
@@ -662,6 +702,12 @@ Compares your local state with the state of the resources in the cloud provider.
 :::note
 The `sst refresh` does not make changes to the resources in the cloud provider.
 :::
+Optionally, refresh specific resources by passing in a list of their URNs.
+You can get the URN of a resource from the [Console](/docs/console/#resources).
+
+```bash frame="none"
+sst refresh --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets
+```
 
 This is useful for cases where you want to ensure that your local state is in sync with your cloud provider. [Learn more about how state works](/docs/providers/#how-state-works).
 </Segment>

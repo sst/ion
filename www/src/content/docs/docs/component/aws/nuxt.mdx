@@ -3,7 +3,7 @@ title: Nuxt
 description: Reference doc for the `sst.aws.Nuxt` component.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/nuxt.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/components/aws/nuxt.ts" */}
 
 import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../../src/components/tsdoc/Section.astro';
@@ -19,7 +19,7 @@ The `Nuxt` component lets you deploy a [Nuxt](https://nuxt.com) app to AWS.
 
 Deploy a Nuxt app that's in the project root.
 
-```js
+```js title="sst.config.ts"
 new sst.aws.Nuxt("MyWeb");
 ```
 
@@ -27,7 +27,7 @@ new sst.aws.Nuxt("MyWeb");
 
 Deploys the Nuxt app in the `my-nuxt-app/` directory.
 
-```js {2}
+```js {2} title="sst.config.ts"
 new sst.aws.Nuxt("MyWeb", {
   path: "my-nuxt-app/"
 });
@@ -37,7 +37,7 @@ new sst.aws.Nuxt("MyWeb", {
 
 Set a custom domain for your Nuxt app.
 
-```js {2}
+```js {2} title="sst.config.ts"
 new sst.aws.Nuxt("MyWeb", {
   domain: "my-app.com"
 });
@@ -47,7 +47,7 @@ new sst.aws.Nuxt("MyWeb", {
 
 Redirect `www.my-app.com` to `my-app.com`.
 
-```js {4}
+```js {4} title="sst.config.ts"
 new sst.aws.Nuxt("MyWeb", {
   domain: {
     name: "my-app.com",
@@ -61,7 +61,7 @@ new sst.aws.Nuxt("MyWeb", {
 [Link resources](/docs/linking/) to your Nuxt app. This will grant permissions
 to the resources and allow you to access it in your app.
 
-```ts {4}
+```ts {4} title="sst.config.ts"
 const bucket = new sst.aws.Bucket("MyBucket");
 
 new sst.aws.Nuxt("MyWeb", {
@@ -72,7 +72,7 @@ new sst.aws.Nuxt("MyWeb", {
 You can use the [SDK](/docs/reference/sdk/) to access the linked resources
 in your Nuxt app.
 
-```ts title="src/app.tsx"
+```ts title="server/api/index.ts"
 import { Resource } from "sst";
 
 console.log(Resource.MyBucket.name);
@@ -299,6 +299,103 @@ If you want to use a different build command.
   buildCommand: "yarn build"
 }
 ```
+</Segment>
+### cachePolicy?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** A new cache plolicy is created
+</InlineSection>
+Configure the Nuxt app to use an existing CloudFront cache policy.
+
+:::note
+CloudFront has a limit of 20 cache policies per account, though you can request a limit
+increase.
+:::
+
+By default, a new cache policy is created for it. This allows you to reuse an existing
+policy instead of creating a new one.
+
+```js
+{
+  cachePolicy: "658327ea-f89d-4fab-a63d-7e88639e58f6"
+}
+```
+</Segment>
+### dev?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">autostart?</code>](#dev-autostart)</p>
+- <p>[<code class="key">command?</code>](#dev-command)</p>
+- <p>[<code class="key">directory?</code>](#dev-directory)</p>
+- <p>[<code class="key">url?</code>](#dev-url)</p>
+</Section>
+Configure the behavior in the `sst dev` mode.
+
+</Segment>
+<NestedTitle id="dev-autostart" Tag="h4" parent="dev.">autostart?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">true</code>
+</InlineSection>
+Whether to start the dev server automatically.
+
+</Segment>
+<NestedTitle id="dev-command" Tag="h4" parent="dev.">command?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** The `start` script in `package.json`
+</InlineSection>
+The command to run in the `sst dev` mode.
+
+</Segment>
+<NestedTitle id="dev-directory" Tag="h4" parent="dev.">directory?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"."</code>
+</InlineSection>
+Path to the directory to watch for changes.
+
+</Segment>
+<NestedTitle id="dev-url" Tag="h4" parent="dev.">url?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"http://url-unavailable-in-dev.mode"</code>
+</InlineSection>
+The URL in the `sst dev` mode.
+
 </Segment>
 ### domain?
 <Segment>
@@ -749,6 +846,66 @@ The resourcess specified using the [IAM ARN format](https://docs.aws.amazon.com/
 }
 ```
 </Segment>
+### server?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">architecture?</code>](#server-architecture)</p>
+- <p>[<code class="key">memory?</code>](#server-memory)</p>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">&lcub;architecture: "x86_64", memory: "1024 MB"&rcub;</code>
+</InlineSection>
+Configure the Lambda function used for server.
+
+</Segment>
+<NestedTitle id="server-architecture" Tag="h4" parent="server.">architecture?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="symbol">&ldquo;</code><code class="primitive">x86_64</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">arm64</code><code class="symbol">&rdquo;</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"x86_64"</code>
+</InlineSection>
+The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
+of the server function.
+
+```js
+{
+  server: {
+    architecture: "arm64"
+  }
+}
+```
+</Segment>
+<NestedTitle id="server-memory" Tag="h4" parent="server.">memory?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="symbol">&ldquo;</code><code class="primitive">$\{number\} MB</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">$\{number\} GB</code><code class="symbol">&rdquo;</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"1024 MB"</code>
+</InlineSection>
+The amount of memory allocated to the server function.
+Takes values between 128 MB and 10240 MB in 1 MB increments.
+
+```js
+{
+  server: {
+    memory: "2048 MB"
+  }
+}
+```
+</Segment>
 ### transform?
 <Segment>
 <Section type="parameters">
@@ -757,6 +914,7 @@ The resourcess specified using the [IAM ARN format](https://docs.aws.amazon.com/
 </InlineSection>
 - <p>[<code class="key">assets?</code>](#transform-assets)</p>
 - <p>[<code class="key">cdn?</code>](#transform-cdn)</p>
+- <p>[<code class="key">imageOptimization?</code>](#transform-imageoptimization)</p>
 - <p>[<code class="key">server?</code>](#transform-server)</p>
 </Section>
 [Transform](/docs/components#transform) how this component creates its underlying
@@ -767,7 +925,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">BucketArgs</code>](/docs/component/aws/bucket/#bucketargs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the Bucket resource used for uploading the assets.
@@ -777,17 +935,27 @@ Transform the Bucket resource used for uploading the assets.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">CdnArgs</code>](/docs/component/aws/cdn/#cdnargs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the CloudFront CDN resource.
+
+</Segment>
+<NestedTitle id="transform-imageoptimization" Tag="h4" parent="transform.">imageOptimization?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
+</InlineSection>
+</Section>
+Transform the image optimization Function resource.
 
 </Segment>
 <NestedTitle id="transform-server" Tag="h4" parent="transform.">server?</NestedTitle>
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">FunctionArgs</code>](/docs/component/aws/function/#functionargs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the server Function resource.
@@ -898,7 +1066,7 @@ The AWS Lambda server function that renders the site.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 The URL of the Nuxt app.
@@ -909,16 +1077,20 @@ Otherwise, it's the autogenerated CloudFront URL.
 
 ## SDK
 
-The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
+Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.
+
+---
 
 ### Links
+This is accessible through the `Resource` object in the [SDK](/docs/reference/sdk/#links).
 <Segment>
 <Section type="parameters">
-- <p><code class="key">url</code> <code class="primitive">string</code><code class="symbol"> | </code><code class="primitive">string</code></p>
-The URL of the Nuxt app.
+- <p><code class="key">url</code> <code class="primitive">string</code></p>
 
-If the `domain` is set, this is the URL with the custom domain.
-Otherwise, it's the autogenerated CloudFront URL.
+  The URL of the Nuxt app.
+  
+  If the `domain` is set, this is the URL with the custom domain.
+  Otherwise, it's the autogenerated CloudFront URL.
 </Section>
 </Segment>
 </div>

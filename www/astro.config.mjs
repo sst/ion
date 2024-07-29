@@ -6,8 +6,12 @@ import sst from "astro-sst";
 
 const sidebar = [
   {
-    label: "What is Ion",
+    label: "Intro",
     link: "/docs/",
+  },
+  {
+    label: "Workflow",
+    link: "/docs/workflow/",
   },
   {
     label: "Get Started",
@@ -38,10 +42,19 @@ const sidebar = [
     label: "Concepts",
     items: [
       { label: "Live", link: "/docs/live/" },
+      { label: "State", link: "/docs/state/" },
       { label: "Linking", link: "/docs/linking/" },
       { label: "Console", link: "/docs/console/" },
       { label: "Providers", link: "/docs/providers/" },
       { label: "Components", link: "/docs/components/" },
+    ],
+  },
+  {
+    label: "How to",
+    items: [
+      // { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
+      // { label: "Import Resources", link: "/docs/import-resources/" },
+      { label: "Custom Domains", link: "/docs/custom-domains/" },
     ],
   },
   {
@@ -108,14 +121,7 @@ const sidebar = [
       { label: "Global", link: "/docs/reference/global/" },
       { label: "Config", link: "/docs/reference/config/" },
       { label: "Secret", link: "/docs/component/secret/" },
-    ],
-  },
-  {
-    label: "How to",
-    items: [
-      // { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
-      // { label: "Import Resources", link: "/docs/import-resources/" },
-      { label: "Custom Domains", link: "/docs/custom-domains/" },
+      { label: "Linkable", link: "/docs/component/linkable/" },
     ],
   },
   {
@@ -139,6 +145,13 @@ const sidebar = [
       { label: "Cdn", link: "/docs/component/aws/cdn/" },
       { label: "Service", link: "/docs/component/aws/service/" },
       {
+        label: "Linkable",
+        items: [
+          { label: "binding", link: "/docs/component/cloudflare/binding/" },
+          { label: "permission", link: "/docs/component/aws/permission/" },
+        ],
+      },
+      {
         label: "AppSyncResolver",
         link: "/docs/component/aws/app-sync-resolver/",
       },
@@ -153,6 +166,10 @@ const sidebar = [
       {
         label: "CognitoUserPoolClient",
         link: "/docs/component/aws/cognito-user-pool-client/",
+      },
+      {
+        label: "ApiGatewayV2UrlRoute",
+        link: "/docs/component/aws/apigatewayv2-url-route/",
       },
       {
         label: "ApiGatewayV1Authorizer",

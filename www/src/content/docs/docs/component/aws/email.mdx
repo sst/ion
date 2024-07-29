@@ -3,7 +3,7 @@ title: Email
 description: Reference doc for the `sst.aws.Email` component.
 ---
 
-{/* DO NOT EDIT. AUTO-GENERATED FROM "pkg/platform/src/components/aws/email.ts" */}
+{/* DO NOT EDIT. AUTO-GENERATED FROM "platform/src/components/aws/email.ts" */}
 
 import Segment from '../../../../../../src/components/tsdoc/Segment.astro';
 import Section from '../../../../../../src/components/tsdoc/Section.astro';
@@ -31,7 +31,7 @@ quota. To remove these restrictions, you need to [request production access](htt
 
 For using an email address as the sender, you need to verify the email address.
 
-```ts
+```ts title="sst.config.ts"
 const email = new sst.aws.Email("MyEmail", {
   sender: "spongebob@example.com",
 });
@@ -41,7 +41,7 @@ const email = new sst.aws.Email("MyEmail", {
 
 When you use a domain as the sender, you'll need to verify that you own the domain.
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Email("MyEmail", {
   sender: "example.com"
 });
@@ -49,7 +49,7 @@ new sst.aws.Email("MyEmail", {
 
 #### Configuring DMARC
 
-```ts
+```ts title="sst.config.ts"
 new sst.aws.Email("MyEmail", {
   sender: "example.com",
   dmarc: "v=DMARC1; p=quarantine; adkim=s; aspf=s;"
@@ -60,7 +60,7 @@ new sst.aws.Email("MyEmail", {
 
 You can link it to a function or your Next.js app to send emails.
 
-```ts {3}
+```ts {3} title="sst.config.ts"
 const api = new sst.aws.Function("MyApi", {
   handler: "sender.handler",
   link: [email]
@@ -233,7 +233,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">EmailIdentityArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sesv2/emailidentity/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EmailIdentityArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sesv2/emailidentity/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">EmailIdentityArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sesv2/emailidentity/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">EmailIdentityArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/sesv2/emailidentity/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the SES identity resource.
@@ -274,13 +274,53 @@ The sender email address or domain name.
 
 ## SDK
 
-The following are accessible through the [SDK](/docs/reference/sdk/) at runtime.
+Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.
+
+---
 
 ### Links
+This is accessible through the `Resource` object in the [SDK](/docs/reference/sdk/#links).
 <Segment>
 <Section type="parameters">
 - <p><code class="key">sender</code> <code class="primitive">string</code></p>
-The sender email address or domain name.
+
+  The sender email address or domain name.
 </Section>
+</Segment>
+
+## Methods
+
+### static get
+<Segment>
+<Section type="signature">
+```ts
+Email.get(name, sender)
+```
+</Section>
+
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">name</code> <code class="primitive">string</code></p>
+The name of the component.
+- <p><code class="key">sender</code> <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
+The email address or domain name of the SES identity.
+</Section>
+
+<InlineSection>
+**Returns** [<code class="type">Email</code>](.)
+</InlineSection>
+Reference an existing Email component with the given Amazon SES identity. This is useful
+when you created an SES identity in one stage and you want to reference it in another stage.
+
+Imagine you created an Email component in the `dev` stage. And in your personal stage,
+ie. `frank`, instead of creating a new sender, you want to reuse the same sender from `dev`.
+
+```ts title="sst.config.ts"
+const email = $app.stage === "frank"
+  ? sst.aws.Email.get("MyEmail", "spongebob@example.com")
+  : new sst.aws.Email("MyEmail", {
+      sender: "spongebob@example.com",
+    });
+```
 </Segment>
 </div>

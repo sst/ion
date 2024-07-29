@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -20,19 +19,34 @@ import (
 	"github.com/fatih/color"
 	"github.com/joho/godotenv"
 	"github.com/sst/ion/cmd/sst/cli"
-	"github.com/sst/ion/cmd/sst/mosaic"
-	"github.com/sst/ion/cmd/sst/ui"
+	"github.com/sst/ion/cmd/sst/mosaic/server"
+	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
 	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/project/provider"
-	"github.com/sst/ion/pkg/server"
 	"github.com/sst/ion/pkg/telemetry"
 )
 
 var version = "dev"
 
 func main() {
+	// check if node_modules/.bin/sst exists
+	nodeModulesBinPath := filepath.Join("node_modules", ".bin", "sst")
+	if _, err := os.Stat(nodeModulesBinPath); err == nil && os.Getenv("npm_config_user_agent") == "" && os.Getenv("SST_SKIP_LOCAL") != "true" && version != "dev" {
+		// forward command to node_modules/.bin/sst
+		fmt.Println(ui.TEXT_WARNING_BOLD.Render("Warning: ") + "You are using a global installation of SST but you also have a local installation specified in your package.json. The local installation will be used but you should typically run it through your package manager.")
+		cmd := exec.Command(nodeModulesBinPath, os.Args[1:]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		cmd.Env = os.Environ()
+		cmd.Env = append(cmd.Env, "SST_SKIP_LOCAL=true")
+		if err := cmd.Run(); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	telemetry.SetVersion(version)
 	defer telemetry.Close()
 	telemetry.Track("cli.start", map[string]interface{}{
@@ -77,7 +91,6 @@ func run() error {
 	}()
 	c, err := cli.New(ctx, cancel, root, version)
 	if err != nil {
-		c.PrintHelp()
 		return err
 	}
 	spin := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
@@ -107,7 +120,16 @@ var root = &cli.Command{
 		Long: strings.Join([]string{
 			"The CLI helps you manage your SST apps.",
 			"",
-			"```bash title=\"Install\"",
+			"If you are using SST as a part of your Node project, we recommend installing it locally.",
+			"```bash \"sst@ion\"",
+			"npm install sst@ion",
+			"```",
+			":::caution",
+			"You need the `@ion` tag to install the Ion version of SST.",
+			":::",
+			"---",
+			"If you are not using Node, you can install the CLI globally.",
+			"```bash",
 			"curl -fsSL https://ion.sst.dev/install | bash",
 			"```",
 			"",
@@ -120,7 +142,7 @@ var root = &cli.Command{
 			"```bash \"VERSION=0.0.403\"",
 			"curl -fsSL https://ion.sst.dev/install | VERSION=0.0.403 bash",
 			"```",
-			"",
+			"---",
 			"#### With a package manager",
 			"",
 			"You can also use a package manager to install the CLI.",
@@ -143,19 +165,7 @@ var root = &cli.Command{
 			"  The CLI is available as downloadable binaries in the [releases](https://github.com/sst/ion/releases/latest). Download the `.deb` or `.rpm` and install with `sudo dpkg -i` and `sudo rpm -i`.",
 			"",
 			"  For Arch Linux, it's available in the [aur](https://aur.archlinux.org/packages/sst-bin).",
-			"",
-			"- **Windows**",
-			"",
-			"  The CLI is available via [Scoop](https://scoop.sh/), and as a downloadable binary in the [releases](https://github.com/sst/ion/releases/latest).",
-			"",
-			"  ```bash",
-			"  scoop bucket add sst https://github.com/sst/scoop-bucket.git",
-			"  scoop install sst",
-			"",
-			"  # Upgrade",
-			"  scoop update sst",
-			"  ```",
-			"",
+			"---",
 			"#### Usage",
 			"",
 			"Once installed you can run the commands using.",
@@ -167,9 +177,9 @@ var root = &cli.Command{
 			"The CLI takes a few global flags. For example, the deploy command takes the `--stage` flag",
 			"",
 			"```bash",
-			"sst deploy --stage=production",
+			"sst deploy --stage production",
 			"```",
-			"",
+			"---",
 			"#### Environment variables",
 			"",
 			"You can access any environment variables set in the CLI in your `sst.config.ts` file. For example, running:",
@@ -191,7 +201,7 @@ var root = &cli.Command{
 					"Set the stage the CLI is running on.",
 					"",
 					"```bash frame=\"none\"",
-					"sst [command] --stage=production",
+					"sst [command] --stage production",
 					"```",
 					"",
 					"The stage is a string that is used to prefix the resources in your app. This allows you to have multiple _environments_ of your app running in the same account.",
@@ -238,7 +248,7 @@ var root = &cli.Command{
 					"sst [command] --help",
 					"```",
 					"",
-					"Or for the global help.",
+					"Or the global help.",
 					"",
 					"```sh frame=\"none\"",
 					"sst --help",
@@ -256,49 +266,73 @@ var root = &cli.Command{
 					"Initialize a new project in the current directory. This will create a `sst.config.ts` and `sst install` your providers.",
 					"",
 					"If this is run in a Next.js, Remix, Astro, or SvelteKit project, it'll init SST in drop-in mode.",
+					"",
+					"To skip the interactive confirmation after detecting the framework.",
+					"",
+					"```bash frame=\"none\"",
+					"sst init --yes",
+					"```",
 				}, "\n"),
 			},
 			Run: CmdInit,
+			Flags: []cli.Flag{
+				{
+					Name: "yes",
+					Type: "bool",
+					Description: cli.Description{
+						Short: "Skip interactive confirmation",
+						Long:  "Skip interactive confirmation for detected framework.",
+					},
+				},
+			},
 		},
 		{
-			Name:   "mosaic",
+			Name:   "ui",
 			Hidden: true,
-			Run:    mosaic.CmdMosaic,
-		},
-		{
-			Name:   "mosaic-deploy",
-			Hidden: true,
-			Run:    mosaic.CmdMosaicDeploy,
+			Run:    CmdUI,
+			Flags: []cli.Flag{
+				{
+					Name: "filter",
+					Type: "string",
+					Description: cli.Description{
+						Short: "Filter events",
+						Long:  "Filter events.",
+					},
+				},
+			},
 		},
 		{
 			Name: "dev",
 			Description: cli.Description{
 				Short: "Run in development mode",
 				Long: strings.Join([]string{
-					"Run your app in development mode. Optionally, pass in a command to start your frontend as well.",
+					"Run your app in development mode.",
 					"",
 					"```bash frame=\"none\"",
 					"sst dev",
 					"```",
 					"",
-					"You can also pass in a command to start your frontend with it.",
+					"Optionally, pass in a command to start your frontend as well.",
 					"",
 					"```bash frame=\"none\"",
 					"sst dev next dev",
 					"```",
 					"",
-					"To pass in a flag to your command, wrap it in quotes.",
+					"To pass in a flag to your command, use --",
 					"",
 					"```bash frame=\"none\"",
-					"sst dev \"next dev --turbo\"",
+					"sst dev -- next dev --turbo",
 					"```",
 					"",
 					"Dev mode does a few things:",
 					"",
 					"1. Starts a local server",
-					"2. Watches your app config and re-deploys your changes",
+					"2. Watches your `sst.config.ts` and re-deploys changes",
 					"3. Run your functions [Live](/docs/live/)",
-					"4. If you pass in a `command`, it'll:",
+					"4. Skip components that should be run locally",
+					"   - `Service`",
+					"   - Frontends like, `Nextjs`, `Remix`, `Astro`, `SvelteKit`, etc.",
+					"5. If you pass in a `command`, it'll:",
 					"   - Load your [linked resources](/docs/linking) in the environment",
 					"   - And run the command",
 					"",
@@ -319,11 +353,11 @@ var root = &cli.Command{
 			},
 			Flags: []cli.Flag{
 				{
-					Name: "silent",
-					Type: "bool",
+					Name: "mode",
+					Type: "[basic,mosaic]",
 					Description: cli.Description{
-						Short: "Do not output function invocation logs",
-						Long:  "Do not output function invocation logs",
+						Short: "Use mode=basic to turn off multiplexer",
+						Long:  "Use mode=basic to turn off multiplexer",
 					},
 				},
 			},
@@ -339,23 +373,23 @@ var root = &cli.Command{
 				{
 					Content: "sst dev",
 					Description: cli.Description{
-						Short: "",
+						Short: "Brings up your entire app - should be all you need",
 					},
 				},
 				{
 					Content: "sst dev next dev",
 					Description: cli.Description{
-						Short: "Start dev mode for SST and Next.js",
+						Short: "Start a command connected to a running sst dev session",
 					},
 				},
 				{
-					Content: "sst dev \"next dev --turbo\"",
+					Content: "sst dev -- next dev --turbo",
 					Description: cli.Description{
-						Short: "When passing flags wrap command in quotes",
+						Short: "Use -- to pass flags to the command",
 					},
 				},
 			},
-			Run: CmdDev,
+			Run: CmdMosaic,
 		},
 		{
 			Name: "deploy",
@@ -367,7 +401,13 @@ var root = &cli.Command{
 					"Optionally, deploy your app to a specific stage.",
 					"",
 					"```bash frame=\"none\"",
-					"sst deploy --stage=production",
+					"sst deploy --stage production",
+					"```",
+					"Optionally, deploy specific resources by passing in a list of their URNs.",
+					"You can get the URN of a resource from the [Console](/docs/console/#resources).",
+					"",
+					"```bash frame=\"none\"",
+					"sst deploy --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets",
 					"```",
 				}, "\n"),
 			},
@@ -382,36 +422,48 @@ var root = &cli.Command{
 			},
 			Examples: []cli.Example{
 				{
-					Content: "sst deploy --stage=production",
+					Content: "sst deploy --stage production",
 					Description: cli.Description{
 						Short: "Deploy to production",
 					},
 				},
 			},
-			Run: func(c *cli.Cli) error {
-				p, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer p.Cleanup()
-
-				ui := ui.New(c.Context, ui.ProgressModeDeploy)
-				defer ui.Destroy()
-				ui.Header(version, p.App().Name, p.App().Stage)
-				target := []string{}
-				if c.String("target") != "" {
-					target = strings.Split(c.String("target"), ",")
-				}
-				err = p.Stack.Run(c.Context, &project.StackInput{
-					Command: "deploy",
-					OnEvent: ui.StackEvent,
-					Target:  target,
-				})
-				if err != nil {
-					return err
-				}
-				return nil
+			Run: CmdDeploy,
+		},
+		{
+			Name: "diff",
+			Description: cli.Description{
+				Short: "See what changes will be made",
+				Long:  strings.Join([]string{}, "\n"),
 			},
+			Flags: []cli.Flag{
+				{
+					Name: "target",
+					Description: cli.Description{
+						Short: "Comma seperated list of target URNs",
+						Long:  "Comma seperated list of target URNs.",
+					},
+				},
+				{
+					Name: "dev",
+					Type: "bool",
+					Description: cli.Description{
+						Short: "Compare to sst dev",
+						Long: strings.Join([]string{
+							"Compare to sst dev",
+						}, "\n"),
+					},
+				},
+			},
+			Examples: []cli.Example{
+				{
+					Content: "sst diff --stage production",
+					Description: cli.Description{
+						Short: "See changes to production",
+					},
+				},
+			},
+			Run: CmdDiff,
 		},
 		{
 			Name: "add",
@@ -438,10 +490,7 @@ var root = &cli.Command{
 					"}",
 					"```",
 					"",
-					"You can use any provider listed in the [Pulumi Registry](https://www.pulumi.com/registry/).",
-					"The name of a provider comes from the **URL of the provider** in the Pulumi Registry.",
-					"",
-					"For example, `https://www.pulumi.com/registry/packages/aws/` is the URL of the AWS Clasic provider. So the name of the provider here is `aws`.",
+					"You can use any provider listed in the [Directory](/docs/providers#directory).",
 					"",
 					":::note",
 					"Running `sst add aws` above is the same as manually adding the provider to your config and running `sst install`.",
@@ -613,7 +662,7 @@ var root = &cli.Command{
 							"Optionally, set the secret in a specific stage.",
 							"",
 							"```bash frame=\"none\"",
-							"sst secret set StripeSecret prod_123456789 --stage=production",
+							"sst secret set StripeSecret prod_123456789 --stage production",
 							"```",
 							"",
 							"To set something like an RSA key, you can first save it to a file.",
@@ -668,7 +717,7 @@ var root = &cli.Command{
 							},
 						},
 						{
-							Content: "sst secret set StripeSecret productionsecret --stage=production",
+							Content: "sst secret set StripeSecret productionsecret --stage production",
 							Description: cli.Description{
 								Short: "Set the StripeSecret in production",
 							},
@@ -697,7 +746,7 @@ var root = &cli.Command{
 							"Optionally, set the secrets in a specific stage.",
 							"",
 							"```bash frame=\"none\"",
-							"sst secret load ./prod.env --stage=production",
+							"sst secret load ./prod.env --stage production",
 							"```",
 							"",
 							"",
@@ -721,7 +770,7 @@ var root = &cli.Command{
 							},
 						},
 						{
-							Content: "sst secret load ./prod.env --stage=production",
+							Content: "sst secret load ./prod.env --stage production",
 							Description: cli.Description{
 								Short: "Set secrets for production",
 							},
@@ -745,7 +794,7 @@ var root = &cli.Command{
 							"Optionally, remove a secret in a specific stage.",
 							"",
 							"```bash frame=\"none\" frame=\"none\"",
-							"sst secret remove StripeSecret --stage=production",
+							"sst secret remove StripeSecret --stage production",
 							"```",
 						}, "\n"),
 					},
@@ -767,7 +816,7 @@ var root = &cli.Command{
 							},
 						},
 						{
-							Content: "sst secret remove StripeSecret --stage=production",
+							Content: "sst secret remove StripeSecret --stage production",
 							Description: cli.Description{
 								Short: "Remove the StripeSecret in production",
 							},
@@ -796,9 +845,9 @@ var root = &cli.Command{
 						if err != nil {
 							return util.NewReadableError(err, "Could not set secret")
 						}
-						addr, _ := server.GetExisting(p.PathConfig(), p.App().Stage)
-						if addr != "" {
-							http.Post("http://"+addr+"/api/deploy", "application/json", strings.NewReader("{}"))
+						url, _ := server.Discover(p.PathConfig(), p.App().Stage)
+						if url != "" {
+							server.Deploy(c.Context, url)
 						}
 						ui.Success(fmt.Sprintf("Removed \"%s\" for stage \"%s\"", key, p.App().Stage))
 						return nil
@@ -814,13 +863,13 @@ var root = &cli.Command{
 							"Optionally, list the secrets in a specific stage.",
 							"",
 							"```bash frame=\"none\" frame=\"none\"",
-							"sst secret list --stage=production",
+							"sst secret list --stage production",
 							"```",
 						}, "\n"),
 					},
 					Examples: []cli.Example{
 						{
-							Content: "sst secret list --stage=production",
+							Content: "sst secret list --stage production",
 							Description: cli.Description{
 								Short: "List the secrets in production",
 							},
@@ -987,7 +1036,14 @@ var root = &cli.Command{
 					"Optionally, remove your app from a specific stage.",
 					"",
 					"```bash frame=\"none\" frame=\"none\"",
-					"sst remove --stage=production",
+					"sst remove --stage production",
+					"```",
+					"```",
+					"Optionally, remove specific resources by passing in a list of their URNs.",
+					"You can get the URN of a resource from the [Console](/docs/console/#resources).",
+					"",
+					"```bash frame=\"none\"",
+					"sst remove --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets",
 					"```",
 				}, "\n"),
 			},
@@ -1001,29 +1057,7 @@ var root = &cli.Command{
 					},
 				},
 			},
-			Run: func(c *cli.Cli) error {
-				p, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer p.Cleanup()
-				ui := ui.New(c.Context, ui.ProgressModeRemove)
-				defer ui.Destroy()
-				ui.Header(version, p.App().Name, p.App().Stage)
-				target := []string{}
-				if c.String("target") != "" {
-					target = strings.Split(c.String("target"), ",")
-				}
-				err = p.Stack.Run(c.Context, &project.StackInput{
-					Command: "remove",
-					OnEvent: ui.StackEvent,
-					Target:  target,
-				})
-				if err != nil {
-					return err
-				}
-				return nil
-			},
+			Run: CmdRemove,
 		},
 		{
 			Name: "unlock",
@@ -1044,7 +1078,7 @@ var root = &cli.Command{
 				}
 				defer p.Cleanup()
 
-				err = p.Stack.Cancel()
+				err = p.Cancel()
 				if err != nil {
 					return err
 				}
@@ -1086,25 +1120,7 @@ var root = &cli.Command{
 					},
 				},
 			},
-			Run: func(cli *cli.Cli) error {
-				newVersion, err := global.Upgrade(
-					version,
-					cli.Positional(0),
-				)
-				if err != nil {
-					return err
-				}
-				newVersion = strings.TrimPrefix(newVersion, "v")
-
-				color.New(color.FgGreen, color.Bold).Print(ui.IconCheck)
-				if newVersion == version {
-					color.New(color.FgWhite).Printf("  Already on latest %s\n", version)
-				} else {
-					color.New(color.FgWhite).Printf("  Upgraded %s ➜ ", version)
-					color.New(color.FgCyan, color.Bold).Println(newVersion)
-				}
-				return nil
-			},
+			Run: CmdUpgrade,
 		},
 		{
 			Name: "telemetry", Description: cli.Description{
@@ -1144,94 +1160,6 @@ var root = &cli.Command{
 			},
 		},
 		{
-			Name:   "import-unstable",
-			Hidden: true,
-			Description: cli.Description{
-				Short: "(unstable)Import existing resource",
-			},
-			Args: []cli.Argument{
-				{
-					Name:     "type",
-					Required: true,
-					Description: cli.Description{
-						Short: "The type of the resource",
-					},
-				},
-				{
-					Name:     "name",
-					Required: true,
-					Description: cli.Description{
-						Short: "The name of the resource",
-					},
-				},
-				{
-					Name:     "id",
-					Required: true,
-					Description: cli.Description{
-						Short: "The id of the resource",
-					},
-				},
-			},
-			Flags: []cli.Flag{
-				{
-					Type: "string",
-					Name: "parent",
-					Description: cli.Description{
-						Short: "The parent resource",
-					},
-				},
-			},
-			Run: func(c *cli.Cli) error {
-				resourceType := c.Positional(0)
-				name := c.Positional(1)
-				id := c.Positional(2)
-				parent := c.String("parent")
-
-				p, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer p.Cleanup()
-
-				err = p.Stack.Import(c.Context, &project.ImportOptions{
-					Type:   resourceType,
-					Name:   name,
-					ID:     id,
-					Parent: parent,
-				})
-				if err != nil {
-					return err
-				}
-
-				return nil
-			},
-		},
-		{
-			Name:   "server",
-			Hidden: true,
-			Run: func(c *cli.Cli) error {
-				project, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer project.Cleanup()
-
-				s, err := server.New(project)
-				if err != nil {
-					return err
-				}
-
-				err = s.Start(c.Context)
-				if err != nil {
-					if err == server.ErrServerAlreadyRunning {
-						return util.NewReadableError(err, "Another instance of SST is already running")
-					}
-					return err
-				}
-				return nil
-			},
-		},
-		{
 			Name:   "introspect",
 			Hidden: true,
 			Run: func(cli *cli.Cli) error {
@@ -1258,6 +1186,12 @@ var root = &cli.Command{
 					":::note",
 					"The `sst refresh` does not make changes to the resources in the cloud provider.",
 					":::",
+					"Optionally, refresh specific resources by passing in a list of their URNs.",
+					"You can get the URN of a resource from the [Console](/docs/console/#resources).",
+					"",
+					"```bash frame=\"none\"",
+					"sst refresh --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets",
+					"```",
 					"",
 					"This is useful for cases where you want to ensure that your local state is in sync with your cloud provider. [Learn more about how state works](/docs/providers/#how-state-works).",
 				}, "\n"),
@@ -1272,29 +1206,7 @@ var root = &cli.Command{
 					},
 				},
 			},
-			Run: func(c *cli.Cli) error {
-				p, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer p.Cleanup()
-				ui := ui.New(c.Context, ui.ProgressModeRefresh)
-				defer ui.Destroy()
-				ui.Header(version, p.App().Name, p.App().Stage)
-				target := []string{}
-				if c.String("target") != "" {
-					target = strings.Split(c.String("target"), ",")
-				}
-				err = p.Stack.Run(c.Context, &project.StackInput{
-					Command: "refresh",
-					OnEvent: ui.StackEvent,
-					Target:  target,
-				})
-				if err != nil {
-					return err
-				}
-				return nil
-			},
+			Run: CmdRefresh,
 		},
 		{
 			Name:   "state",
@@ -1319,17 +1231,17 @@ var root = &cli.Command{
 						parsed.Version = version
 						parsed.UpdateID = cuid2.Generate()
 						parsed.TimeStarted = time.Now().UTC().Format(time.RFC3339)
-						err = p.Stack.Lock(parsed.UpdateID, "edit")
+						err = p.Lock(parsed.UpdateID, "edit")
 						if err != nil {
 							return util.NewReadableError(err, "Could not lock state")
 						}
-						defer p.Stack.Unlock()
+						defer p.Unlock()
 						defer func() {
 							parsed.TimeCompleted = time.Now().UTC().Format(time.RFC3339)
 							provider.PutSummary(p.Backend(), p.App().Name, p.App().Stage, parsed.UpdateID, parsed)
 						}()
 
-						path, err := p.Stack.PullState()
+						path, err := p.PullState()
 						if err != nil {
 							return util.NewReadableError(err, "Could not pull state")
 						}
@@ -1337,7 +1249,9 @@ var root = &cli.Command{
 						if editor == "" {
 							editor = "vim"
 						}
-						cmd := exec.Command(editor, path)
+						editorArgs := append(strings.Fields(editor), path)
+						fmt.Println(editorArgs)
+						cmd := exec.Command(editorArgs[0], editorArgs[1:]...)
 						cmd.Stdin = os.Stdin
 						cmd.Stdout = os.Stdout
 						cmd.Stderr = os.Stderr
@@ -1348,7 +1262,7 @@ var root = &cli.Command{
 							return util.NewReadableError(err, "Editor exited with error")
 						}
 
-						return p.Stack.PushState(parsed.UpdateID)
+						return p.PushState(parsed.UpdateID)
 					},
 				},
 			},

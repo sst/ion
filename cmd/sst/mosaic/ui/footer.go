@@ -1,63 +1,128 @@
 package ui
 
 import (
+	"bytes"
+	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"strings"
-	"syscall"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/sst/ion/pkg/project"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 type footer struct {
-	spinner     spinner.Model
-	mode        ProgressMode
-	complete    *project.CompleteEvent
-	parents     map[string]string
-	summary     bool
-	cancelled   bool
-	lines       []string
-	pending     []*apitype.ResourcePreEvent
-	skipped     int
-	exitConfirm bool
+	started   bool
+	mode      ProgressMode
+	complete  *project.CompleteEvent
+	parents   map[string]string
+	summary   bool
+	pending   []*apitype.ResourcePreEvent
+	skipped   int
+	cancelled bool
 
-	width  int
-	height int
+	spinner int
+
+	input chan any
+
+	previous string
 }
 
 type op struct {
 	urn string
 }
 
-func NewFooter(mode ProgressMode) *tea.Program {
-	slog.Info("initialized footer ui")
+func NewFooter() *footer {
 	f := footer{
-		spinner: spinner.New(),
-		lines:   []string{},
-		mode:    mode,
+		input: make(chan any),
 	}
-	f.spinner.Spinner = spinner.MiniDot
 	f.Reset()
-	p := tea.NewProgram(f,
-		tea.WithFPS(16),
-		tea.WithoutSignalHandler())
-	go p.Run()
-	return p
+	return &f
 }
 
-func (m footer) Init() tea.Cmd {
-	return m.spinner.Tick
+func (m *footer) Send(input any) {
+	m.input <- input
+}
+
+type spinnerTick struct{}
+
+func (m *footer) Start(ctx context.Context) {
+	ticker := time.NewTicker(time.Millisecond * 100)
+	defer ticker.Stop()
+	go func() {
+		for range ticker.C {
+			m.Send(&spinnerTick{})
+		}
+	}()
+	os.Stdout.WriteString("\033[2l")
+	os.Stdout.WriteString(ansi.HideCursor)
+	for {
+		select {
+		case <-ctx.Done():
+			m.cancelled = true
+			break
+		case val, ok := <-m.input:
+			if !ok {
+				return
+			}
+			width, _, _ := terminal.GetSize(int(os.Stdout.Fd()))
+			switch evt := val.(type) {
+			case lineMsg:
+				m.Render(width, "")
+				fmt.Println(evt)
+			default:
+				m.Update(val)
+			}
+			next := m.View(width)
+			m.Render(width, next)
+		}
+	}
+}
+
+func (m *footer) Render(width int, next string) {
+	oldLines := strings.Split(m.previous, "\n")
+	nextLines := strings.Split(next, "\n")
+
+	out := &bytes.Buffer{}
+
+	if next == m.previous {
+		return
+	}
+
+	if len(oldLines) > 0 {
+		for i := range oldLines {
+			out.WriteString(ansi.EraseEntireLine)
+			if i < len(oldLines)-1 {
+				out.WriteString(ansi.CursorUp1)
+			}
+		}
+	}
+
+	for i, line := range nextLines {
+		if i == 0 {
+			out.WriteByte('\r')
+		}
+		truncated := ansi.Truncate(line, width, "…")
+		out.WriteString(truncated)
+		if i < len(nextLines)-1 {
+			out.WriteString("\r\n")
+		}
+	}
+	out.WriteString(ansi.CursorLeft(10000))
+	os.Stdout.Write(out.Bytes())
+	m.previous = next
 }
 
 type lineMsg string
 
 func (m *footer) Reset() {
+	m.started = false
 	m.skipped = 0
 	m.parents = map[string]string{}
 	m.pending = []*apitype.ResourcePreEvent{}
@@ -66,44 +131,33 @@ func (m *footer) Reset() {
 	m.cancelled = false
 }
 
-func (m footer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
+func (m *footer) Update(msg any) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-	case lineMsg:
-		m.lines = append(m.lines, string(msg))
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc":
-			if m.exitConfirm {
-				m.exitConfirm = false
-			}
-		case "ctrl+l":
-			m.lines = []string{}
-			cmds = append(cmds, tea.ClearScreen)
-		case "ctrl+c":
-			if m.exitConfirm || m.mode == ProgressModeDev {
-				pid := os.Getpid()
-				syscall.Kill(pid, syscall.SIGINT)
-				m.cancelled = true
-			}
-
-			if !m.exitConfirm {
-				m.exitConfirm = true
-			}
-			break
-		}
+	case *spinnerTick:
+		m.spinner++
 	case *project.StackCommandEvent:
 		m.Reset()
-		cmds = append(cmds, tea.HideCursor)
+		m.started = true
+		if msg.Command == "diff" {
+			m.mode = ProgressModeDiff
+		}
+		if msg.Command == "refresh" {
+			m.mode = ProgressModeRefresh
+		}
+		if msg.Command == "remove" {
+			m.mode = ProgressModeRemove
+		}
+		if msg.Command == "deploy" {
+			m.mode = ProgressModeDeploy
+		}
 	case *project.CompleteEvent:
 		if msg.Old {
 			break
 		}
 		m.complete = msg
+	case *project.ConcurrentUpdateEvent:
+		m.Reset()
+		break
 	case *apitype.ResourcePreEvent:
 		if resource.URN(msg.Metadata.URN).Type().DisplayName() == "pulumi:pulumi:Stack" {
 			break
@@ -114,10 +168,10 @@ func (m footer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Metadata.New != nil && msg.Metadata.New.Parent != "" {
 			m.parents[msg.Metadata.URN] = msg.Metadata.New.Parent
 		}
-		if msg.Metadata.Op == apitype.OpSame {
+		if msg.Metadata.Op == apitype.OpSame || msg.Metadata.Op == apitype.OpRead {
 			m.skipped++
 		}
-		if msg.Metadata.Op != apitype.OpSame {
+		if msg.Metadata.Op != apitype.OpSame && msg.Metadata.Op != apitype.OpRead {
 			m.pending = append(m.pending, msg)
 		}
 	case *apitype.SummaryEvent:
@@ -129,11 +183,10 @@ func (m footer) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.removePending(msg.URN)
 		}
 	}
+}
 
-	var cmd tea.Cmd
-	m.spinner, cmd = m.spinner.Update(msg)
-	cmds = append(cmds, cmd)
-	return m, tea.Batch(cmds...)
+func (m *footer) Destroy() {
+	fmt.Print(ansi.ShowCursor)
 }
 
 var TEXT_HIGHLIGHT = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
@@ -157,58 +210,55 @@ var TEXT_SUCCESS_BOLD = TEXT_SUCCESS.Copy().Bold(true)
 var TEXT_INFO = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
 var TEXT_INFO_BOLD = TEXT_INFO.Copy().Bold(true)
 
-func (m footer) View() string {
+func (m *footer) View(width int) string {
+	if !m.started || m.complete != nil {
+		return ""
+	}
+	spinner := spinner.MiniDot.Frames[m.spinner%len(spinner.MiniDot.Frames)]
 	result := []string{}
-	for _, line := range m.lines {
-		result = append(result, line)
+	for _, r := range m.pending {
+		label := "Creating"
+		if r.Metadata.Op == apitype.OpUpdate {
+			label = "Updating"
+		}
+		if r.Metadata.Op == apitype.OpDelete {
+			label = "Deleting"
+		}
+		if r.Metadata.Op == apitype.OpReplace {
+			label = "Creating"
+		}
+		if r.Metadata.Op == apitype.OpRefresh {
+			label = "Refreshing"
+		}
+		if r.Metadata.Op == apitype.OpCreate {
+			label = "Creating"
+		}
+		result = append(result, fmt.Sprintf("%s  %-11s %s", spinner, label, m.formatURN(r.Metadata.URN)))
 	}
-	if m.complete == nil {
-		if m.complete == nil {
-			for _, r := range m.pending {
-				label := "Creating"
-				if r.Metadata.Op == apitype.OpUpdate {
-					label = "Updating"
-				}
-				if r.Metadata.Op == apitype.OpDelete {
-					label = "Deleting"
-				}
-				if r.Metadata.Op == apitype.OpReplace {
-					label = "Creating"
-				}
-				if r.Metadata.Op == apitype.OpRefresh {
-					label = "Refreshing"
-				}
-				if r.Metadata.Op == apitype.OpCreate {
-					label = "Creating"
-				}
-				result = append(result, fmt.Sprintf("%s  %-11s %s", m.spinner.View(), label, m.formatURN(r.Metadata.URN)))
-			}
+	label := "Finalizing"
+	if !m.summary {
+		if m.mode == ProgressModeDiff {
+			label = "Generating"
 		}
-
-		if (m.skipped > 0 || m.summary) && m.complete == nil {
-			label := "Finalizing"
-			if !m.summary {
-				if m.mode == ProgressModeRemove {
-					label = "Removing"
-				}
-				if m.mode == ProgressModeRefresh {
-					label = "Refreshing"
-				}
-				if m.mode == ProgressModeDeploy || m.mode == ProgressModeDev {
-					label = "Deploying"
-				}
-			}
-			if m.skipped > 0 {
-				label = fmt.Sprintf("%-11s [%d skipped]", label, m.skipped)
-			}
-			result = append(result, m.spinner.View()+"  "+label)
+		if m.mode == ProgressModeRemove {
+			label = "Removing"
 		}
-
-		if m.exitConfirm {
-			result = append(result, TEXT_DANGER_BOLD.Render("|  ")+"Press Ctrl+C again to exit")
+		if m.mode == ProgressModeRefresh {
+			label = "Refreshing"
+		}
+		if m.mode == ProgressModeDeploy {
+			label = "Deploying"
+		}
+		if m.cancelled {
+			label = "Cancelling, waiting for pending operations to complete"
 		}
 	}
-	return lipgloss.NewStyle().Width(m.width).Render(lipgloss.JoinVertical(lipgloss.Top, result...))
+	if m.skipped > 0 {
+		label = fmt.Sprintf("%-11s", label)
+		label += TEXT_DIM.Render(fmt.Sprintf(" %d skipped", m.skipped))
+	}
+	result = append(result, spinner+"  "+label)
+	return lipgloss.NewStyle().MaxWidth(width).Render(lipgloss.JoinVertical(lipgloss.Top, result...))
 }
 
 func (u *footer) removePending(urn string) {
