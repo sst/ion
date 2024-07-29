@@ -3,6 +3,7 @@ import * as cloudflare from "@pulumi/cloudflare";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link.js";
 import { binding } from "./binding.js";
+import { DEFAULT_ACCOUNT_ID } from "./account-id";
 
 export interface BucketArgs {
   /**
@@ -71,8 +72,8 @@ export class Bucket extends Component implements Link.Linkable {
           args?.transform?.bucket,
           `${name}Bucket`,
           {
-            name,
-            accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+            name: "",
+            accountId: DEFAULT_ACCOUNT_ID,
           },
           { parent },
         ),

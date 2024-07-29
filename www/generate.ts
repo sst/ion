@@ -277,9 +277,22 @@ function generateCliDoc() {
   }
 
   function renderCliFlagType(type: CliCommand["flags"][number]["type"]) {
-    return `<code class="primitive">${
-      type === "bool" ? "boolean" : type
-    }</code>`;
+    if (type.startsWith("[") && type.endsWith("]")) {
+      return type
+        .substring(1, type.length - 1)
+        .split(",")
+        .map((t: string) =>
+          [
+            `<code class="symbol">&ldquo;</code>`,
+            `<code class="primitive">${t}</code>`,
+            `<code class="symbol">&rdquo;</code>`,
+          ].join("")
+        )
+        .join(`<code class="symbol"> | </code>`);
+    }
+
+    if (type === "bool") return `<code class="primitive">boolean</code>`;
+    return `<code class="primitive">${type}</code>`;
   }
 }
 
@@ -752,9 +765,14 @@ function renderType(
     if (type.name === "T") {
       return `<code class="primitive">${type.name}</code>`;
     }
-    if (type.name === "Output" || type.name === "Input") {
+    if (
+      type.name === "Output" ||
+      type.name === "OutputInstance" ||
+      type.name === "Input"
+    ) {
+      const typeName = type.name === "OutputInstance" ? "Output" : type.name;
       return [
-        `<code class="primitive">${type.name}</code>`,
+        `<code class="primitive">${typeName}</code>`,
         `<code class="symbol">&lt;</code>`,
         renderSomeType(type.typeArguments?.[0]!),
         `<code class="symbol">&gt;</code>`,
@@ -1243,7 +1261,7 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
       if (
         link.type &&
         link.type.type === "reference" &&
-        link.type.name === "Output" &&
+        (link.type.name === "Output" || link.type.name === "OutputInstance") &&
         (link.type.typeArguments![0].type === "intrinsic" ||
           link.type.typeArguments![0].type === "union")
       ) {
@@ -1253,7 +1271,8 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
       else if (link.type && link.type.type === "union") {
         linkType = link.type;
         linkType.types = linkType.types.map((t) =>
-          t.type === "reference" && t.name === "Output"
+          t.type === "reference" &&
+          (t.name === "Output" || t.name === "OutputInstance")
             ? t.typeArguments![0]
             : t
         );
@@ -1796,7 +1815,7 @@ function patchCode() {
       // replace generic <Resource>
       .replaceAll(`: Resource`, `: "RESOURCE_CLASS"`)
       // replace Definition.include
-      .replace(/include\?\: \{[^}]*\}/, `include: any`)
+      .replace(/include\?\: \{[^}]*\}/, `include?: any`)
   );
 }
 

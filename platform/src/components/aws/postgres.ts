@@ -1,8 +1,13 @@
-import { ComponentResourceOptions, output, Output } from "@pulumi/pulumi";
+import {
+  ComponentResourceOptions,
+  jsonParse,
+  output,
+  Output,
+} from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import { Input } from "../input.js";
-import { rds } from "@pulumi/aws";
+import { rds, secretsmanager } from "@pulumi/aws";
 import { permission } from "./permission";
 
 type ACU = `${number} ACU`;
@@ -334,6 +339,18 @@ export class Postgres extends Component implements Link.Linkable {
     }
   }
 
+  private _dbSecret?: Output<secretsmanager.GetSecretVersionResult> | undefined;
+  private get secret() {
+    return this.secretArn.apply((val) => {
+      if (this._dbSecret) return this._dbSecret;
+      if (!val) return;
+      this._dbSecret = secretsmanager.getSecretVersionOutput({
+        secretId: val,
+      });
+      return this._dbSecret;
+    });
+  }
+
   /**
    * The ARN of the RDS Cluster.
    */
@@ -348,11 +365,43 @@ export class Postgres extends Component implements Link.Linkable {
     return this.cluster.masterUserSecrets[0].secretArn;
   }
 
+  /** The username of the master user. */
+  public get username() {
+    return this.cluster.masterUsername;
+  }
+
+  /** The password of the master user. */
+  public get password() {
+    return this.cluster.masterPassword.apply((val) => {
+      if (val) return output(undefined);
+      const parsed = jsonParse(
+        this.secret.apply((secret) =>
+          secret ? secret.secretString : output("{}"),
+        ),
+      ) as Output<{ username: string; password: string }>;
+      return parsed.password;
+    });
+  }
+
   /**
    * The name of the database.
    */
   public get database() {
     return this.cluster.databaseName;
+  }
+
+  /**
+   * The port of the database.
+   */
+  public get port() {
+    return this.instance.port;
+  }
+
+  /**
+   * The host of the database.
+   */
+  public get host() {
+    return this.instance.endpoint;
   }
 
   public get nodes() {
@@ -366,9 +415,13 @@ export class Postgres extends Component implements Link.Linkable {
   public getSSTLink() {
     return {
       properties: {
-        clusterArn: this.cluster.arn,
-        secretArn: this.cluster.masterUserSecrets[0].secretArn,
+        clusterArn: this.clusterArn,
+        secretArn: this.secretArn,
         database: this.cluster.databaseName,
+        username: this.username,
+        password: this.password,
+        port: this.port,
+        host: this.host,
       },
       include: [
         permission({
@@ -397,13 +450,13 @@ export class Postgres extends Component implements Link.Linkable {
    * @param clusterName The name of the RDS cluster.
    *
    * @example
-   * Imagine you created a cluster in the `dev` stage. And in your perosonal stage, ie. `frank`,
+   * Imagine you created a cluster in the `dev` stage. And in your personal stage, ie. `frank`,
    * instead of creating a new cluster, you want to reuse the same cluster from `dev`.
    *
    * ```ts title="sst.config.ts"
    * const database = $app.stage === "frank"
    *   ? sst.aws.Postgres.get("MyDatabase", "app-dev-mydatabase")
-   *   ? new sst.aws.Postgres("MyDatabase");
+   *   : new sst.aws.Postgres("MyDatabase");
    * ```
    *
    * Here `app-dev-mydatabase` is the name of the cluster created in the `dev` stage.
@@ -421,7 +474,11 @@ export class Postgres extends Component implements Link.Linkable {
         return instances.instanceIdentifiers[0];
       }),
     );
-    return new Postgres(name, { ref: true, cluster, instance } as PostgresArgs);
+    return new Postgres(name, {
+      ref: true,
+      cluster,
+      instance,
+    } as PostgresArgs);
   }
 }
 
