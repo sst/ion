@@ -3,10 +3,7 @@
 
 const CLOUDFLARE_API_BASE_URL =
   process.env.CLOUDFLARE_API_BASE_URL ?? "https://api.cloudflare.com/client/v4";
-const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
-const CLOUDFLARE_EMAIL = process.env.CLOUDFLARE_EMAIL;
-const CLOUDFLARE_API_KEY = process.env.CLOUDFLARE_API_KEY;
-const AUTH = getAuth() as any;
+const AUTH = getAuth();
 
 export interface FetchError {
   code: number;
@@ -62,8 +59,11 @@ export async function cfFetch<ResultType>(
   throw error;
 }
 
+function getAuth(): any {
+  const CLOUDFLARE_API_TOKEN = process.env.CLOUDFLARE_API_TOKEN;
+  const CLOUDFLARE_EMAIL = process.env.CLOUDFLARE_EMAIL;
+  const CLOUDFLARE_API_KEY = process.env.CLOUDFLARE_API_KEY;
 
-function getAuth() {
   if (CLOUDFLARE_API_TOKEN) {
     return {
       Authorization: `Bearer ${CLOUDFLARE_API_TOKEN}`,
