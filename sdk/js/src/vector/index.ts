@@ -169,13 +169,18 @@ export interface RemoveEvent {
 
 export interface QueryResponse {
   /**
-   * Metadata for the event that was provided when storing the vector.
+   * List of result objects matching the query.
    */
-  metadata: Record<string, any>;
-  /**
-   * The similarity score between the prompt and the queried vector.
-   */
-  score: number;
+  results: {
+    /**
+     * Metadata for the event that was provided when storing the vector.
+     */
+    metadata: Record<string, any>;
+    /**
+     * The similarity score between the prompt and the queried vector.
+     */
+    score: number;
+  }[];
 }
 
 export interface VectorClientResponse {
