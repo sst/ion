@@ -14,6 +14,7 @@ import { Dns } from "../dns.js";
 import { dns as awsDns } from "./dns.js";
 import { cloudfront } from "@pulumi/aws";
 import { DistributionInvalidation } from "./providers/distribution-invalidation.js";
+import crypto from "crypto";
 
 export interface CdnDomainArgs {
   /**
