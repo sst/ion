@@ -13,7 +13,7 @@ import { hashStringToPrettyString, sanitizeToPascalCase } from "../naming";
 import { parseQueueArn } from "./helpers/arn";
 import { QueueLambdaSubscriber } from "./queue-lambda-subscriber";
 import { lambda, sqs } from "@pulumi/aws";
-import { DurationHours, toSeconds } from "../duration";
+import { DurationHours, DurationMinutes, toSeconds } from "../duration";
 import { permission } from "./permission.js";
 
 export interface QueueArgs {
@@ -156,50 +156,93 @@ export interface QueueSubscriberArgs {
    * ```
    */
   filters?: Input<Input<Record<string, any>>[]>;
-
   /**
-   *
-   * Activates [ReportBatchItemFailures](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html#services-sqs-batchfailurereporting) for the subscribed Lambda event source mapping.
-   *
-   * When a Lambda function encounters an error while processing a batch of messages, by default, all messages in that batch,
-   * including those successfully processed ones, become visible in the queue again.
-   * This can lead to multiple reprocessings of the same messages.
-   *
-   * To avoid this, you can enable `reportBatchItemFailures` to report failures individually.
-   *
-   * If enabled, the handler function must return a response that includes the message IDs of the failed messages.
-   * This ensures that only the failed messages become visible in the queue again.
-   *
-   * :::tip
-   * Remember to update your Lambda function to handle the `batchItemFailures` response.
-   * :::
-   *
-   * :::tip
-   * This is only useful if your batch size is greater than 1.
-   * For instance, if your batch size of 3, a single Function will process 3 messages at a time.
-   * Without this property activated, the function can only return a success or failure response for the entire batch in an all-or-nothing manner.
-   * :::
-   *
-   * @default false
-   * @example
-   * Suppose you have a batch of five messages with message IDs: id1, id2, id3, id4, and id5.
-   * Your function successfully processes id1, id3, and id5.
-   * To make messages id2 and id4 visible again in your queue, your function should return the following response:
-   * ```json
-   * {
-   *   "batchItemFailures": [
-   *         {
-   *             "itemIdentifier": "id2"
-   *         },
-   *         {
-   *             "itemIdentifier": "id4"
-   *         }
-   *     ]
-   * }
-   * ```
-   *
+   * Configure batch processing options for the consumer function.
+   * @default `{size: 10, window: "20 seconds", partialResponses: false}`
    */
-  reportBatchItemFailures?: Input<true>;
+  batch?: Input<{
+    /**
+     * The maximum number of events that will be processed together in a single invocation
+     * of the consumer function.
+     *
+     * Value must be between 1 and 10000.
+     *
+     * :::note
+     * When `size` is set to a value greater than 10, `window` must be set to at least `1 second`.
+     * :::
+     *
+     * @default `10`
+     * @example
+     * Set batch size to 1. This will process events individually.
+     * ```js
+     * {
+     *   batch: {
+     *     size: 1
+     *   }
+     * }
+     * ```
+     */
+    size?: Input<number>;
+    /**
+     * The maximum amount of time to wait for collecting events before sending the batch to
+     * the consumer function, even if the batch size hasn't been reached.
+     *
+     * Value must be between 0 seconds and 5 minutes (300 seconds).
+     * @default `"0 seconds"`
+     * @example
+     * ```js
+     * {
+     *   batch: {
+     *     window: "20 seconds"
+     *   }
+     * }
+     * ```
+     */
+    window?: Input<DurationMinutes>;
+    /**
+     * Whether to return partial successful responses for a batch.
+     *
+     * Enables reporting of individual message failures in a batch. When enabled, only failed
+     * messages become visible in the queue again, preventing unnecessary reprocessing of
+     * successful messages.
+     *
+     * The handler function must return a response with failed message IDs.
+     *
+     * :::note
+     * Ensure your Lambda function is updated to handle `batchItemFailures` responses when
+     * enabling this option.
+     * :::
+     *
+     * Read more about [partial batch responses](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html#services-sqs-batchfailurereporting).
+     * @default `false`
+     * @example
+     * Enable partial responses.
+     * ```js
+     * {
+     *   batch: {
+     *     partialResponses: true
+     *   }
+     * }
+     * ```
+     *
+     * For a batch of messages (id1, id2, id3, id4, id5), if id2 and id4 fail:
+     * ```json
+     * {
+     *   "batchItemFailures": [
+     *         {
+     *             "itemIdentifier": "id2"
+     *         },
+     *         {
+     *             "itemIdentifier": "id4"
+     *         }
+     *     ]
+     * }
+     * ```
+     *
+     * This makes only id2 and id4 visible again in the queue.
+     */
+    partialResponses?: Input<boolean>;
+  }>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
