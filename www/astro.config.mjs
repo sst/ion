@@ -121,6 +121,7 @@ const sidebar = [
       { label: "Global", link: "/docs/reference/global/" },
       { label: "Config", link: "/docs/reference/config/" },
       { label: "Secret", link: "/docs/component/secret/" },
+      { label: "Linkable", link: "/docs/component/linkable/" },
     ],
   },
   {
@@ -143,6 +144,13 @@ const sidebar = [
       },
       { label: "Cdn", link: "/docs/component/aws/cdn/" },
       { label: "Service", link: "/docs/component/aws/service/" },
+      {
+        label: "Linkable",
+        items: [
+          { label: "binding", link: "/docs/component/cloudflare/binding/" },
+          { label: "permission", link: "/docs/component/aws/permission/" },
+        ],
+      },
       {
         label: "AppSyncResolver",
         link: "/docs/component/aws/app-sync-resolver/",

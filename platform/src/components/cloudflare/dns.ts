@@ -47,6 +47,7 @@ import { ZoneLookup } from "./providers/zone-lookup";
 import { ComponentResourceOptions, output } from "@pulumi/pulumi";
 import { Transform, transform } from "../component";
 import { Input } from "../input";
+import { DEFAULT_ACCOUNT_ID } from "./account-id";
 
 export interface DnsArgs {
   /**
@@ -60,6 +61,21 @@ export interface DnsArgs {
    * ```
    */
   zone?: Input<string>;
+  /**
+   * Set to `true` to allow the creation of new DNS records that can replace existing ones.
+   *
+   * This is useful for switching a domain to a new site without removing old DNS records,
+   * helping to prevent downtime.
+   *
+   * @default `false`
+   * @example
+   * ```js
+   * {
+   *   override: true
+   * }
+   * ```
+   */
+  override?: Input<boolean>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -95,7 +111,7 @@ export function dns(args: DnsArgs = {}) {
         return new ZoneLookup(
           `${namePrefix}${record.type}ZoneLookup${nameSuffix}`,
           {
-            accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+            accountId: DEFAULT_ACCOUNT_ID,
             domain: output(record.name).apply((name) =>
               name.replace(/\.$/, ""),
             ),
@@ -115,6 +131,7 @@ export function dns(args: DnsArgs = {}) {
               value: record.value,
               type: record.type,
               ttl: 60,
+              allowOverwrite: args.override,
             },
             opts,
           ),

@@ -167,7 +167,7 @@ sst init
 <Section type="parameters">
 #### Flags
 - <p><code class="key">yes</code> <code class="primitive">boolean</code></p>
-Skip interactive confirmation for detected framework.
+<p>Skip interactive confirmation for detected framework.</p>
 </Section>
 Initialize a new project in the current directory. This will create a `sst.config.ts` and `sst install` your providers.
 
@@ -191,57 +191,74 @@ sst dev [command]
 <Section type="parameters">
 #### Args
 - <p><code class="key">command?</code></p>
-The command to run
+<p>The command to run</p>
 </Section>
 
 <Section type="parameters">
 #### Flags
-- <p><code class="key">silent</code> <code class="primitive">boolean</code></p>
-Don't show logs from function invocations
+- <p><code class="key">mode</code> <code class="symbol">&ldquo;</code><code class="primitive">basic</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">mosaic</code><code class="symbol">&rdquo;</code></p>
+<p>Defaults to using the multiplexer or `mosaic` mode. Use `basic` to turn it off.</p>
 </Section>
-Run your app in development mode.
+Run your app in dev mode.
 
 ```bash frame="none"
 sst dev
 ```
+By default, this starts a multiplexer with processes that deploy your app, run your functions, and start your frontend.
 
-Optionally, pass in a command to start your frontend as well.
+![sst dev multiplexer mode](../../../../assets/docs/cli/sst-dev-multiplexer-mode.png)
+
+Each process is run in a separate pane that you can click on in the sidebar. These
+include processes that:
+
+1. Watch your `sst.config.ts` and deploy your app
+2. Run your functions [Live](/docs/live/) and logs their invocations
+3. Run the dev mode for components that have `dev.autostart` enabled
+   - Components like `Service` and frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.
+   - It starts their `dev.command` in a separate pane
+   - And loads any [linked resources](/docs/linking) in the environment
+
+The multiplexer makes it so that you won't have to start your frontend or
+your container applications separately.
+
+:::tip
+The `sst dev` CLI also starts your frontend. So you don't need to start it
+separately.
+:::
+
+While `sst dev` does a deploy when it starts up, it does not deploy components like
+`Service`, or the frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.
+That's because these have their own dev modes that the multiplexer starts.
+
+:::note
+The `Service` component and the frontends like `Nextjs` or `StaticSite` are not
+deployed by `sst dev`.
+:::
+
+Optionally, you can disable the multiplexer and run `sst dev` in basic mode.
+
+```bash frame="none"
+sst dev --mode=basic
+```
+
+This will only deploy your app and run your functions. If you are coming from SST
+v2, this is how `sst dev` used to work.
+
+However in `basic` mode, you'll need to start your frontend separately by running
+`sst dev` in a separate terminal session by passing in the command. For example:
 
 ```bash frame="none"
 sst dev next dev
 ```
 
-To pass in a flag to your command, wrap it in quotes.
+By wrapping your command, it'll load your [linked resources](/docs/linking) in the
+environment.
+
+To pass in a flag to the command, use `--`.
 
 ```bash frame="none"
-sst dev "next dev --turbo"
+sst dev -- next dev --turbo
 ```
-
-Dev mode does a few things:
-
-1. Starts a local server
-2. Watches your `sst.config.ts` and re-deploys changes
-3. Run your functions [Live](/docs/live/)
-4. Skip components that should be run locally
-   - `Service`
-   - Frontends like, `Nextjs`, `Remix`, `Astro`, `SvelteKit`, etc.
-5. If you pass in a `command`, it'll:
-   - Load your [linked resources](/docs/linking) in the environment
-   - And run the command
-
-:::note
-If you run `sst dev` with a command, it will not print your function logs.
-:::
-
-If `sst dev` starts your frontend, it won't print logs from your SST app. We do this to prevent your logs from being too noisy. To view your logs, you can run `sst dev` in a separate terminal.
-
-:::tip
-You can start as many instances of `sst dev` in your app as you want.
-:::
-
-Starting multiple instances of `sst dev` in the same project only starts a single _server_. Meaning that the second instance connects to the existing one.
-
-This is different from SST v2, in that you needed to run `sst dev` and `sst bind` for your frontend.
 </Segment>
 
 ### deploy
@@ -255,7 +272,7 @@ sst deploy
 <Section type="parameters">
 #### Flags
 - <p><code class="key">target</code> <code class="primitive"></code></p>
-Comma seperated list of target URNs.
+<p>Comma seperated list of target URNs.</p>
 </Section>
 Deploy your application. By default, it deploys to your personal stage.
 
@@ -272,6 +289,24 @@ sst deploy --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::
 ```
 </Segment>
 
+### diff
+<Segment>
+<Section type="signature">
+```sh frame="none"
+sst diff
+```
+</Section>
+
+<Section type="parameters">
+#### Flags
+- <p><code class="key">target</code> <code class="primitive"></code></p>
+<p>Comma seperated list of target URNs.</p>
+- <p><code class="key">dev</code> <code class="primitive">boolean</code></p>
+<p>Compare to sst dev</p>
+</Section>
+See what changes will be made
+</Segment>
+
 ### add
 <Segment>
 <Section type="signature">
@@ -283,7 +318,7 @@ sst add <provider>
 <Section type="parameters">
 #### Args
 - <p><code class="key">provider</code></p>
-The provider to add.
+<p>The provider to add.</p>
 </Section>
 Adds and installs the given provider. For example,
 
@@ -371,9 +406,9 @@ sst secret set <name> [value]
 <Section type="parameters">
 #### Args
 - <p><code class="key">name</code></p>
-The name of the secret.
+<p>The name of the secret.</p>
 - <p><code class="key">value</code></p>
-The value of the secret.
+<p>The value of the secret.</p>
 </Section>
 Set the value of the secret.
 
@@ -424,7 +459,7 @@ sst secret load <file>
 <Section type="parameters">
 #### Args
 - <p><code class="key">file</code></p>
-The file to load the secrets from.
+<p>The file to load the secrets from.</p>
 </Section>
 Load all the secrets from a file and set them.
 
@@ -457,7 +492,7 @@ sst secret remove <name>
 <Section type="parameters">
 #### Args
 - <p><code class="key">name</code></p>
-The name of the secret.
+<p>The name of the secret.</p>
 </Section>
 Remove a secret.
 
@@ -500,7 +535,7 @@ sst shell [command]
 <Section type="parameters">
 #### Args
 - <p><code class="key">command?</code></p>
-A command to run.
+<p>A command to run.</p>
 </Section>
 Run a command with **all the resources linked** to the environment. This is useful for running scripts against your infrastructure.
 
@@ -557,7 +592,7 @@ sst remove
 <Section type="parameters">
 #### Flags
 - <p><code class="key">target</code> <code class="primitive">string</code></p>
-Comma seperated list of target URNs.
+<p>Comma seperated list of target URNs.</p>
 </Section>
 Removes your application. By default, it removes your personal stage.
 
@@ -616,7 +651,7 @@ sst upgrade [version]
 <Section type="parameters">
 #### Args
 - <p><code class="key">version?</code></p>
-A version to upgrade to.
+<p>A version to upgrade to.</p>
 </Section>
 Upgrade the CLI to the latest version. Or optionally, pass in a version to upgrade to.
 
@@ -672,7 +707,7 @@ sst refresh
 <Section type="parameters">
 #### Flags
 - <p><code class="key">target</code> <code class="primitive">string</code></p>
-Comma seperated list of target URNs.
+<p>Comma seperated list of target URNs.</p>
 </Section>
 Compares your local state with the state of the resources in the cloud provider. Any changes that are found are adopted into your local state. It will:
 

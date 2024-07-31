@@ -206,7 +206,7 @@ func (u *UI) Event(unknown interface{}) {
 
 	case *apitype.ResourcePreEvent:
 		u.timing[evt.Metadata.URN] = time.Now()
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" {
+		if evt.Metadata.Type == "pulumi:pulumi:Stack" || evt.Metadata.Type == "sst:sst:LinkRef" {
 			return
 		}
 
@@ -226,7 +226,7 @@ func (u *UI) Event(unknown interface{}) {
 		break
 
 	case *apitype.ResOutputsEvent:
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" {
+		if evt.Metadata.Type == "pulumi:pulumi:Stack" || evt.Metadata.Type == "sst:sst:LinkRef" {
 			return
 		}
 
@@ -309,16 +309,16 @@ func (u *UI) Event(unknown interface{}) {
 		}
 
 		if evt.Severity == "info#err" {
-			if strings.HasPrefix(evt.Message, "Downloading provider") {
-				u.printEvent(TEXT_INFO, "Info", strings.TrimSpace(ansi.Strip(evt.Message)))
-			} else {
-				u.printEvent(
-					TEXT_DIM,
-					"Log",
-					strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace),
-				)
-			}
+			u.printEvent(
+				TEXT_DIM,
+				"Log",
+				strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace),
+			)
 		}
+
+	case *project.ProviderDownloadEvent:
+		u.printEvent(TEXT_INFO, "Info", "Downloading provider "+evt.Name+" v"+evt.Version)
+		break
 
 	case *project.CompleteEvent:
 		if evt.Old {
@@ -327,7 +327,7 @@ func (u *UI) Event(unknown interface{}) {
 		u.complete = evt
 		u.blank()
 		if len(evt.Errors) == 0 && evt.Finished {
-			u.print(TEXT_SUCCESS_BOLD.Render("+"))
+			u.print(TEXT_SUCCESS_BOLD.Render(IconCheck))
 			if len(u.timing) == 0 {
 				if u.mode == ProgressModeRemove {
 					u.print(TEXT_NORMAL_BOLD.Render("  No resources to remove"))
@@ -391,19 +391,33 @@ func (u *UI) Event(unknown interface{}) {
 				if status.URN != "" {
 					u.println(TEXT_DANGER_BOLD.Render("   " + u.FormatURN(status.URN)))
 				}
-				u.println(TEXT_NORMAL.Render("   " + strings.Join(parseError(status.Message), "\n   ")))
-			}
-		}
-		if len(evt.ImportDiffs) > 0 {
-			u.blank()
-			u.println(TEXT_NORMAL_BOLD.Render("   Import Errors"))
-
-			for _, diff := range evt.ImportDiffs {
-				u.print(TEXT_NORMAL.Render("   " + u.FormatURN(diff.URN)))
-				u.print(TEXT_NORMAL_BOLD.Render(" " + diff.Input))
-				u.print(TEXT_NORMAL.Render(" should be "))
-				u.print(TEXT_INFO.Render(fmt.Sprintf("%v ", diff.Old)))
-				u.println(TEXT_DIM.Render(fmt.Sprintf("(was %v)", diff.New)))
+				u.print(TEXT_NORMAL.Render("   " + strings.Join(parseError(status.Message), "\n   ")))
+				importDiffs, ok := evt.ImportDiffs[status.URN]
+				if ok {
+					isSSTComponent := strings.Contains(status.URN, "::sst")
+					if isSSTComponent {
+						u.println(TEXT_NORMAL.Render(". Set the following values: "))
+					}
+					if !isSSTComponent {
+						u.println(TEXT_NORMAL.Render(". Set the following values in transform: "))
+					}
+					for _, diff := range importDiffs {
+						value, _ := json.Marshal(diff.Old)
+						if diff.Old == nil {
+							value = []byte("undefined")
+						}
+						u.print(TEXT_NORMAL.Render("   - "))
+						if isSSTComponent {
+							u.print(TEXT_INFO.Render("`args." + string(diff.Input) + " = " + string(value) + "`;"))
+						}
+						if !isSSTComponent {
+							u.print(TEXT_INFO.Render("`" + string(diff.Input) + ": " + string(value) + "`;"))
+						}
+						u.println()
+					}
+				} else {
+					u.println()
+				}
 			}
 		}
 		u.blank()
@@ -555,7 +569,7 @@ func (u *UI) FormatURN(urn string) string {
 		if parent == "" {
 			break
 		}
-		if parent.Type().DisplayName() == "pulumi:pulumi:Stack" {
+		if parent.Type().DisplayName() == "pulumi:pulumi:Stack" || parent.Type().DisplayName() == "sst:sst:LinkRef" {
 			break
 		}
 		child = parent

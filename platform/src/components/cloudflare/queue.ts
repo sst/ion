@@ -3,6 +3,7 @@ import * as cloudflare from "@pulumi/cloudflare";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import { binding } from "./binding";
+import { DEFAULT_ACCOUNT_ID } from "./account-id";
 
 export interface QueueArgs {
   /**
@@ -39,8 +40,8 @@ export class Queue extends Component implements Link.Linkable {
           args?.transform?.queue,
           `${name}Queue`,
           {
-            name,
-            accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+            name: "",
+            accountId: DEFAULT_ACCOUNT_ID,
           },
           { parent },
         ),
@@ -52,8 +53,11 @@ export class Queue extends Component implements Link.Linkable {
     return {
       properties: {},
       include: [
-        binding("queueBindings", {
-          queue: this.queue.id,
+        binding({
+          type: "queueBindings",
+          properties: {
+            queue: this.queue.id,
+          },
         }),
       ],
     };

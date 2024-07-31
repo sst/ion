@@ -34,12 +34,13 @@
  * @packageDocumentation
  */
 
-import * as vercel from "@pulumiverse/vercel";
+import { DnsRecord, DnsRecordArgs } from "@pulumiverse/vercel";
 import { Dns, Record } from "../dns";
 import { sanitizeToPascalCase } from "../naming";
 import { ComponentResourceOptions, all } from "@pulumi/pulumi";
 import { Transform, transform } from "../component";
 import { Input } from "../input";
+import { DEFAULT_TEAM_ID } from "./account-id";
 
 export interface DnsArgs {
   /**
@@ -61,12 +62,12 @@ export interface DnsArgs {
     /**
      * Transform the Vercel record resource.
      */
-    record?: Transform<vercel.DnsRecordArgs>;
+    record?: Transform<DnsRecordArgs>;
   };
 }
 
 export function dns(args: DnsArgs) {
-  let caaRecord: vercel.DnsRecord;
+  let caaRecord: DnsRecord;
   return {
     provider: "vercel",
     createRecord,
@@ -74,7 +75,7 @@ export function dns(args: DnsArgs) {
 
   function useCAARecord(namePrefix: string, opts: ComponentResourceOptions) {
     if (!caaRecord) {
-      caaRecord = new vercel.DnsRecord(
+      caaRecord = new DnsRecord(
         ...transform(
           args.transform?.record,
           `${namePrefix}CAARecord`,
@@ -83,7 +84,7 @@ export function dns(args: DnsArgs) {
             type: "CAA",
             name: "",
             value: `0 issue "amazonaws.com"`,
-            teamId: sst.vercel.DEFAULT_TEAM_ID,
+            teamId: DEFAULT_TEAM_ID,
           },
           opts,
         ),
@@ -113,7 +114,7 @@ export function dns(args: DnsArgs) {
       }
 
       function createRecord() {
-        return new vercel.DnsRecord(
+        return new DnsRecord(
           ...transform(
             args.transform?.record,
             `${namePrefix}${record.type}Record${nameSuffix}`,
@@ -122,7 +123,7 @@ export function dns(args: DnsArgs) {
               type: record.type,
               name: recordName,
               value: record.value,
-              teamId: sst.vercel.DEFAULT_TEAM_ID,
+              teamId: DEFAULT_TEAM_ID,
               ttl: 60,
             },
             { ...opts, dependsOn: [useCAARecord(namePrefix, opts)] },

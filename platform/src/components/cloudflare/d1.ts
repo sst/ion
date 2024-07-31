@@ -3,6 +3,7 @@ import * as cloudflare from "@pulumi/cloudflare";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import { binding } from "./binding";
+import { DEFAULT_ACCOUNT_ID } from ".";
 
 export interface D1Args {
   /**
@@ -69,8 +70,8 @@ export class D1 extends Component implements Link.Linkable {
           args?.transform?.database,
           `${name}Database`,
           {
-            name,
-            accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+            name: "",
+            accountId: DEFAULT_ACCOUNT_ID,
           },
           { parent },
         ),
@@ -97,8 +98,11 @@ export class D1 extends Component implements Link.Linkable {
     return {
       properties: {},
       include: [
-        binding("d1DatabaseBindings", {
-          databaseId: this.database.id,
+        binding({
+          type: "d1DatabaseBindings",
+          properties: {
+            databaseId: this.database.id,
+          },
         }),
       ],
     };

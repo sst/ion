@@ -300,10 +300,11 @@ The default `max-age` is set to 1 year.
 </InlineSection>
 The command used internally to build your Next.js app. It uses OpenNext with the `openNextVersion`.
 
-If you want to use a custom `build` script from your `package.json`.
+If you want to use a custom `build` script from your `package.json`. This is useful if you have a custom build process or want to use a different version of OpenNext.
+open-next by default uses the `build` script for building next-js app in your `package.json`. You can customize the build command in open-next configuration.
 ```js
 {
-  buildCommand: "npm run build"
+  buildCommand: "npm run build:open-next"
 }
 ```
 </Segment>
@@ -316,7 +317,7 @@ If you want to use a custom `build` script from your `package.json`.
 </Section>
 
 <InlineSection>
-**Default** A new cache plolicy is created
+**Default** A new cache policy is created
 </InlineSection>
 Configure the Next.js app to use an existing CloudFront cache policy.
 
@@ -333,6 +334,89 @@ policy instead of creating a new one.
   cachePolicy: "658327ea-f89d-4fab-a63d-7e88639e58f6"
 }
 ```
+</Segment>
+### dev?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">autostart?</code>](#dev-autostart)</p>
+- <p>[<code class="key">command?</code>](#dev-command)</p>
+- <p>[<code class="key">directory?</code>](#dev-directory)</p>
+- <p>[<code class="key">url?</code>](#dev-url)</p>
+</Section>
+Configure how this component works in `sst dev`.
+
+:::note
+In `sst dev` your Next.js app is run in dev mode; it's not deployed.
+:::
+
+Instead of deploying your Next.js app, this starts it in dev mode. It's run
+as a separate process in the `sst dev` multiplexer. Read more about
+[`sst dev`](/docs/reference/cli/#dev).
+
+</Segment>
+<NestedTitle id="dev-autostart" Tag="h4" parent="dev.">autostart?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">true</code>
+</InlineSection>
+Configure if you want to automatically start this when `sst dev` starts. You can still
+start it manually later.
+
+</Segment>
+<NestedTitle id="dev-command" Tag="h4" parent="dev.">command?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"npm run dev"</code>
+</InlineSection>
+The command that `sst dev` runs to start this in dev mode.
+
+</Segment>
+<NestedTitle id="dev-directory" Tag="h4" parent="dev.">directory?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** Uses the `path`
+</InlineSection>
+Change the directory from where the `command` is run.
+
+</Segment>
+<NestedTitle id="dev-url" Tag="h4" parent="dev.">url?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">"http://url-unavailable-in-dev.mode"</code>
+</InlineSection>
+The `url` when this is running in dev mode.
+
+Since this component is not deployed in `sst dev`, there is no real URL. But if you are
+using this component's `url` or linking to this component's `url`, it can be useful to
+have a placeholder URL. It avoids having to handle it being `undefined`.
+
 </Segment>
 ### domain?
 <Segment>
@@ -1100,7 +1184,7 @@ The AWS Lambda server function that renders the app.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 The URL of the Next.js app.

@@ -25,31 +25,29 @@ type process struct {
 	dead     bool
 }
 
-func (s *Multiplexer) AddProcess(key string, args []string, icon string, title string, cwd string, killable bool, env ...string) {
-	for _, p := range s.processes {
-		if p.key == key {
-			return
-		}
-	}
-	proc := &process{
-		icon:     icon,
-		key:      key,
-		dir:      cwd,
-		title:    title,
-		args:     args,
-		killable: killable,
-		env:      env,
-	}
-	term := tcellterm.New()
-	term.SetSurface(s.main)
-	term.Attach(func(ev tcell.Event) {
-		s.screen.PostEvent(ev)
+type EventProcess struct {
+	tcell.EventTime
+	Key       string
+	Args      []string
+	Icon      string
+	Title     string
+	Cwd       string
+	Killable  bool
+	Autostart bool
+	Env       []string
+}
+
+func (s *Multiplexer) AddProcess(key string, args []string, icon string, title string, cwd string, killable bool, autostart bool, env ...string) {
+	s.screen.PostEvent(&EventProcess{
+		Key:       key,
+		Args:      args,
+		Icon:      icon,
+		Title:     title,
+		Cwd:       cwd,
+		Killable:  killable,
+		Autostart: autostart,
+		Env:       env,
 	})
-	proc.vt = term
-	proc.start()
-	s.processes = append(s.processes, proc)
-	s.sort()
-	s.draw()
 }
 
 func (p *process) start() error {

@@ -13,11 +13,10 @@ import {
 } from "@pulumi/pulumi";
 import { Cdn, CdnArgs } from "./cdn.js";
 import { Function, FunctionArgs } from "./function.js";
-import { DistributionInvalidation } from "./providers/distribution-invalidation.js";
 import { useProvider } from "./helpers/provider.js";
 import { Bucket, BucketArgs } from "./bucket.js";
 import { BucketFile, BucketFiles } from "./providers/bucket-files.js";
-import { prefixName, sanitizeToPascalCase } from "../naming.js";
+import { sanitizeToPascalCase } from "../naming.js";
 import { Input } from "../input.js";
 import { transform, type Prettify, type Transform } from "../component.js";
 import { VisibleError } from "../error.js";
@@ -64,48 +63,48 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs {
   invalidation?: Input<
     | false
     | {
-        /**
-         * Configure if `sst deploy` should wait for the CloudFront cache invalidation to finish.
-         *
-         * :::tip
-         * For non-prod environments it might make sense to pass in `false`.
-         * :::
-         *
-         * Waiting for this process to finish ensures that new content will be available after the deploy finishes. However, this process can sometimes take more than 5 mins.
-         * @default `false`
-         * @example
-         * ```js
-         * {
-         *   invalidation: {
-         *     wait: true
-         *   }
-         * }
-         * ```
-         */
-        wait?: Input<boolean>;
-        /**
-         * The paths to invalidate.
-         *
-         * You can either pass in an array of glob patterns to invalidate specific files. Or you can use one of these built-in options:
-         * - `all`: All files will be invalidated when any file changes
-         * - `versioned`: Only versioned files will be invalidated when versioned files change
-         *
-         * :::note
-         * Each glob pattern counts as a single invalidation. However, invalidating `all` counts as a single invalidation as well.
-         * :::
-         * @default `"all"`
-         * @example
-         * Invalidate the `index.html` and all files under the `products/` route. This counts as two invalidations.
-         * ```js
-         * {
-         *   invalidation: {
-         *     paths: ["/index.html", "/products/*"]
-         *   }
-         * }
-         * ```
-         */
-        paths?: Input<"all" | "versioned" | string[]>;
-      }
+      /**
+       * Configure if `sst deploy` should wait for the CloudFront cache invalidation to finish.
+       *
+       * :::tip
+       * For non-prod environments it might make sense to pass in `false`.
+       * :::
+       *
+       * Waiting for this process to finish ensures that new content will be available after the deploy finishes. However, this process can sometimes take more than 5 mins.
+       * @default `false`
+       * @example
+       * ```js
+       * {
+       *   invalidation: {
+       *     wait: true
+       *   }
+       * }
+       * ```
+       */
+      wait?: Input<boolean>;
+      /**
+       * The paths to invalidate.
+       *
+       * You can either pass in an array of glob patterns to invalidate specific files. Or you can use one of these built-in options:
+       * - `all`: All files will be invalidated when any file changes
+       * - `versioned`: Only versioned files will be invalidated when versioned files change
+       *
+       * :::note
+       * Each glob pattern counts as a single invalidation. However, invalidating `all` counts as a single invalidation as well.
+       * :::
+       * @default `"all"`
+       * @example
+       * Invalidate the `index.html` and all files under the `products/` route. This counts as two invalidations.
+       * ```js
+       * {
+       *   invalidation: {
+       *     paths: ["/index.html", "/products/*"]
+       *   }
+       * }
+       * ```
+       */
+      paths?: Input<"all" | "versioned" | string[]>;
+    }
   >;
   /**
    * Configure the Lambda function used for server.
@@ -324,9 +323,8 @@ export function createServersAndDistribution(
     const edgeFunctions = createEdgeFunctions();
     const origins = buildOrigins();
     const originGroups = buildOriginGroups();
+    const invalidation = buildInvalidation();
     const distribution = createDistribution();
-    allowServerFunctionInvalidateDistribution();
-    createDistributionInvalidation();
     createWarmer();
 
     return {
@@ -364,13 +362,13 @@ export function createServersAndDistribution(
               // versioned files
               ...(copy.versionedSubDir
                 ? [
-                    {
-                      files: path.posix.join(copy.versionedSubDir, "**"),
-                      cacheControl:
-                        assets?.versionedFilesCacheHeader ??
-                        `public,max-age=${versionedFilesTTL},immutable`,
-                    },
-                  ]
+                  {
+                    files: path.posix.join(copy.versionedSubDir, "**"),
+                    cacheControl:
+                      assets?.versionedFilesCacheHeader ??
+                      `public,max-age=${versionedFilesTTL},immutable`,
+                  },
+                ]
                 : []),
               ...(assets?.fileOptions ?? []),
             ];
@@ -474,7 +472,6 @@ export function createServersAndDistribution(
           functions[fnName] = new cloudfront.Function(
             `${name}CloudfrontFunction${sanitizeToPascalCase(fnName)}`,
             {
-              // name: prefixName(63, `${name}-${sanifnName}`),
               runtime: "cloudfront-js-1.0",
               code: `
 function handler(event) {
@@ -518,6 +515,14 @@ function handler(event) {
                 ...environment,
                 ...props.environment,
               })),
+              permissions: output(args.permissions).apply((permissions) => [
+                {
+                  actions: ["cloudfront:CreateInvalidation"],
+                  resources: ["*"],
+                },
+                ...(permissions ?? []),
+                ...(props.permissions ?? []),
+              ]),
               link: output(args.link).apply((link) => [
                 ...(props.link ?? []),
                 ...(link ?? []),
@@ -617,6 +622,10 @@ function handler(event) {
               ...props.function.environment,
             })),
             permissions: output(args.permissions).apply((permissions) => [
+              {
+                actions: ["cloudfront:CreateInvalidation"],
+                resources: ["*"],
+              },
               ...(permissions ?? []),
               ...(props.function.permissions ?? []),
             ]),
@@ -704,11 +713,11 @@ function handler(event) {
           cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
           functionAssociations: cfFunction
             ? [
-                {
-                  eventType: "viewer-request",
-                  functionArn: cfFunction.arn,
-                },
-              ]
+              {
+                eventType: "viewer-request",
+                functionArn: cfFunction.arn,
+              },
+            ]
             : [],
         };
       } else if (behavior.cacheType === "server") {
@@ -731,20 +740,20 @@ function handler(event) {
           originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac",
           functionAssociations: cfFunction
             ? [
-                {
-                  eventType: "viewer-request",
-                  functionArn: cfFunction.arn,
-                },
-              ]
+              {
+                eventType: "viewer-request",
+                functionArn: cfFunction.arn,
+              },
+            ]
             : [],
           lambdaFunctionAssociations: edgeFunction
             ? [
-                {
-                  includeBody: true,
-                  eventType: "origin-request",
-                  lambdaArn: edgeFunction.nodes.function.qualifiedArn,
-                },
-              ]
+              {
+                includeBody: true,
+                eventType: "origin-request",
+                lambdaArn: edgeFunction.nodes.function.qualifiedArn,
+              },
+            ]
             : [],
         };
       }
@@ -769,14 +778,14 @@ function handler(event) {
               headersConfig:
                 (plan.serverCachePolicy?.allowedHeaders ?? []).length > 0
                   ? {
-                      headerBehavior: "whitelist",
-                      headers: {
-                        items: plan.serverCachePolicy?.allowedHeaders,
-                      },
-                    }
-                  : {
-                      headerBehavior: "none",
+                    headerBehavior: "whitelist",
+                    headers: {
+                      items: plan.serverCachePolicy?.allowedHeaders,
                     },
+                  }
+                  : {
+                    headerBehavior: "none",
+                  },
               queryStringsConfig: {
                 queryStringBehavior: "all",
               },
@@ -799,14 +808,107 @@ function handler(event) {
         `  });`,
         ...(streaming
           ? [
-              `  const response = await p;`,
-              `  responseStream.write(JSON.stringify(response));`,
-              `  responseStream.end();`,
-              `  return;`,
-            ]
+            `  const response = await p;`,
+            `  responseStream.write(JSON.stringify(response));`,
+            `  responseStream.end();`,
+            `  return;`,
+          ]
           : [`  return p;`]),
         `}`,
       ].join("\n");
+    }
+
+    function buildInvalidation() {
+      return all([outputPath, args.invalidation]).apply(
+        ([outputPath, invalidationRaw]) => {
+          // Normalize invalidation
+          if (invalidationRaw === false) return false;
+          const invalidation = {
+            wait: false,
+            paths: "all",
+            ...invalidationRaw,
+          };
+
+          // We will generate a hash based on the contents of the S3 files with cache enabled.
+          // This will be used to determine if we need to invalidate our CloudFront cache.
+          const s3Origin = Object.values(plan.origins).find(
+            (origin) => origin.s3,
+          )?.s3;
+          if (!s3Origin) return false;
+          const cachedS3Files = s3Origin.copy.filter((file) => file.cached);
+          if (cachedS3Files.length === 0) return false;
+
+          // Build invalidation paths
+          const invalidationPaths: string[] = [];
+          if (invalidation.paths === "all") {
+            invalidationPaths.push("/*");
+          } else if (invalidation.paths === "versioned") {
+            cachedS3Files.forEach((item) => {
+              if (!item.versionedSubDir) return false;
+              invalidationPaths.push(
+                path.posix.join("/", item.to, item.versionedSubDir, "*"),
+              );
+            });
+          } else {
+            invalidationPaths.push(...(invalidation?.paths || []));
+          }
+          if (invalidationPaths.length === 0) return false;
+
+          // Build build ID
+          let invalidationBuildId: string;
+          if (plan.buildId) {
+            invalidationBuildId = plan.buildId;
+          } else {
+            const hash = crypto.createHash("md5");
+
+            cachedS3Files.forEach((item) => {
+              // The below options are needed to support following symlinks when building zip files:
+              // - nodir: This will prevent symlinks themselves from being copied into the zip.
+              // - follow: This will follow symlinks and copy the files within.
+
+              // For versioned files, use file path for digest since file version in name should change on content change
+              if (item.versionedSubDir) {
+                globSync("**", {
+                  dot: true,
+                  nodir: true,
+                  follow: true,
+                  cwd: path.resolve(
+                    outputPath,
+                    item.from,
+                    item.versionedSubDir,
+                  ),
+                }).forEach((filePath) => hash.update(filePath));
+              }
+
+              // For non-versioned files, use file content for digest
+              if (invalidation.paths !== "versioned") {
+                globSync("**", {
+                  ignore: item.versionedSubDir
+                    ? [path.posix.join(item.versionedSubDir, "**")]
+                    : undefined,
+                  dot: true,
+                  nodir: true,
+                  follow: true,
+                  cwd: path.resolve(outputPath, item.from),
+                }).forEach((filePath) =>
+                  hash.update(
+                    fs.readFileSync(
+                      path.resolve(outputPath, item.from, filePath),
+                    ),
+                  ),
+                );
+              }
+            });
+            invalidationBuildId = hash.digest("hex");
+          }
+
+          return {
+            paths: invalidationPaths,
+            token: invalidationBuildId,
+            wait: invalidation.wait,
+          };
+        },
+      );
     }
 
     function createDistribution() {
@@ -830,49 +932,12 @@ function handler(event) {
               })),
             customErrorResponses: plan.errorResponses,
             domain: args.domain,
+            invalidation,
           },
           // create distribution after assets are uploaded
           { dependsOn: bucketFile, parent },
         ),
       );
-    }
-
-    function allowServerFunctionInvalidateDistribution() {
-      const policy = new iam.Policy(
-        `${name}InvalidationPolicy`,
-        {
-          policy: interpolate`{
-            "Version": "2012-10-17",
-            "Statement": [
-              {
-                "Action": "cloudfront:CreateInvalidation",
-                "Effect": "Allow",
-                "Resource": "${distribution.nodes.distribution.arn}"
-              }
-            ]
-          }`,
-        },
-        { parent },
-      );
-
-      for (const fn of [...ssrFunctions, ...Object.values(edgeFunctions)]) {
-        fn.nodes.function.name.apply((functionName) => {
-          const uniqueHash = crypto
-            .createHash("md5")
-            .update(functionName)
-            .digest("hex")
-            .substring(0, 4);
-
-          new iam.RolePolicyAttachment(
-            `${name}InvalidationPolicyAttachment${uniqueHash}`,
-            {
-              policyArn: policy.arn,
-              role: fn.nodes.role!.name,
-            },
-            { parent },
-          );
-        });
-      }
     }
 
     function createWarmer() {
@@ -932,104 +997,6 @@ function handler(event) {
           input: JSON.stringify({}),
         },
         { parent },
-      );
-    }
-
-    function createDistributionInvalidation() {
-      all([outputPath, args.invalidation]).apply(
-        ([outputPath, invalidationRaw]) => {
-          // Normalize invalidation
-          if (invalidationRaw === false) return;
-          const invalidation = {
-            wait: false,
-            paths: "all",
-            ...invalidationRaw,
-          };
-
-          // We will generate a hash based on the contents of the S3 files with cache enabled.
-          // This will be used to determine if we need to invalidate our CloudFront cache.
-          const s3Origin = Object.values(plan.origins).find(
-            (origin) => origin.s3,
-          )?.s3;
-          if (!s3Origin) return;
-          const cachedS3Files = s3Origin.copy.filter((file) => file.cached);
-          if (cachedS3Files.length === 0) return;
-
-          // Build invalidation paths
-          const invalidationPaths: string[] = [];
-          if (invalidation.paths === "all") {
-            invalidationPaths.push("/*");
-          } else if (invalidation.paths === "versioned") {
-            cachedS3Files.forEach((item) => {
-              if (!item.versionedSubDir) return;
-              invalidationPaths.push(
-                path.posix.join("/", item.to, item.versionedSubDir, "*"),
-              );
-            });
-          } else {
-            invalidationPaths.push(...(invalidation?.paths || []));
-          }
-          if (invalidationPaths.length === 0) return;
-
-          // Build build ID
-          let invalidationBuildId: string;
-          if (plan.buildId) {
-            invalidationBuildId = plan.buildId;
-          } else {
-            const hash = crypto.createHash("md5");
-
-            cachedS3Files.forEach((item) => {
-              // The below options are needed to support following symlinks when building zip files:
-              // - nodir: This will prevent symlinks themselves from being copied into the zip.
-              // - follow: This will follow symlinks and copy the files within.
-
-              // For versioned files, use file path for digest since file version in name should change on content change
-              if (item.versionedSubDir) {
-                globSync("**", {
-                  dot: true,
-                  nodir: true,
-                  follow: true,
-                  cwd: path.resolve(
-                    outputPath,
-                    item.from,
-                    item.versionedSubDir,
-                  ),
-                }).forEach((filePath) => hash.update(filePath));
-              }
-
-              // For non-versioned files, use file content for digest
-              if (invalidation.paths !== "versioned") {
-                globSync("**", {
-                  ignore: item.versionedSubDir
-                    ? [path.posix.join(item.versionedSubDir, "**")]
-                    : undefined,
-                  dot: true,
-                  nodir: true,
-                  follow: true,
-                  cwd: path.resolve(outputPath, item.from),
-                }).forEach((filePath) =>
-                  hash.update(
-                    fs.readFileSync(
-                      path.resolve(outputPath, item.from, filePath),
-                    ),
-                  ),
-                );
-              }
-            });
-            invalidationBuildId = hash.digest("hex");
-          }
-
-          new DistributionInvalidation(
-            `${name}Invalidation`,
-            {
-              distributionId: distribution.nodes.distribution.id,
-              paths: invalidationPaths,
-              version: invalidationBuildId,
-              wait: invalidation.wait,
-            },
-            { parent },
-          );
-        },
       );
     }
   });

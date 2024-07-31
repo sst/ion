@@ -60,6 +60,9 @@ func (s *Multiplexer) draw() {
 	if selected != nil && selected.isScrolling() && (s.focused || !selected.killable) {
 		hotkeys["enter"] = "reset"
 	}
+	if selected.vt.HasSelection() {
+		hotkeys["enter"] = "copy"
+	}
 	hotkeys["ctrl-u/d"] = "scroll"
 	// sort hotkeys
 	keys := make([]string, 0, len(hotkeys))
@@ -78,7 +81,7 @@ func (s *Multiplexer) draw() {
 		label := hotkeys[key]
 		title := views.NewTextBar()
 		title.SetStyle(tcell.StyleDefault.Foreground(tcell.ColorGray))
-		title.SetLeft(" "+key, tcell.StyleDefault.Foreground(tcell.ColorWhite).Bold(true))
+		title.SetLeft(" "+key, tcell.StyleDefault.Foreground(tcell.ColorGray).Bold(true))
 		title.SetRight(label+"  ", tcell.StyleDefault)
 		s.stack.AddWidget(title, 0)
 	}

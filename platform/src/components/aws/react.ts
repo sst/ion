@@ -21,11 +21,24 @@ import { Cdn } from "./cdn.js";
 import { Bucket } from "./bucket.js";
 import { Component } from "../component.js";
 import { Link } from "../link.js";
+import { DevArgs } from "../dev.js";
 import type { Input } from "../input.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { URL_UNAVAILABLE } from "./linkable.js";
 
 export interface ReactArgs extends SsrSiteArgs {
+  /**
+   * Configure how this component works in `sst dev`.
+   *
+   * :::note
+   * In `sst dev` your React app is run in dev mode; it's not deployed.
+   * :::
+   *
+   * Instead of deploying your React app, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   */
+  dev?: DevArgs["dev"];
   /**
    * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
    *
@@ -342,6 +355,7 @@ export class React extends Component implements Link.Linkable {
   private cdn?: Output<Cdn>;
   private assets?: Bucket;
   private server?: Output<Function>;
+  private devUrl?: Output<string>;
 
   constructor(
     name: string,
@@ -355,6 +369,7 @@ export class React extends Component implements Link.Linkable {
     const { sitePath, partition } = prepare(args, opts);
     if ($dev) {
       const server = createDevServer(parent, name, args);
+      this.devUrl = output(args.dev?.url ?? URL_UNAVAILABLE);
       this.registerOutputs({
         _metadata: {
           mode: "placeholder",
@@ -373,7 +388,6 @@ export class React extends Component implements Link.Linkable {
           environment: args.environment,
         },
         _dev: {
-          directory: sitePath,
           links: output(args.link || [])
             .apply(Link.build)
             .apply((links) => links.map((link) => link.name)),
@@ -381,7 +395,13 @@ export class React extends Component implements Link.Linkable {
             role: server.nodes.role.arn,
           },
           environment: args.environment,
-          command: "npm run dev",
+          directory: output(args.dev?.directory).apply(
+            (dir) => dir || sitePath,
+          ),
+          autostart: output(args.dev?.autostart).apply((val) => val ?? true),
+          command: output(args.dev?.command).apply(
+            (val) => val || "npm run dev",
+          ),
         },
       });
       return;
@@ -472,36 +492,36 @@ export class React extends Component implements Link.Linkable {
             defaultRootObject: indexPage,
             errorResponses: !serverConfig
               ? [
-                  {
-                    errorCode: 403,
-                    responsePagePath: interpolate`/${indexPage}`,
-                    responseCode: 200,
-                  },
-                  {
-                    errorCode: 404,
-                    responsePagePath: interpolate`/${indexPage}`,
-                    responseCode: 200,
-                  },
-                ]
+                {
+                  errorCode: 403,
+                  responsePagePath: interpolate`/${indexPage}`,
+                  responseCode: 200,
+                },
+                {
+                  errorCode: 404,
+                  responsePagePath: interpolate`/${indexPage}`,
+                  responseCode: 200,
+                },
+              ]
               : [],
             edgeFunctions:
               edge && serverConfig
                 ? {
-                    server: {
-                      function: serverConfig,
-                    },
-                  }
+                  server: {
+                    function: serverConfig,
+                  },
+                }
                 : undefined,
             origins: {
               ...(edge || !serverConfig
                 ? {}
                 : {
+                  server: {
                     server: {
-                      server: {
-                        function: serverConfig,
-                      },
+                      function: serverConfig,
                     },
-                  }),
+                  },
+                }),
               s3: {
                 s3: {
                   copy: [
@@ -517,35 +537,35 @@ export class React extends Component implements Link.Linkable {
             behaviors: [
               ...(!serverConfig
                 ? [
-                    {
-                      cacheType: "static",
-                      cfFunction: "serverCfFunction",
-                      origin: "s3",
-                    } as const,
-                  ]
+                  {
+                    cacheType: "static",
+                    cfFunction: "serverCfFunction",
+                    origin: "s3",
+                  } as const,
+                ]
                 : [
-                    edge
-                      ? ({
-                          cacheType: "server",
-                          cfFunction: "serverCfFunction",
-                          edgeFunction: "server",
-                          origin: "s3",
-                        } as const)
-                      : ({
-                          cacheType: "server",
-                          cfFunction: "serverCfFunction",
-                          origin: "server",
-                        } as const),
-                    ...buildMeta.staticRoutes.map(
-                      (route) =>
-                        ({
-                          cacheType: "static",
-                          pattern: route,
-                          cfFunction: "staticCfFunction",
-                          origin: "s3",
-                        }) as const,
-                    ),
-                  ]),
+                  edge
+                    ? ({
+                      cacheType: "server",
+                      cfFunction: "serverCfFunction",
+                      edgeFunction: "server",
+                      origin: "s3",
+                    } as const)
+                    : ({
+                      cacheType: "server",
+                      cfFunction: "serverCfFunction",
+                      origin: "server",
+                    } as const),
+                  ...buildMeta.staticRoutes.map(
+                    (route) =>
+                      ({
+                        cacheType: "static",
+                        pattern: route,
+                        cfFunction: "staticCfFunction",
+                        origin: "s3",
+                      }) as const,
+                  ),
+                ]),
             ],
           });
         },
@@ -630,10 +650,8 @@ export class React extends Component implements Link.Linkable {
    * Otherwise, it's the autogenerated CloudFront URL.
    */
   public get url() {
-    if (!this.cdn) return;
-
-    return all([this.cdn.domainUrl, this.cdn.url]).apply(
-      ([domainUrl, url]) => domainUrl ?? url,
+    return all([this.cdn?.domainUrl, this.cdn?.url, this.devUrl]).apply(
+      ([domainUrl, url, dev]) => domainUrl ?? url ?? dev!,
     );
   }
 
@@ -661,7 +679,7 @@ export class React extends Component implements Link.Linkable {
   public getSSTLink() {
     return {
       properties: {
-        url: output(this.url).apply((url) => url || URL_UNAVAILABLE),
+        url: this.url,
       },
     };
   }

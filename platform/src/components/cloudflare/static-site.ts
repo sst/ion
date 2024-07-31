@@ -15,6 +15,7 @@ import {
   cleanup,
   prepare,
 } from "../base/base-static-site.js";
+import { DEFAULT_ACCOUNT_ID } from "./account-id.js";
 
 export interface StaticSiteArgs extends BaseStaticSiteArgs {
   /**
@@ -262,7 +263,7 @@ export class StaticSite extends Component implements Link.Linkable {
     this.router = worker;
 
     this.registerOutputs({
-      ...cleanup(this.url as Output<string>, sitePath, environment),
+      ...cleanup(sitePath, environment, this.url as Output<string>),
       _metadata: {
         path: sitePath,
         environment,
@@ -346,7 +347,7 @@ export class StaticSite extends Component implements Link.Linkable {
       return new KvData(
         `${name}AssetFiles`,
         {
-          accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+          accountId: DEFAULT_ACCOUNT_ID,
           namespaceId: storage.id,
           entries: assetManifest.apply((manifest) =>
             manifest.map((m) => ({

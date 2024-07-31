@@ -19,6 +19,7 @@ import { Cdn } from "./cdn.js";
 import { Bucket } from "./bucket.js";
 import { Component } from "../component.js";
 import { Link } from "../link.js";
+import { DevArgs } from "../dev.js";
 import { VisibleError } from "../error.js";
 import type { Input } from "../input.js";
 import { Queue } from "./queue.js";
@@ -26,7 +27,7 @@ import { buildApp } from "../base/base-ssr-site.js";
 import { dynamodb, lambda } from "@pulumi/aws";
 import { URL_UNAVAILABLE } from "./linkable.js";
 
-const DEFAULT_OPEN_NEXT_VERSION = "3.0.2";
+const DEFAULT_OPEN_NEXT_VERSION = "3.0.8";
 const DEFAULT_CACHE_POLICY_ALLOWED_HEADERS = ["x-open-next-cache-key"];
 
 type BaseFunction = {
@@ -90,6 +91,18 @@ interface OpenNextOutput {
 }
 
 export interface NextjsArgs extends SsrSiteArgs {
+  /**
+   * Configure how this component works in `sst dev`.
+   *
+   * :::note
+   * In `sst dev` your Next.js app is run in dev mode; it's not deployed.
+   * :::
+   *
+   * Instead of deploying your Next.js app, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   */
+  dev?: DevArgs["dev"];
   /**
    * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
    *
@@ -211,10 +224,11 @@ export interface NextjsArgs extends SsrSiteArgs {
    *
    * @example
    *
-   * If you want to use a custom `build` script from your `package.json`.
+   * If you want to use a custom `build` script from your `package.json`. This is useful if you have a custom build process or want to use a different version of OpenNext.
+   * open-next by default uses the `build` script for building next-js app in your `package.json`. You can customize the build command in open-next configuration.
    * ```js
    * {
-   *   buildCommand: "npm run build"
+   *   buildCommand: "npm run build:open-next"
    * }
    * ```
    */
@@ -389,7 +403,7 @@ export interface NextjsArgs extends SsrSiteArgs {
    * By default, a new cache policy is created for it. This allows you to reuse an existing
    * policy instead of creating a new one.
    *
-   * @default A new cache plolicy is created
+   * @default A new cache policy is created
    *
    * @example
    * ```js
@@ -475,6 +489,7 @@ export class Nextjs extends Component implements Link.Linkable {
   private cdn?: Output<Cdn>;
   private assets?: Bucket;
   private server?: Output<Function>;
+  private devUrl?: Output<string>;
 
   constructor(
     name: string,
@@ -497,6 +512,7 @@ export class Nextjs extends Component implements Link.Linkable {
     const { sitePath, partition, region } = prepare(args, opts);
     if ($dev) {
       const server = createDevServer(parent, name, args);
+      this.devUrl = output(args.dev?.url ?? URL_UNAVAILABLE);
       this.registerOutputs({
         _metadata: {
           mode: "placeholder",
@@ -514,7 +530,6 @@ export class Nextjs extends Component implements Link.Linkable {
           environment: args.environment,
         },
         _dev: {
-          directory: sitePath,
           links: output(args.link || [])
             .apply(Link.build)
             .apply((links) => links.map((link) => link.name)),
@@ -522,7 +537,13 @@ export class Nextjs extends Component implements Link.Linkable {
             role: server.nodes.role.arn,
           },
           environment: args.environment,
-          command: "npm run dev",
+          directory: output(args.dev?.directory).apply(
+            (dir) => dir || sitePath,
+          ),
+          autostart: output(args.dev?.autostart).apply((val) => val ?? true),
+          command: output(args.dev?.command).apply(
+            (val) => val || "npm run dev",
+          ),
         },
       });
       return;
@@ -769,39 +790,39 @@ export class Nextjs extends Component implements Link.Linkable {
               },
               ...(revalidationQueueArn
                 ? [
-                    {
-                      actions: [
-                        "sqs:SendMessage",
-                        "sqs:GetQueueAttributes",
-                        "sqs:GetQueueUrl",
-                      ],
-                      resources: [revalidationQueueArn],
-                    },
-                  ]
+                  {
+                    actions: [
+                      "sqs:SendMessage",
+                      "sqs:GetQueueAttributes",
+                      "sqs:GetQueueUrl",
+                    ],
+                    resources: [revalidationQueueArn],
+                  },
+                ]
                 : []),
               ...(revalidationTableArn
                 ? [
-                    {
-                      actions: [
-                        "dynamodb:BatchGetItem",
-                        "dynamodb:GetRecords",
-                        "dynamodb:GetShardIterator",
-                        "dynamodb:Query",
-                        "dynamodb:GetItem",
-                        "dynamodb:Scan",
-                        "dynamodb:ConditionCheckItem",
-                        "dynamodb:BatchWriteItem",
-                        "dynamodb:PutItem",
-                        "dynamodb:UpdateItem",
-                        "dynamodb:DeleteItem",
-                        "dynamodb:DescribeTable",
-                      ],
-                      resources: [
-                        revalidationTableArn,
-                        `${revalidationTableArn}/*`,
-                      ],
-                    },
-                  ]
+                  {
+                    actions: [
+                      "dynamodb:BatchGetItem",
+                      "dynamodb:GetRecords",
+                      "dynamodb:GetShardIterator",
+                      "dynamodb:Query",
+                      "dynamodb:GetItem",
+                      "dynamodb:Scan",
+                      "dynamodb:ConditionCheckItem",
+                      "dynamodb:BatchWriteItem",
+                      "dynamodb:PutItem",
+                      "dynamodb:UpdateItem",
+                      "dynamodb:DeleteItem",
+                      "dynamodb:DescribeTable",
+                    ],
+                    resources: [
+                      revalidationTableArn,
+                      `${revalidationTableArn}/*`,
+                    ],
+                  },
+                ]
                 : []),
             ],
           };
@@ -1335,10 +1356,8 @@ if(request.headers["cloudfront-viewer-longitude"]) {
    * Otherwise, it's the autogenerated CloudFront URL.
    */
   public get url() {
-    if (!this.cdn) return;
-
-    return all([this.cdn.domainUrl, this.cdn.url]).apply(
-      ([domainUrl, url]) => domainUrl ?? url,
+    return all([this.cdn?.domainUrl, this.cdn?.url, this.devUrl]).apply(
+      ([domainUrl, url, dev]) => domainUrl ?? url ?? dev!,
     );
   }
 
@@ -1366,7 +1385,7 @@ if(request.headers["cloudfront-viewer-longitude"]) {
   public getSSTLink() {
     return {
       properties: {
-        url: output(this.url).apply((url) => url || URL_UNAVAILABLE),
+        url: this.url,
       },
     };
   }
