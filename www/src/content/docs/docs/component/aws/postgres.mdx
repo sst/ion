@@ -212,7 +212,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">ClusterArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/cluster/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ClusterArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/cluster/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">ClusterArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/cluster/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ClusterArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/cluster/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the RDS Cluster.
@@ -222,7 +222,7 @@ Transform the RDS Cluster.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">ClusterInstanceArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/clusterinstance/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ClusterInstanceArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/clusterinstance/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">ClusterInstanceArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/clusterinstance/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">ClusterInstanceArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/clusterinstance/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the database instance in the RDS Cluster.
@@ -232,7 +232,7 @@ Transform the database instance in the RDS Cluster.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">SubnetGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/subnetgroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">SubnetGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/subnetgroup/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">SubnetGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/subnetgroup/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">SubnetGroupArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/rds/subnetgroup/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the RDS subnet group.
@@ -337,6 +337,16 @@ A list of VPC security group IDs.
 The ARN of the RDS Cluster.
 </Segment>
 
+### clusterID
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The ID of the RDS Cluster.
+</Segment>
+
 ### database
 <Segment>
 <Section type="parameters">
@@ -345,6 +355,16 @@ The ARN of the RDS Cluster.
 </InlineSection>
 </Section>
 The name of the database.
+</Segment>
+
+### host
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The host of the database.
 </Segment>
 
 ### nodes
@@ -374,6 +394,26 @@ The name of the database.
 </Section>
 </Segment>
 
+### password
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The password of the master user.
+</Segment>
+
+### port
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">number</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The port of the database.
+</Segment>
+
 ### secretArn
 <Segment>
 <Section type="parameters">
@@ -382,6 +422,16 @@ The name of the database.
 </InlineSection>
 </Section>
 The ARN of the master user secret.
+</Segment>
+
+### username
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The username of the master user.
 </Segment>
 
 ## SDK
@@ -400,9 +450,69 @@ This is accessible through the `Resource` object in the [SDK](/docs/reference/sd
 - <p><code class="key">database</code> <code class="primitive">string</code></p>
 
   The name of the database.
+- <p><code class="key">host</code> <code class="primitive">string</code></p>
+
+  The host of the database.
+- <p><code class="key">password</code> <code class="primitive">undefined</code><code class="symbol"> | </code><code class="primitive">string</code></p>
+
+  The password of the master user.
+- <p><code class="key">port</code> <code class="primitive">number</code></p>
+
+  The port of the database.
 - <p><code class="key">secretArn</code> <code class="primitive">string</code></p>
 
   The ARN of the master user secret.
+- <p><code class="key">username</code> <code class="primitive">string</code></p>
+
+  The username of the master user.
 </Section>
+</Segment>
+
+## Methods
+
+### static get
+<Segment>
+<Section type="signature">
+```ts
+Postgres.get(name, clusterID)
+```
+</Section>
+
+<Section type="parameters">
+#### Parameters
+- <p><code class="key">name</code> <code class="primitive">string</code></p>
+The name of the component.
+- <p><code class="key">clusterID</code> <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code></p>
+The id of the existing Postgres cluster.
+</Section>
+
+<InlineSection>
+**Returns** [<code class="type">Postgres</code>](.)
+</InlineSection>
+Reference an existing Postgrest cluster with the given cluster name. This is useful when you
+create a Postgres cluster in one stage and want to share it in another. It avoids having to
+create a new Postgres cluster in the other stage.
+
+:::tip
+You can use the `static get` method to share Postgres clusters across stages.
+:::
+
+Imagine you create a cluster in the `dev` stage. And in your personal stage `frank`,
+instead of creating a new cluster, you want to share the same cluster from `dev`.
+
+```ts title="sst.config.ts"
+const database = $app.stage === "frank"
+  ? sst.aws.Postgres.get("MyDatabase", "app-dev-mydatabase")
+  : new sst.aws.Postgres("MyDatabase");
+```
+
+Here `app-dev-mydatabase` is the ID of the cluster created in the `dev` stage.
+You can find this by outputting the cluster ID in the `dev` stage.
+
+```ts title="sst.config.ts"
+return {
+  cluster: database.clusterID
+};
+```
 </Segment>
 </div>

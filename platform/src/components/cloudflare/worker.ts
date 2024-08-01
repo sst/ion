@@ -18,6 +18,7 @@ import { ZoneLookup } from "./providers/zone-lookup.js";
 import { iam } from "@pulumi/aws";
 import { Permission } from "../aws/permission.js";
 import { Binding, binding } from "./binding.js";
+import { DEFAULT_ACCOUNT_ID } from "./account-id.js";
 
 export interface WorkerArgs {
   /**
@@ -272,7 +273,7 @@ export class Worker extends Component implements Link.Linkable {
                 handler,
                 runtime: "worker",
                 properties: {
-                  accountID: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+                  accountID: DEFAULT_ACCOUNT_ID,
                   scriptName: script.name,
                   build,
                 },
@@ -378,43 +379,46 @@ export class Worker extends Component implements Link.Linkable {
       return all([handler, args.environment, iamCredentials, bindings]).apply(
         async ([handler, environment, iamCredentials, bindings]) =>
           new cf.WorkerScript(
-            `${name}Script`,
-            transform(args.transform?.worker, {
-              name,
-              accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
-              content: (await fs.readFile(handler)).toString(),
-              module: true,
-              compatibilityDate: "2024-04-04",
-              compatibilityFlags: ["nodejs_compat"],
-              ...bindings,
-              plainTextBindings: [
-                ...(iamCredentials
-                  ? [
-                      {
-                        name: "AWS_ACCESS_KEY_ID",
-                        text: iamCredentials.id,
-                      },
-                    ]
-                  : []),
-                ...Object.entries(environment ?? {}).map(([key, value]) => ({
-                  name: key,
-                  text: value,
-                })),
-                ...(bindings.plainTextBindings || []),
-              ],
-              secretTextBindings: [
-                ...(iamCredentials
-                  ? [
-                      {
-                        name: "AWS_SECRET_ACCESS_KEY",
-                        text: iamCredentials.secret,
-                      },
-                    ]
-                  : []),
-                ...(bindings.secretTextBindings || []),
-              ],
-            }),
-            { parent },
+            ...transform(
+              args.transform?.worker,
+              `${name}Script`,
+              {
+                name: "",
+                accountId: DEFAULT_ACCOUNT_ID,
+                content: (await fs.readFile(handler)).toString(),
+                module: true,
+                compatibilityDate: "2024-04-04",
+                compatibilityFlags: ["nodejs_compat"],
+                ...bindings,
+                plainTextBindings: [
+                  ...(iamCredentials
+                    ? [
+                        {
+                          name: "AWS_ACCESS_KEY_ID",
+                          text: iamCredentials.id,
+                        },
+                      ]
+                    : []),
+                  ...Object.entries(environment ?? {}).map(([key, value]) => ({
+                    name: key,
+                    text: value,
+                  })),
+                  ...(bindings.plainTextBindings || []),
+                ],
+                secretTextBindings: [
+                  ...(iamCredentials
+                    ? [
+                        {
+                          name: "AWS_SECRET_ACCESS_KEY",
+                          text: iamCredentials.secret,
+                        },
+                      ]
+                    : []),
+                  ...(bindings.secretTextBindings || []),
+                ],
+              },
+              { parent },
+            ),
           ),
       );
     }
@@ -423,7 +427,7 @@ export class Worker extends Component implements Link.Linkable {
       return new WorkerUrl(
         `${name}Url`,
         {
-          accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+          accountId: DEFAULT_ACCOUNT_ID,
           scriptName: script.name,
           enabled: urlEnabled,
         },
@@ -437,7 +441,7 @@ export class Worker extends Component implements Link.Linkable {
       const zone = new ZoneLookup(
         `${name}ZoneLookup`,
         {
-          accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+          accountId: DEFAULT_ACCOUNT_ID,
           domain: args.domain,
         },
         { parent },
@@ -446,7 +450,7 @@ export class Worker extends Component implements Link.Linkable {
       return new cf.WorkerDomain(
         `${name}Domain`,
         {
-          accountId: sst.cloudflare.DEFAULT_ACCOUNT_ID,
+          accountId: DEFAULT_ACCOUNT_ID,
           service: script.name,
           hostname: args.domain,
           zoneId: zone.id,
@@ -499,8 +503,11 @@ export class Worker extends Component implements Link.Linkable {
         url: this.url,
       },
       include: [
-        binding("serviceBindings", {
-          service: this.script.id,
+        binding({
+          type: "serviceBindings",
+          properties: {
+            service: this.script.id,
+          },
         }),
       ],
     };

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,9 +17,8 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
-	"github.com/joho/godotenv"
 	"github.com/sst/ion/cmd/sst/cli"
-	"github.com/sst/ion/cmd/sst/mosaic"
+	"github.com/sst/ion/cmd/sst/mosaic/dev"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
@@ -81,7 +79,6 @@ func main() {
 }
 
 func run() error {
-	godotenv.Load()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	interruptChannel := make(chan os.Signal, 1)
@@ -289,72 +286,94 @@ var root = &cli.Command{
 			},
 		},
 		{
-			Name:   "mosaic",
+			Name:   "ui",
 			Hidden: true,
-			Run:    mosaic.CmdMosaic,
-		},
-		{
-			Name:   "mosaic-deploy",
-			Hidden: true,
-			Run:    mosaic.CmdMosaicDeploy,
+			Run:    CmdUI,
+			Flags: []cli.Flag{
+				{
+					Name: "filter",
+					Type: "string",
+					Description: cli.Description{
+						Short: "Filter events",
+						Long:  "Filter events.",
+					},
+				},
+			},
 		},
 		{
 			Name: "dev",
 			Description: cli.Description{
 				Short: "Run in development mode",
 				Long: strings.Join([]string{
-					"Run your app in development mode.",
+					"Run your app in dev mode.",
 					"",
 					"```bash frame=\"none\"",
 					"sst dev",
 					"```",
+					"By default, this starts a multiplexer with processes that deploy your app, run your functions, and start your frontend.",
 					"",
-					"Optionally, pass in a command to start your frontend as well.",
+					"![sst dev multiplexer mode](../../../../assets/docs/cli/sst-dev-multiplexer-mode.png)",
+					"",
+					"Each process is run in a separate pane that you can click on in the sidebar. These",
+					"include processes that:",
+					"",
+					"1. Watch your `sst.config.ts` and deploy your app",
+					"2. Run your functions [Live](/docs/live/) and logs their invocations",
+					"3. Run the dev mode for components that have `dev.autostart` enabled",
+					"   - Components like `Service` and frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.",
+					"   - It starts their `dev.command` in a separate pane",
+					"   - And loads any [linked resources](/docs/linking) in the environment",
+					"",
+					"The multiplexer makes it so that you won't have to start your frontend or",
+					"your container applications separately.",
+					"",
+					":::tip",
+					"The `sst dev` CLI also starts your frontend. So you don't need to start it",
+					"separately.",
+					":::",
+					"",
+					"While `sst dev` does a deploy when it starts up, it does not deploy components like",
+					"`Service`, or the frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.",
+					"That's because these have their own dev modes that the multiplexer starts.",
+					"",
+					":::note",
+					"The `Service` component and the frontends like `Nextjs` or `StaticSite` are not",
+					"deployed by `sst dev`.",
+					":::",
+					"",
+					"Optionally, you can disable the multiplexer and run `sst dev` in basic mode.",
+					"",
+					"```bash frame=\"none\"",
+					"sst dev --mode=basic",
+					"```",
+					"",
+					"This will only deploy your app and run your functions. If you are coming from SST",
+					"v2, this is how `sst dev` used to work.",
+					"",
+					"However in `basic` mode, you'll need to start your frontend separately by running",
+					"`sst dev` in a separate terminal session by passing in the command. For example:",
 					"",
 					"```bash frame=\"none\"",
 					"sst dev next dev",
 					"```",
 					"",
-					"To pass in a flag to your command, wrap it in quotes.",
+					"By wrapping your command, it'll load your [linked resources](/docs/linking) in the",
+					"environment.",
+					"",
+					"To pass in a flag to the command, use `--`.",
 					"",
 					"```bash frame=\"none\"",
-					"sst dev \"next dev --turbo\"",
+					"sst dev -- next dev --turbo",
 					"```",
-					"",
-					"Dev mode does a few things:",
-					"",
-					"1. Starts a local server",
-					"2. Watches your `sst.config.ts` and re-deploys changes",
-					"3. Run your functions [Live](/docs/live/)",
-					"4. Skip components that should be run locally",
-					"   - `Service`",
-					"   - Frontends like, `Nextjs`, `Remix`, `Astro`, `SvelteKit`, etc.",
-					"5. If you pass in a `command`, it'll:",
-					"   - Load your [linked resources](/docs/linking) in the environment",
-					"   - And run the command",
-					"",
-					":::note",
-					"If you run `sst dev` with a command, it will not print your function logs.",
-					":::",
-					"",
-					"If `sst dev` starts your frontend, it won't print logs from your SST app. We do this to prevent your logs from being too noisy. To view your logs, you can run `sst dev` in a separate terminal.",
-					"",
-					":::tip",
-					"You can start as many instances of `sst dev` in your app as you want.",
-					":::",
-					"",
-					"Starting multiple instances of `sst dev` in the same project only starts a single _server_. Meaning that the second instance connects to the existing one.",
-					"",
-					"This is different from SST v2, in that you needed to run `sst dev` and `sst bind` for your frontend.",
 				}, "\n"),
 			},
 			Flags: []cli.Flag{
 				{
-					Name: "silent",
-					Type: "bool",
+					Name: "mode",
+					Type: "string",
 					Description: cli.Description{
-						Short: "Don't show function invocation logs",
-						Long:  "Don't show logs from function invocations",
+						Short: "Use mode=basic to turn off multiplexer",
+						Long:  "Defaults to using the multiplexer or `mosaic` mode. Use `basic` to turn it off.",
 					},
 				},
 			},
@@ -370,23 +389,23 @@ var root = &cli.Command{
 				{
 					Content: "sst dev",
 					Description: cli.Description{
-						Short: "",
+						Short: "Brings up your entire app - should be all you need",
 					},
 				},
 				{
 					Content: "sst dev next dev",
 					Description: cli.Description{
-						Short: "Start dev mode for SST and Next.js",
+						Short: "Start a command connected to a running sst dev session",
 					},
 				},
 				{
-					Content: "sst dev \"next dev --turbo\"",
+					Content: "sst dev -- next dev --turbo",
 					Description: cli.Description{
-						Short: "When passing flags wrap command in quotes",
+						Short: "Use -- to pass flags to the command",
 					},
 				},
 			},
-			Run: CmdDev,
+			Run: CmdMosaic,
 		},
 		{
 			Name: "deploy",
@@ -842,9 +861,9 @@ var root = &cli.Command{
 						if err != nil {
 							return util.NewReadableError(err, "Could not set secret")
 						}
-						addr, _ := server.GetExisting(p.PathConfig(), p.App().Stage)
-						if addr != "" {
-							http.Post("http://"+addr+"/api/deploy", "application/json", strings.NewReader("{}"))
+						url, _ := server.Discover(p.PathConfig(), p.App().Stage)
+						if url != "" {
+							dev.Deploy(c.Context, url)
 						}
 						ui.Success(fmt.Sprintf("Removed \"%s\" for stage \"%s\"", key, p.App().Stage))
 						return nil
@@ -884,6 +903,15 @@ var root = &cli.Command{
 					Description: cli.Description{
 						Short: "A command to run",
 						Long:  "A command to run.",
+					},
+				},
+			},
+			Flags: []cli.Flag{
+				{
+					Name: "target",
+					Description: cli.Description{
+						Short: "Target to run against",
+						Long:  "Target to run against.",
 					},
 				},
 			},
@@ -942,80 +970,7 @@ var root = &cli.Command{
 					},
 				},
 			},
-			Run: func(c *cli.Cli) error {
-				p, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer p.Cleanup()
-
-				backend := p.Backend()
-				links, err := provider.GetLinks(backend, p.App().Name, p.App().Stage)
-				if err != nil {
-					return err
-				}
-				var args []string
-				for _, arg := range c.Arguments() {
-					args = append(args, strings.Fields(arg)...)
-				}
-				cwd, _ := os.Getwd()
-				currentDir := cwd
-				for {
-					newPath := filepath.Join(currentDir, "node_modules", ".bin") + string(os.PathListSeparator) + os.Getenv("PATH")
-					os.Setenv("PATH", newPath)
-					parentDir := filepath.Dir(currentDir)
-					if parentDir == currentDir {
-						break
-					}
-					currentDir = parentDir
-				}
-				if len(args) == 0 {
-					args = append(args, "sh")
-				}
-				cmd := exec.Command(
-					args[0],
-					args[1:]...,
-				)
-				// Get the environment variables
-				envs := os.Environ()
-
-				// Filter the environment variables to exclude AWS_PROFILE
-				filteredEnvs := make([]string, 0, len(envs))
-				for _, val := range envs {
-					if !strings.HasPrefix(val, "AWS_PROFILE=") {
-						filteredEnvs = append(filteredEnvs, val)
-					}
-				}
-				cmd.Env = append(cmd.Env,
-					filteredEnvs...,
-				)
-				cmd.Env = append(cmd.Env,
-					fmt.Sprintf("PS1=%s/%s> ", p.App().Name, p.App().Stage),
-				)
-
-				for resource, value := range links {
-					jsonValue, err := json.Marshal(value)
-					if err != nil {
-						return err
-					}
-					envVar := fmt.Sprintf("SST_RESOURCE_%s=%s", resource, jsonValue)
-					cmd.Env = append(cmd.Env, envVar)
-				}
-				cmd.Env = append(cmd.Env, fmt.Sprintf(`SST_RESOURCE_App={"name": "%s", "stage": "%s" }`, p.App().Name, p.App().Stage))
-
-				for key, val := range p.Env() {
-					key = strings.ReplaceAll(key, "SST_", "")
-					cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, val))
-				}
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				cmd.Stdin = os.Stdin
-				err = cmd.Run()
-				if err != nil {
-					return util.NewReadableError(err, err.Error())
-				}
-				return nil
-			},
+			Run: CmdShell,
 		},
 		{
 			Name: "remove",
@@ -1154,31 +1109,6 @@ var root = &cli.Command{
 						return telemetry.Disable()
 					},
 				},
-			},
-		},
-		{
-			Name:   "server",
-			Hidden: true,
-			Run: func(c *cli.Cli) error {
-				project, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer project.Cleanup()
-
-				s, err := server.New(project)
-				if err != nil {
-					return err
-				}
-
-				err = s.Start(c.Context)
-				if err != nil {
-					if err == server.ErrServerAlreadyRunning {
-						return util.NewReadableError(err, "Another instance of SST is already running")
-					}
-					return err
-				}
-				return nil
 			},
 		},
 		{

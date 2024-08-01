@@ -23,11 +23,11 @@ import (
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sst/ion/cmd/sst/mosaic/aws/iot_writer"
 	"github.com/sst/ion/cmd/sst/mosaic/bus"
-	"github.com/sst/ion/cmd/sst/mosaic/server"
 	"github.com/sst/ion/cmd/sst/mosaic/watcher"
 	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/project/provider"
 	"github.com/sst/ion/pkg/runtime"
+	"github.com/sst/ion/pkg/server"
 )
 
 type fragment struct {
@@ -291,6 +291,14 @@ func Start(
 			return true
 		}
 
+		for unknown := range evts {
+			casted, ok := unknown.(*project.CompleteEvent)
+			if !ok {
+				continue
+			}
+			complete = casted
+			break
+		}
 		for {
 			select {
 			case <-ctx.Done():

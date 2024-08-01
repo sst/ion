@@ -62,6 +62,13 @@ export interface CognitoUserPoolArgs {
    */
   triggers?: Input<{
     /**
+     * The ARN of the AWS KMS key used for encryption.
+     *
+     * When `customEmailSender` or `customSmsSender` are configured, Cognito encrypts the
+     * verification code and temporary passwords before sending them to your Lambda functions.
+     */
+    kmsKey?: string;
+    /**
      * Triggered after the user successfully responds to the previous challenge, and a new
      * challenge needs to be created.
      *
@@ -159,7 +166,7 @@ export interface CognitoUserPoolArgs {
    */
   transform?: {
     /**
-     * Transform the Cognito user pool resource.
+     * Transform the Cognito User Pool resource.
      */
     userPool?: Transform<cognito.UserPoolArgs>;
   };
@@ -179,7 +186,7 @@ export interface CognitoUserPoolClientArgs {
 }
 
 /**
- * The `CognitoUserPool` component lets you add a [Amazon Cognito user pool](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools.html) to your app.
+ * The `CognitoUserPool` component lets you add a [Amazon Cognito User Pool](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools.html) to your app.
  *
  * #### Create the user pool
  *
@@ -233,94 +240,130 @@ export class CognitoUserPool extends Component implements Link.Linkable {
 
     function normalizeAliasesAndUsernames() {
       all([args.aliases, args.usernames]).apply(([aliases, usernames]) => {
-        if (aliases && usernames) {
+        if (aliases && usernames)
           throw new VisibleError(
             "You cannot set both aliases and usernames. Learn more about customizing sign-in attributes at https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-attributes.html#user-pool-settings-aliases",
           );
-        }
       });
     }
 
     function createTriggers() {
       if (!args.triggers) return;
 
-      return output(args.triggers).apply((triggers) =>
-        Object.fromEntries(
-          Object.entries(triggers).map(([trigger, value]) => {
+      return output(args.triggers).apply((triggers) => {
+        if (
+          (triggers.customEmailSender || triggers.customSmsSender) &&
+          !triggers.kmsKey
+        )
+          throw new VisibleError(
+            "You must provide a KMS key via `kmsKey` when configuring `customEmailSender` or `customSmsSender`.",
+          );
+
+        return Object.fromEntries(
+          Object.entries(triggers).map(([key, value]) => {
+            if (key === "kmsKey") return [key, output(value as string)];
+
             const fn = Function.fromDefinition(
-              `${name}Trigger${trigger}`,
+              `${name}Trigger${key}`,
               value,
               {
-                description: `Subscribed to ${trigger} from ${name}`,
+                description: `Subscribed to ${key} from ${name}`,
               },
               undefined,
               { parent },
             );
-            return [trigger, fn.arn];
+            return [key, fn.arn];
           }),
-        ),
-      );
+        );
+      });
     }
 
     function createUserPool() {
       return new cognito.UserPool(
-        `${name}UserPool`,
-        transform(args.transform?.userPool, {
-          aliasAttributes:
-            args.aliases &&
-            output(args.aliases).apply((aliases) => [
-              ...(aliases.includes("email") ? ["email"] : []),
-              ...(aliases.includes("phone") ? ["phone_number"] : []),
-              ...(aliases.includes("preferred_username")
-                ? ["preferred_username"]
-                : []),
-            ]),
-          usernameAttributes:
-            args.usernames &&
-            output(args.usernames).apply((usernames) => [
-              ...(usernames.includes("email") ? ["email"] : []),
-              ...(usernames.includes("phone") ? ["phone_number"] : []),
-            ]),
-          accountRecoverySetting: {
-            recoveryMechanisms: [
-              {
-                name: "verified_phone_number",
-                priority: 1,
-              },
-              {
-                name: "verified_email",
-                priority: 2,
-              },
-            ],
+        ...transform(
+          args.transform?.userPool,
+          `${name}UserPool`,
+          {
+            aliasAttributes:
+              args.aliases &&
+              output(args.aliases).apply((aliases) => [
+                ...(aliases.includes("email") ? ["email"] : []),
+                ...(aliases.includes("phone") ? ["phone_number"] : []),
+                ...(aliases.includes("preferred_username")
+                  ? ["preferred_username"]
+                  : []),
+              ]),
+            usernameAttributes:
+              args.usernames &&
+              output(args.usernames).apply((usernames) => [
+                ...(usernames.includes("email") ? ["email"] : []),
+                ...(usernames.includes("phone") ? ["phone_number"] : []),
+              ]),
+            accountRecoverySetting: {
+              recoveryMechanisms: [
+                {
+                  name: "verified_phone_number",
+                  priority: 1,
+                },
+                {
+                  name: "verified_email",
+                  priority: 2,
+                },
+              ],
+            },
+            adminCreateUserConfig: {
+              allowAdminCreateUserOnly: false,
+            },
+            usernameConfiguration: {
+              caseSensitive: false,
+            },
+            autoVerifiedAttributes: all([
+              args.aliases || [],
+              args.usernames || [],
+            ]).apply(([aliases, usernames]) => {
+              const attributes = [...aliases, ...usernames];
+              return [
+                ...(attributes.includes("email") ? ["email"] : []),
+                ...(attributes.includes("phone") ? ["phone_number"] : []),
+              ];
+            }),
+            emailConfiguration: {
+              emailSendingAccount: "COGNITO_DEFAULT",
+            },
+            verificationMessageTemplate: {
+              defaultEmailOption: "CONFIRM_WITH_CODE",
+              emailMessage:
+                "The verification code to your new account is {####}",
+              emailSubject: "Verify your new account",
+              smsMessage: "The verification code to your new account is {####}",
+            },
+            lambdaConfig:
+              triggers &&
+              triggers.apply((triggers) => ({
+                kmsKeyId: triggers.kmsKey,
+                createAuthChallenge: triggers.createAuthChallenge,
+                customEmailSender: triggers.customEmailSender && {
+                  lambdaArn: triggers.customEmailSender,
+                  lambdaVersion: "V1_0",
+                },
+                customMessage: triggers.customMessage,
+                customSmsSender: triggers.customSmsSender && {
+                  lambdaArn: triggers.customSmsSender,
+                  lambdaVersion: "V1_0",
+                },
+                defineAuthChallenge: triggers.defineAuthChallenge,
+                postAuthentication: triggers.postAuthentication,
+                postConfirmation: triggers.postConfirmation,
+                preAuthentication: triggers.preAuthentication,
+                preSignUp: triggers.preSignUp,
+                preTokenGeneration: triggers.preTokenGeneration,
+                userMigration: triggers.userMigration,
+                verifyAuthChallengeResponse:
+                  triggers.verifyAuthChallengeResponse,
+              })),
           },
-          adminCreateUserConfig: {
-            allowAdminCreateUserOnly: false,
-          },
-          usernameConfiguration: {
-            caseSensitive: false,
-          },
-          autoVerifiedAttributes: all([
-            args.aliases || [],
-            args.usernames || [],
-          ]).apply(([aliases, usernames]) => {
-            const attributes = [...aliases, ...usernames];
-            return [
-              ...(attributes.includes("email") ? ["email"] : []),
-              ...(attributes.includes("phone") ? ["phone_number"] : []),
-            ];
-          }),
-          emailConfiguration: {
-            emailSendingAccount: "COGNITO_DEFAULT",
-          },
-          verificationMessageTemplate: {
-            defaultEmailOption: "CONFIRM_WITH_CODE",
-            emailMessage: "The verification code to your new account is {####}",
-            emailSubject: "Verify your new account",
-            smsMessage: "The verification code to your new account is {####}",
-          },
-          lambdaConfig: triggers,
-        }),
-        { parent },
+          { parent },
+        ),
       );
     }
 
@@ -328,9 +371,11 @@ export class CognitoUserPool extends Component implements Link.Linkable {
       if (!triggers) return;
 
       triggers.apply((triggers) => {
-        Object.entries(triggers).forEach(([trigger, functionArn]) => {
+        Object.entries(triggers).forEach(([key, functionArn]) => {
+          if (key === "kmsKey") return;
+
           new lambda.Permission(
-            `${name}Permission${trigger}`,
+            `${name}Permission${key}`,
             {
               action: "lambda:InvokeFunction",
               function: functionArn,
@@ -345,14 +390,14 @@ export class CognitoUserPool extends Component implements Link.Linkable {
   }
 
   /**
-   * The Cognito user pool ID.
+   * The Cognito User Pool ID.
    */
   public get id() {
     return this.userPool.id;
   }
 
   /**
-   * The Cognito user pool ARN.
+   * The Cognito User Pool ARN.
    */
   public get arn() {
     return this.userPool.arn;
@@ -364,7 +409,7 @@ export class CognitoUserPool extends Component implements Link.Linkable {
   public get nodes() {
     return {
       /**
-       * The Amazon Cognito user pool.
+       * The Amazon Cognito User Pool.
        */
       userPool: this.userPool,
     };

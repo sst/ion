@@ -65,6 +65,28 @@ dns(args?)
 </Segment>
 
 ## DnsArgs
+### override?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">boolean</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+
+<InlineSection>
+**Default** <code class="primitive">false</code>
+</InlineSection>
+Set to `true` to allow the creation of new DNS records that can replace existing ones.
+
+This is useful for switching a domain to a new site without removing old DNS records,
+helping to prevent downtime.
+
+```js
+{
+  override: true
+}
+```
+</Segment>
 ### transform?
 <Segment>
 <Section type="parameters">
@@ -81,7 +103,7 @@ resources.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">RecordArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/route53/record/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RecordArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/route53/record/#inputs)<code class="symbol"> => </code><code class="primitive">void</code><code class="symbol">)</code>
+**Type** [<code class="type">RecordArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/route53/record/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">RecordArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/route53/record/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
 </InlineSection>
 </Section>
 Transform the AWS Route 53 record resource.

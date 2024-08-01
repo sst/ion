@@ -3,9 +3,9 @@
   "type": "module",
   "version": "0.0.1",
   "scripts": {
-    "dev": "sst dev astro dev",
+    "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro check && astro build",
+    "build": "astro build",
     "preview": "astro preview",
     "astro": "astro"
   },
@@ -15,7 +15,7 @@
     "@aws-sdk/s3-request-presigner": "^3.540.0",
     "astro": "^4.5.9",
     "astro-sst": "^2.41.2",
-    "sst": "0.1.11",
+    "sst": "0.1.17",
     "typescript": "^5.4.3"
   }
 }

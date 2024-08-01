@@ -4,14 +4,14 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"regexp"
 	"strings"
 
 	"github.com/fatih/color"
 	"github.com/sst/ion/cmd/sst/cli"
-	"github.com/sst/ion/cmd/sst/ui"
+	"github.com/sst/ion/cmd/sst/mosaic/dev"
+	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/project/provider"
 	"github.com/sst/ion/pkg/server"
@@ -87,10 +87,11 @@ func CmdSecretSet(c *cli.Cli) error {
 	if err != nil {
 		return util.NewReadableError(err, "Could not set secret")
 	}
-	addr, _ := server.GetExisting(p.PathConfig(), p.App().Stage)
-	if addr != "" {
-		http.Post("http://"+addr+"/api/deploy", "application/json", strings.NewReader("{}"))
+	url, _ := server.Discover(p.PathConfig(), p.App().Stage)
+	if url != "" {
+		dev.Deploy(c.Context, url)
 	}
+
 	ui.Success(fmt.Sprintf("Set \"%s\" for stage \"%s\". Run \"sst deploy\" to update.", key, p.App().Stage))
 	return nil
 }
@@ -131,10 +132,11 @@ func CmdSecretLoad(c *cli.Cli) error {
 	if err != nil {
 		return util.NewReadableError(err, "Could not set secret")
 	}
-	addr, _ := server.GetExisting(p.PathConfig(), p.App().Stage)
-	if addr != "" {
-		http.Post("http://"+addr+"/api/deploy", "application/json", strings.NewReader("{}"))
+	url, _ := server.Discover(p.PathConfig(), p.App().Stage)
+	if url != "" {
+		dev.Deploy(c.Context, url)
 	}
+
 	ui.Success("Run \"sst deploy\" to update.")
 	return nil
 }

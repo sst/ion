@@ -20,7 +20,12 @@
  *   },
  *   // Your app's resources
  *   async run() {
- *     new sst.aws.Bucket("MyBucket");
+ *     const bucket = new sst.aws.Bucket("MyBucket");
+ *
+ *     // Your app's outputs
+ *     return {
+ *       bucket: bucket.name
+ *     };
  *   }
  * });
  * ```
@@ -587,15 +592,18 @@ export interface PullRequestEvent {
 
 export interface Config {
   /**
-   * The config for your app. It needs to return an object of type [`App`](#app-1).
+   * The config for your app. It needs to return an object of type [`App`](#app-1). The `app`
+   * function is evaluated when your app loads.
    *
-   * :::tip
-   * The `app` function is evaluated when your app loads.
+   * :::caution
+   * You cannot define any components or resources in the `app` function.
    * :::
+   *
+   * Here's an example of a simple `app` function.
    *
    * @example
    *
-   * ```ts
+   * ```ts title="sst.config.ts"
    * app(input) {
    *   return {
    *     name: "my-sst-app",
@@ -638,7 +646,7 @@ export interface Config {
      * You can pass in your own `target` function to customize this behaviour and the machine
      * that'll be used to run the build.
      *
-     * ```ts
+     * ```ts title="sst.config.ts"
      * console: {
      *   autodeploy: {
      *     target(event) {
@@ -673,7 +681,7 @@ export interface Config {
        *
        * By default, this is what the `target` function looks like:
        *
-       * ```ts
+       * ```ts title="sst.config.ts"
        * target(event) {
        *   if (event.type === "branch" && event.action === "pushed") {
        *     return {
@@ -702,7 +710,7 @@ export interface Config {
        * For example, to auto-deploy to the `production` stage when you git push to the
        * `main` branch.
        *
-       * ```ts
+       * ```ts title="sst.config.ts"
        * target(event) {
        *   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
        *     return { stage: "production" };
@@ -713,7 +721,7 @@ export interface Config {
        * If you don't want to auto-deploy for a given event, you can return `undefined`. For
        * example, to skip any deploys to the `staging` stage.
        *
-       * ```ts {2}
+       * ```ts title="sst.config.ts" {2}
        * target(event) {
        *   if (event.type === "branch" && event.branch === "staging") return;
        *   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
@@ -734,7 +742,7 @@ export interface Config {
        * In addition to the `stage` you can also configure the `runner` that will run the build.
        * For example, to use a larger machine for the `production` stage.
        *
-       * ```ts
+       * ```ts title="sst.config.ts"
        * target(event) {
        *   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
        *     return {
@@ -766,7 +774,7 @@ export interface Config {
    *
    * For example, here we return the name of the bucket we created.
    *
-   * ```ts
+   * ```ts title="sst.config.ts"
    * async run() {
    *   const bucket = new sst.aws.Bucket("MyBucket");
    *
@@ -776,10 +784,17 @@ export interface Config {
    * }
    * ```
    *
-   * This will display the following in the CLI.
+   * This will display the following in the CLI on `sst deploy` and `sst dev`.
    *
    * ```bash frame=\"none\"
    * bucket: bucket-jOaikGu4rla
+   * ```
+   *
+   * These outputs are also written to a `.sst/output.json` file after every successful deploy.
+   * It contains the above outputs in JSON.
+   *
+   * ```json title=".sst/output.json"
+   * {"bucket": "bucket-jOaikGu4rla"}
    * ```
    */
   run(): Promise<Record<string, any> | void>;

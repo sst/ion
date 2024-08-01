@@ -175,6 +175,44 @@ export interface ClusterArgs {
 
 export interface ClusterServiceArgs {
   /**
+   * Configure how this component works in `sst dev`.
+   *
+   * :::note
+   * In `sst dev` your service is run locally; it's not deployed.
+   * :::
+   *
+   * Instead of deploying your service, this starts it locally. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   */
+  dev?: {
+    /**
+     * The `url` when this is running in dev mode.
+     *
+     * Since this component is not deployed in `sst dev`, there is no real URL. But if you are
+     * using this component's `url` or linking to this component's `url`, it can be useful to
+     * have a placeholder URL. It avoids having to handle it being `undefined`.
+     * @default `"http://url-unavailable-in-dev.mode"`
+     */
+    url?: Input<string>;
+    /**
+     * The command that `sst dev` runs to start this in dev mode. This is the command you run
+     * when you want to run your service locally.
+     */
+    command?: Input<string>;
+    /**
+     * Configure if you want to automatically start this when `sst dev` starts. You can still
+     * start it manually later.
+     * @default `true`
+     */
+    autostart?: Input<boolean>;
+    /**
+     * Change the directory from where the `command` is run.
+     * @default Uses the `image.dockerfile` path
+     */
+    directory?: Input<string>;
+  };
+  /**
    * Configure the docker build command for building the image.
    *
    * Prior to building the image, SST will automatically add the `.sst` directory
@@ -722,13 +760,6 @@ export interface ClusterServiceArgs {
      */
     logGroup?: Transform<cloudwatch.LogGroupArgs>;
   };
-
-  /**
-   * @internal
-   */
-  dev?: Input<{
-    command: string;
-  }>;
 }
 
 /**
@@ -819,9 +850,7 @@ export class Cluster extends Component {
 
     function createCluster() {
       return new ecs.Cluster(
-        `${name}Cluster`,
-        transform(args.transform?.cluster, {}),
-        { parent },
+        ...transform(args.transform?.cluster, `${name}Cluster`, {}, { parent }),
       );
     }
   }

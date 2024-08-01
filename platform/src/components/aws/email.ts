@@ -117,6 +117,11 @@ export interface EmailArgs {
   };
 }
 
+interface EmailRef {
+  ref: boolean;
+  identity: sesv2.EmailIdentity;
+}
+
 /**
  * The `Email` component lets you send emails in your app.
  * It uses [Amazon Simple Email Service](https://aws.amazon.com/ses/).
@@ -166,7 +171,7 @@ export interface EmailArgs {
  * You can link it to a function or your Next.js app to send emails.
  *
  * ```ts {3} title="sst.config.ts"
- * const api = new sst.aws.Function("MyApi", {
+ * new sst.aws.Function("MyApi", {
  *   handler: "sender.handler",
  *   link: [email]
  * });
@@ -203,8 +208,14 @@ export class Email extends Component implements Link.Linkable {
   constructor(name: string, args: EmailArgs, opts?: ComponentResourceOptions) {
     super(__pulumiType, name, args, opts);
 
-    const parent = this;
+    if (args && "ref" in args) {
+      const ref = args as unknown as EmailRef;
+      this._sender = ref.identity.emailIdentity;
+      this.identity = ref.identity;
+      return;
+    }
 
+    const parent = this;
     const isDomain = checkIsDomain();
     const dns = normalizeDns();
     const dmarc = normalizeDmarc();
@@ -247,9 +258,12 @@ export class Email extends Component implements Link.Linkable {
 
     function createIdentity() {
       return new sesv2.EmailIdentity(
-        `${name}Identity`,
-        transform(args.transform?.identity, { emailIdentity: args.sender }),
-        { parent },
+        ...transform(
+          args.transform?.identity,
+          `${name}Identity`,
+          { emailIdentity: args.sender },
+          { parent },
+        ),
       );
     }
 
@@ -332,6 +346,31 @@ export class Email extends Component implements Link.Linkable {
         }),
       ],
     };
+  }
+
+  /**
+   * Reference an existing Email component with the given Amazon SES identity. This is useful
+   * when you create an SES identity in one stage and want to share it in another stage. It
+   * avoids having to create a new Email component in the other stage.
+   *
+   * @param name The name of the component.
+   * @param sender The email address or domain name of the existing SES identity.
+   *
+   * @example
+   * Imagine you create an Email component in the `dev` stage. And in your personal stage `frank`,
+   * instead of creating a new component, you want to share the one from `dev`.
+   *
+   * ```ts title="sst.config.ts"
+   * const email = $app.stage === "frank"
+   *   ? sst.aws.Email.get("MyEmail", "spongebob@example.com")
+   *   : new sst.aws.Email("MyEmail", {
+   *       sender: "spongebob@example.com",
+   *     });
+   * ```
+   */
+  public static get(name: string, sender: Input<string>) {
+    const identity = sesv2.EmailIdentity.get(`${name}Identity`, sender);
+    return new Email(name, { ref: true, identity } as unknown as EmailArgs);
   }
 }
 

@@ -34,12 +34,13 @@
  * @packageDocumentation
  */
 
-import * as vercel from "@pulumiverse/vercel";
+import { DnsRecord, DnsRecordArgs } from "@pulumiverse/vercel";
 import { Dns, Record } from "../dns";
 import { sanitizeToPascalCase } from "../naming";
 import { ComponentResourceOptions, all } from "@pulumi/pulumi";
 import { Transform, transform } from "../component";
 import { Input } from "../input";
+import { DEFAULT_TEAM_ID } from "./account-id";
 
 export interface DnsArgs {
   /**
@@ -61,12 +62,12 @@ export interface DnsArgs {
     /**
      * Transform the Vercel record resource.
      */
-    record?: Transform<vercel.DnsRecordArgs>;
+    record?: Transform<DnsRecordArgs>;
   };
 }
 
 export function dns(args: DnsArgs) {
-  let caaRecord: vercel.DnsRecord;
+  let caaRecord: DnsRecord;
   return {
     provider: "vercel",
     createRecord,
@@ -74,16 +75,19 @@ export function dns(args: DnsArgs) {
 
   function useCAARecord(namePrefix: string, opts: ComponentResourceOptions) {
     if (!caaRecord) {
-      caaRecord = new vercel.DnsRecord(
-        `${namePrefix}CAARecord`,
-        transform(args.transform?.record, {
-          domain: args.domain,
-          type: "CAA",
-          name: "",
-          value: `0 issue "amazonaws.com"`,
-          teamId: sst.vercel.DEFAULT_TEAM_ID,
-        }),
-        opts,
+      caaRecord = new DnsRecord(
+        ...transform(
+          args.transform?.record,
+          `${namePrefix}CAARecord`,
+          {
+            domain: args.domain,
+            type: "CAA",
+            name: "",
+            value: `0 issue "amazonaws.com"`,
+            teamId: DEFAULT_TEAM_ID,
+          },
+          opts,
+        ),
       );
     }
     return caaRecord;
@@ -110,17 +114,20 @@ export function dns(args: DnsArgs) {
       }
 
       function createRecord() {
-        return new vercel.DnsRecord(
-          `${namePrefix}${record.type}Record${nameSuffix}`,
-          transform(args.transform?.record, {
-            domain: args.domain,
-            type: record.type,
-            name: recordName,
-            value: record.value,
-            teamId: sst.vercel.DEFAULT_TEAM_ID,
-            ttl: 60,
-          }),
-          { ...opts, dependsOn: [useCAARecord(namePrefix, opts)] },
+        return new DnsRecord(
+          ...transform(
+            args.transform?.record,
+            `${namePrefix}${record.type}Record${nameSuffix}`,
+            {
+              domain: args.domain,
+              type: record.type,
+              name: recordName,
+              value: record.value,
+              teamId: DEFAULT_TEAM_ID,
+              ttl: 60,
+            },
+            { ...opts, dependsOn: [useCAARecord(namePrefix, opts)] },
+          ),
         );
       }
     });

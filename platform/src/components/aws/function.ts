@@ -190,16 +190,18 @@ export interface FunctionArgs {
    */
   live?: Input<false>;
   /**
-   * The name for the function. This is displayed in the AWS Console.
+   * The name for the function. This is the name that's displayed in the AWS Console.
    *
-   * :::note
+   * :::caution
    * Changing the name will create a new function and delete the old one.
    * :::
+   *
+   * By default, the name is generated from the app name, stage name, and component name.
    *
    * @example
    * ```js
    * {
-   *   name: ""
+   *   name: "my-function"
    * }
    * ```
    */
@@ -429,23 +431,49 @@ export interface FunctionArgs {
   injections?: Input<string[]>;
   /**
    * Configure the function logs in CloudWatch.
-   * @default `{retention: "forever"}`
+   * @default `{retention: "forever", format: "text"}`
    * @example
+   * Disable function writing logs to AWS CloudWatch logs.
    * ```js
    * {
-   *   logging: {
-   *     retention: "1 week"
-   *   }
+   *   logging: false
    * }
    * ```
+   * When set to `false`, the function does not have permissions to write to AWS CloudWatch
+   * Logs.
    */
-  logging?: Input<{
-    /**
-     * The duration the function logs are kept in CloudWatch.
-     * @default `forever`
-     */
-    retention?: Input<keyof typeof RETENTION>;
-  }>;
+  logging?: Input<
+    | false
+    | {
+      /**
+       * The duration the function logs are kept in CloudWatch.
+       * @default `forever`
+       * @example
+       * ```js
+       * {
+       *   logging: {
+       *     retention: "1 week"
+       *   }
+       * }
+       * ```
+       */
+      retention?: Input<keyof typeof RETENTION>;
+      /**
+       * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
+       * of the Lambda function.
+       * @default `"text"`
+       * @example
+       * ```js
+       * {
+       *   logging: {
+       *     format: "json"
+       *   }
+       * }
+       * ```
+       */
+      format?: Input<"text" | "json">;
+    }
+  >;
   /**
    * The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
    * of the Lambda function.
@@ -506,45 +534,45 @@ export interface FunctionArgs {
   url?: Input<
     | boolean
     | {
-        /**
-         * The authorization used for the function URL. Supports [IAM authorization](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
-         * @default `"none"`
-         * @example
-         * ```js
-         * {
-         *   url: {
-         *     authorization: "iam"
-         *   }
-         * }
-         * ```
-         */
-        authorization?: Input<"none" | "iam">;
-        /**
-         * Customize the CORS (Cross-origin resource sharing) settings for the function URL.
-         * @default `true`
-         * @example
-         * Disable CORS.
-         * ```js
-         * {
-         *   url: {
-         *     cors: false
-         *   }
-         * }
-         * ```
-         * Only enable the `GET` and `POST` methods for `https://example.com`.
-         * ```js
-         * {
-         *   url: {
-         *     cors: {
-         *       allowMethods: ["GET", "POST"],
-         *       allowOrigins: ["https://example.com"]
-         *     }
-         *   }
-         * }
-         * ```
-         */
-        cors?: Input<boolean | Prettify<FunctionUrlCorsArgs>>;
-      }
+      /**
+       * The authorization used for the function URL. Supports [IAM authorization](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
+       * @default `"none"`
+       * @example
+       * ```js
+       * {
+       *   url: {
+       *     authorization: "iam"
+       *   }
+       * }
+       * ```
+       */
+      authorization?: Input<"none" | "iam">;
+      /**
+       * Customize the CORS (Cross-origin resource sharing) settings for the function URL.
+       * @default `true`
+       * @example
+       * Disable CORS.
+       * ```js
+       * {
+       *   url: {
+       *     cors: false
+       *   }
+       * }
+       * ```
+       * Only enable the `GET` and `POST` methods for `https://example.com`.
+       * ```js
+       * {
+       *   url: {
+       *     cors: {
+       *       allowMethods: ["GET", "POST"],
+       *       allowOrigins: ["https://example.com"]
+       *     }
+       *   }
+       * }
+       * ```
+       */
+      cors?: Input<boolean | Prettify<FunctionUrlCorsArgs>>;
+    }
   >;
   /**
    * Configure how your function is bundled.
@@ -905,7 +933,7 @@ export interface FunctionArgs {
 export class Function extends Component implements Link.Linkable {
   private function: Output<lambda.Function>;
   private role?: iam.Role;
-  private logGroup: cloudwatch.LogGroup;
+  private logGroup: Output<cloudwatch.LogGroup | undefined>;
   private fnUrl: Output<lambda.FunctionUrl | undefined>;
   private missingSourcemap?: boolean;
 
@@ -1034,10 +1062,15 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function normalizeLogging() {
-      return output(args.logging).apply((logging) => ({
-        ...logging,
-        retention: logging?.retention ?? "forever",
-      }));
+      return output(args.logging).apply((logging) => {
+        if (logging === false) return undefined;
+
+        return {
+          ...logging,
+          retention: logging?.retention ?? "forever",
+          format: logging?.format ?? "text",
+        };
+      });
     }
 
     function normalizeUrl() {
@@ -1063,10 +1096,10 @@ export class Function extends Component implements Link.Linkable {
             : url.cors === true || url.cors === undefined
               ? defaultCors
               : {
-                  ...defaultCors,
-                  ...url.cors,
-                  maxAge: url.cors.maxAge && toSeconds(url.cors.maxAge),
-                };
+                ...defaultCors,
+                ...url.cors,
+                maxAge: url.cors.maxAge && toSeconds(url.cors.maxAge),
+              };
 
         return { authorization, cors };
       });
@@ -1165,12 +1198,12 @@ export class Function extends Component implements Link.Linkable {
 
           const linkInjection = hasLinkInjections
             ? linkData
-                .map((item) => [
-                  `process.env.SST_RESOURCE_${item.name} = ${JSON.stringify(
-                    JSON.stringify(item.properties),
-                  )};\n`,
-                ])
-                .join("")
+              .map((item) => [
+                `process.env.SST_RESOURCE_${item.name} = ${JSON.stringify(
+                  JSON.stringify(item.properties),
+                )};\n`,
+              ])
+              .join("")
             : "";
 
           const parsed = path.posix.parse(handler);
@@ -1200,21 +1233,21 @@ export class Function extends Component implements Link.Linkable {
               name: path.posix.join(handlerDir, `${newHandlerFileName}.mjs`),
               content: streaming
                 ? [
-                    linkInjection,
-                    `export const ${newHandlerFunction} = awslambda.streamifyResponse(async (event, responseStream, context) => {`,
-                    ...injections,
-                    `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
-                    `  return rawHandler(event, responseStream, context);`,
-                    `});`,
-                  ].join("\n")
+                  linkInjection,
+                  `export const ${newHandlerFunction} = awslambda.streamifyResponse(async (event, responseStream, context) => {`,
+                  ...injections,
+                  `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
+                  `  return rawHandler(event, responseStream, context);`,
+                  `});`,
+                ].join("\n")
                 : [
-                    linkInjection,
-                    `export const ${newHandlerFunction} = async (event, context) => {`,
-                    ...injections,
-                    `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
-                    `  return rawHandler(event, context);`,
-                    `};`,
-                  ].join("\n"),
+                  linkInjection,
+                  `export const ${newHandlerFunction} = async (event, context) => {`,
+                  ...injections,
+                  `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
+                  `  return rawHandler(event, context);`,
+                  `};`,
+                ].join("\n"),
             },
           };
         },
@@ -1239,24 +1272,26 @@ export class Function extends Component implements Link.Linkable {
               })),
               ...(dev
                 ? [
-                    {
-                      actions: ["iot:*"],
-                      resources: ["*"],
-                    },
-                  ]
+                  {
+                    actions: ["iot:*"],
+                    resources: ["*"],
+                  },
+                ]
                 : []),
             ],
           }),
       );
 
       return new iam.Role(
-        `${name}Role`,
-        transform(args.transform?.role, {
-          assumeRolePolicy: !$dev
-            ? iam.assumeRolePolicyForPrincipal({
+        ...transform(
+          args.transform?.role,
+          `${name}Role`,
+          {
+            assumeRolePolicy: !$dev
+              ? iam.assumeRolePolicyForPrincipal({
                 Service: "lambda.amazonaws.com",
               })
-            : iam.getPolicyDocumentOutput({
+              : iam.getPolicyDocumentOutput({
                 statements: [
                   {
                     actions: ["sts:AssumeRole"],
@@ -1268,30 +1303,34 @@ export class Function extends Component implements Link.Linkable {
                       {
                         type: "AWS",
                         identifiers: [
-                          interpolate`arn:aws:iam::${
-                            getCallerIdentityOutput().accountId
-                          }:root`,
+                          interpolate`arn:aws:iam::${getCallerIdentityOutput().accountId
+                            }:root`,
                         ],
                       },
                     ],
                   },
                 ],
               }).json,
-          // if there are no statements, do not add an inline policy.
-          // adding an inline policy with no statements will cause an error.
-          inlinePolicies: policy.apply(({ statements }) =>
-            statements ? [{ name: "inline", policy: policy.json }] : [],
-          ),
-          managedPolicyArns: [
-            "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-            ...(args.vpc
-              ? [
+            // if there are no statements, do not add an inline policy.
+            // adding an inline policy with no statements will cause an error.
+            inlinePolicies: policy.apply(({ statements }) =>
+              statements ? [{ name: "inline", policy: policy.json }] : [],
+            ),
+            managedPolicyArns: logging.apply((logging) => [
+              ...(logging
+                ? [
+                  "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                ]
+                : []),
+              ...(args.vpc
+                ? [
                   "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
                 ]
-              : []),
-          ],
-        }),
-        { parent },
+                : []),
+            ]),
+          },
+          { parent },
+        ),
       );
     }
 
@@ -1351,9 +1390,9 @@ export class Function extends Component implements Link.Linkable {
               entry.isDir
                 ? archive.directory(entry.from, entry.to, { date: new Date(0) })
                 : archive.file(entry.from, {
-                    name: entry.to,
-                    date: new Date(0),
-                  });
+                  name: entry.to,
+                  date: new Date(0),
+                });
               //if (mode === "start") {
               //  try {
               //    const dir = path.dirname(toPath);
@@ -1390,57 +1429,77 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function createLogGroup() {
-      return new cloudwatch.LogGroup(
-        `${name}LogGroup`,
-        transform(args.transform?.logGroup, {
-          name: `/aws/lambda/${prefixName(64, `${name}Function`)}`,
-          retentionInDays: logging.apply(
-            (logging) => RETENTION[logging.retention],
+      return logging.apply((logging) => {
+        if (!logging) return;
+
+        return new cloudwatch.LogGroup(
+          ...transform(
+            args.transform?.logGroup,
+            `${name}LogGroup`,
+            {
+              name: interpolate`/aws/lambda/${args.name ?? prefixName(64, `${name}Function`)
+                }`,
+              retentionInDays: RETENTION[logging.retention],
+            },
+            { parent },
           ),
-        }),
-        { parent },
-      );
+        );
+      });
     }
 
     function createFunction() {
-      const transformed = transform(args.transform?.function, {
-        name: args.name,
-        description: all([args.description, dev]).apply(([description, dev]) =>
-          dev
-            ? description
-              ? `${description.substring(0, 240)} (live)`
-              : "live"
-            : `${description ?? ""}`,
-        ),
-        code: new asset.FileArchive(
-          path.join($cli.paths.platform, "functions", "empty-function"),
-        ),
-        handler: unsecret(handler),
-        role: args.role ?? role!.arn,
-        runtime,
-        timeout: timeout.apply((timeout) => toSeconds(timeout)),
-        memorySize: memory.apply((memory) => toMBs(memory)),
-        environment: {
-          variables: environment,
-        },
-        architectures,
-        loggingConfig: {
-          logFormat: "Text",
-          logGroup: logGroup.name,
-        },
-        vpcConfig: args.vpc && {
-          securityGroupIds: output(args.vpc).securityGroups,
-          subnetIds: output(args.vpc).subnets,
-        },
-        layers: args.layers,
+      return all([logging, logGroup]).apply(([logging, logGroup]) => {
+        const transformed = transform(
+          args.transform?.function,
+          `${name}Function`,
+          {
+            name: args.name,
+            description: all([args.description, dev]).apply(
+              ([description, dev]) =>
+                dev
+                  ? description
+                    ? `${description.substring(0, 240)} (live)`
+                    : "live"
+                  : `${description ?? ""}`,
+            ),
+            code: new asset.FileArchive(
+              path.join($cli.paths.platform, "functions", "empty-function"),
+            ),
+            handler: unsecret(handler),
+            role: args.role ?? role!.arn,
+            runtime,
+            timeout: timeout.apply((timeout) => toSeconds(timeout)),
+            memorySize: memory.apply((memory) => toMBs(memory)),
+            environment: {
+              variables: environment,
+            },
+            architectures,
+            loggingConfig: logging && {
+              logFormat: logging.format === "json" ? "JSON" : "Text",
+              logGroup: logGroup!.name,
+            },
+            vpcConfig: args.vpc && {
+              securityGroupIds: output(args.vpc).securityGroups,
+              subnetIds: output(args.vpc).subnets,
+            },
+            layers: args.layers,
+          },
+          { parent },
+        );
+        return new lambda.Function(
+          transformed[0],
+          {
+            ...transformed[1],
+            runtime: all([transformed[1].runtime, dev]).apply(
+              ([runtime, dev]) => (dev ? "provided.al2023" : runtime!),
+            ),
+            architectures: all([transformed[1].architectures, dev]).apply(
+              ([architectures, dev]) => (dev ? ["x86_64"] : architectures!),
+            ),
+          },
+          transformed[2],
+        );
       });
-      transformed.runtime = all([transformed.runtime, dev]).apply(
-        ([runtime, dev]) => (dev ? "provided.al2023" : runtime!),
-      );
-      transformed.architectures = all([transformed.architectures, dev]).apply(
-        ([architectures, dev]) => (dev ? ["x86_64"] : architectures!),
-      );
-      return new lambda.Function(`${name}Function`, transformed, { parent });
     }
 
     function createUrl() {
@@ -1542,25 +1601,31 @@ export class Function extends Component implements Link.Linkable {
     return output(definition).apply((definition) => {
       if (typeof definition === "string") {
         return new Function(
-          name,
-          transform(argsTransform, { handler: definition, ...override }),
-          opts,
+          ...transform(
+            argsTransform,
+            name,
+            { handler: definition, ...override },
+            opts || {},
+          ),
         );
       } else if (definition.handler) {
         return new Function(
-          name,
-          transform(argsTransform, {
-            ...definition,
-            ...override,
-            permissions: all([
-              definition.permissions,
-              override?.permissions,
-            ]).apply(([permissions, overridePermissions]) => [
-              ...(permissions ?? []),
-              ...(overridePermissions ?? []),
-            ]),
-          }),
-          opts,
+          ...transform(
+            argsTransform,
+            name,
+            {
+              ...definition,
+              ...override,
+              permissions: all([
+                definition.permissions,
+                override?.permissions,
+              ]).apply(([permissions, overridePermissions]) => [
+                ...(permissions ?? []),
+                ...(overridePermissions ?? []),
+              ]),
+            },
+            opts || {},
+          ),
         );
       }
       throw new Error(`Invalid function definition for the "${name}" Function`);

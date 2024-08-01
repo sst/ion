@@ -7,7 +7,9 @@ import { Link } from "../link.js";
 import { VisibleError } from "../error.js";
 import { Input } from "../input.js";
 import { Prettify } from "../component.js";
-import { BaseSiteFileOptions } from "./base-site.js";
+import { BaseSiteFileOptions, limiter } from "./base-site.js";
+import { Semaphore } from "../../util/semaphore.js";
+import { DevArgs } from "../dev.js";
 
 export interface BaseStaticSiteArgs {
   path?: Input<string>;
@@ -277,15 +279,16 @@ export function buildApp(
   environment: ReturnType<typeof prepare>["environment"],
 ) {
   return all([build, sitePath, environment]).apply(
-    ([build, sitePath, environment]) => {
+    async ([build, sitePath, environment]) => {
       if ($dev)
         return path.join($cli.paths.platform, "functions", "empty-site");
       if (!build) return sitePath;
 
       // Run build
       if (!process.env.SKIP) {
-        console.debug(`Running "${build.command}" script`);
         try {
+          await limiter.acquire("build for " + name);
+          console.debug(`running "${build.command}" script for ${name}`);
           execSync(build.command, {
             cwd: sitePath,
             stdio: "inherit",
@@ -296,6 +299,8 @@ export function buildApp(
           });
         } catch (e) {
           throw new VisibleError(`There was a problem building "${name}".`);
+        } finally {
+          limiter.release();
         }
       }
 
@@ -313,16 +318,18 @@ export function buildApp(
 }
 
 export function cleanup(
-  url: Output<string>,
   sitePath: ReturnType<typeof prepare>["sitePath"],
   environment: ReturnType<typeof prepare>["environment"],
+  url?: Output<string>,
+  dev?: DevArgs["dev"],
 ) {
   return {
     _hint: url,
     _dev: {
-      directory: sitePath,
       environment: environment,
-      command: "npm run dev",
+      command: output(dev?.command).apply((val) => val || "npm run dev"),
+      directory: output(dev?.directory).apply((dir) => dir || sitePath),
+      autostart: output(dev?.autostart).apply((val) => val ?? true),
     },
     _receiver: all([sitePath, environment]).apply(
       ([sitePath, environment]) => ({

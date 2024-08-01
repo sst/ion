@@ -1,7 +1,8 @@
-import { ComponentResourceOptions, Output, all } from "@pulumi/pulumi";
+import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
 import { ec2, getAvailabilityZonesOutput } from "@pulumi/aws";
+import { InternetGateway } from "@pulumi/aws/ec2";
 
 export interface VpcArgs {
   /**
@@ -60,6 +61,19 @@ export interface VpcArgs {
   };
 }
 
+interface VpcRef {
+  ref: boolean;
+  vpc: ec2.Vpc;
+  internetGateway: ec2.InternetGateway;
+  securityGroup: ec2.SecurityGroup;
+  privateSubnets: Output<ec2.Subnet[]>;
+  privateRouteTables: Output<ec2.RouteTable[]>;
+  publicSubnets: Output<ec2.Subnet[]>;
+  publicRouteTables: Output<ec2.RouteTable[]>;
+  natGateways: Output<ec2.NatGateway[]>;
+  elasticIps: Output<ec2.Eip[]>;
+}
+
 /**
  * The `Vpc` component lets you add a VPC to your app. It uses [Amazon VPC](https://docs.aws.amazon.com/vpc/). This is useful for services like RDS and Fargate that need to be hosted inside
  * a VPC.
@@ -93,9 +107,9 @@ export interface VpcArgs {
  *
  * #### Create it with 3 Availability Zones
  *
- * ```ts title="sst.config.ts"
+ * ```ts title="sst.config.ts" {2}
  * new sst.aws.Vpc("MyVPC", {
- *   az: 3,
+ *   az: 3
  * });
  * ```
  */
@@ -112,6 +126,20 @@ export class Vpc extends Component {
 
   constructor(name: string, args?: VpcArgs, opts?: ComponentResourceOptions) {
     super(__pulumiType, name, args, opts);
+
+    if (args && "ref" in args) {
+      const ref = args as VpcRef;
+      this.vpc = ref.vpc;
+      this.internetGateway = ref.internetGateway;
+      this.securityGroup = ref.securityGroup;
+      this._publicSubnets = output(ref.publicSubnets);
+      this._privateSubnets = output(ref.privateSubnets);
+      this.publicRouteTables = output(ref.publicRouteTables);
+      this.privateRouteTables = output(ref.privateRouteTables);
+      this.natGateways = output(ref.natGateways);
+      this.elasticIps = ref.elasticIps;
+      return;
+    }
 
     const parent = this;
 
@@ -147,49 +175,58 @@ export class Vpc extends Component {
 
     function createVpc() {
       return new ec2.Vpc(
-        `${name}Vpc`,
-        transform(args?.transform?.vpc, {
-          cidrBlock: "10.0.0.0/16",
-          enableDnsSupport: true,
-          enableDnsHostnames: true,
-        }),
-        { parent },
+        ...transform(
+          args?.transform?.vpc,
+          `${name}Vpc`,
+          {
+            cidrBlock: "10.0.0.0/16",
+            enableDnsSupport: true,
+            enableDnsHostnames: true,
+          },
+          { parent },
+        ),
       );
     }
 
     function createInternetGateway() {
       return new ec2.InternetGateway(
-        `${name}InternetGateway`,
-        transform(args?.transform?.internetGateway, {
-          vpcId: vpc.id,
-        }),
-        { parent },
+        ...transform(
+          args?.transform?.internetGateway,
+          `${name}InternetGateway`,
+          {
+            vpcId: vpc.id,
+          },
+          { parent },
+        ),
       );
     }
 
     function createSecurityGroup() {
       return new ec2.SecurityGroup(
-        `${name}SecurityGroup`,
-        transform(args?.transform?.securityGroup, {
-          vpcId: vpc.id,
-          egress: [
-            {
-              fromPort: 0,
-              toPort: 0,
-              protocol: "-1",
-              cidrBlocks: ["0.0.0.0/0"],
-            },
-          ],
-          ingress: [
-            {
-              fromPort: 0,
-              toPort: 0,
-              protocol: "-1",
-              cidrBlocks: ["0.0.0.0/0"],
-            },
-          ],
-        }),
-        { parent },
+        ...transform(
+          args?.transform?.securityGroup,
+          `${name}SecurityGroup`,
+          {
+            vpcId: vpc.id,
+            egress: [
+              {
+                fromPort: 0,
+                toPort: 0,
+                protocol: "-1",
+                cidrBlocks: ["0.0.0.0/0"],
+              },
+            ],
+            ingress: [
+              {
+                fromPort: 0,
+                toPort: 0,
+                protocol: "-1",
+                cidrBlocks: ["0.0.0.0/0"],
+              },
+            ],
+          },
+          { parent },
+        ),
       );
     }
 
@@ -197,20 +234,26 @@ export class Vpc extends Component {
       const ret = publicSubnets.apply((subnets) =>
         subnets.map((subnet, i) => {
           const elasticIp = new ec2.Eip(
-            `${name}ElasticIp${i + 1}`,
-            transform(args?.transform?.elasticIp, {
-              vpc: true,
-            }),
-            { parent },
+            ...transform(
+              args?.transform?.elasticIp,
+              `${name}ElasticIp${i + 1}`,
+              {
+                vpc: true,
+              },
+              { parent },
+            ),
           );
 
           const natGateway = new ec2.NatGateway(
-            `${name}NatGateway${i + 1}`,
-            transform(args?.transform?.natGateway, {
-              subnetId: subnet.id,
-              allocationId: elasticIp.id,
-            }),
-            { parent },
+            ...transform(
+              args?.transform?.natGateway,
+              `${name}NatGateway${i + 1}`,
+              {
+                subnetId: subnet.id,
+                allocationId: elasticIp.id,
+              },
+              { parent },
+            ),
           );
           return { elasticIp, natGateway };
         }),
@@ -226,28 +269,34 @@ export class Vpc extends Component {
       const ret = zones.apply((zones) =>
         zones.map((zone, i) => {
           const subnet = new ec2.Subnet(
-            `${name}PublicSubnet${i + 1}`,
-            transform(args?.transform?.publicSubnet, {
-              vpcId: vpc.id,
-              cidrBlock: `10.0.${i + 1}.0/24`,
-              availabilityZone: zone,
-              mapPublicIpOnLaunch: true,
-            }),
-            { parent },
+            ...transform(
+              args?.transform?.publicSubnet,
+              `${name}PublicSubnet${i + 1}`,
+              {
+                vpcId: vpc.id,
+                cidrBlock: `10.0.${i + 1}.0/24`,
+                availabilityZone: zone,
+                mapPublicIpOnLaunch: true,
+              },
+              { parent },
+            ),
           );
 
           const routeTable = new ec2.RouteTable(
-            `${name}PublicRouteTable${i + 1}`,
-            transform(args?.transform?.publicRouteTable, {
-              vpcId: vpc.id,
-              routes: [
-                {
-                  cidrBlock: "0.0.0.0/0",
-                  gatewayId: internetGateway.id,
-                },
-              ],
-            }),
-            { parent },
+            ...transform(
+              args?.transform?.publicRouteTable,
+              `${name}PublicRouteTable${i + 1}`,
+              {
+                vpcId: vpc.id,
+                routes: [
+                  {
+                    cidrBlock: "0.0.0.0/0",
+                    gatewayId: internetGateway.id,
+                  },
+                ],
+              },
+              { parent },
+            ),
           );
 
           new ec2.RouteTableAssociation(
@@ -273,27 +322,33 @@ export class Vpc extends Component {
       const ret = zones.apply((zones) =>
         zones.map((zone, i) => {
           const subnet = new ec2.Subnet(
-            `${name}PrivateSubnet${i + 1}`,
-            transform(args?.transform?.privateSubnet, {
-              vpcId: vpc.id,
-              cidrBlock: `10.0.${zones.length + i + 1}.0/24`,
-              availabilityZone: zone,
-            }),
-            { parent },
+            ...transform(
+              args?.transform?.privateSubnet,
+              `${name}PrivateSubnet${i + 1}`,
+              {
+                vpcId: vpc.id,
+                cidrBlock: `10.0.${zones.length + i + 1}.0/24`,
+                availabilityZone: zone,
+              },
+              { parent },
+            ),
           );
 
           const routeTable = new ec2.RouteTable(
-            `${name}PrivateRouteTable${i + 1}`,
-            transform(args?.transform?.privateRouteTable, {
-              vpcId: vpc.id,
-              routes: [
-                {
-                  cidrBlock: "0.0.0.0/0",
-                  natGatewayId: natGateways[i].id,
-                },
-              ],
-            }),
-            { parent },
+            ...transform(
+              args?.transform?.privateRouteTable,
+              `${name}PrivateRouteTable${i + 1}`,
+              {
+                vpcId: vpc.id,
+                routes: [
+                  {
+                    cidrBlock: "0.0.0.0/0",
+                    natGatewayId: natGateways[i].id,
+                  },
+                ],
+              },
+              { parent },
+            ),
           );
 
           new ec2.RouteTableAssociation(
@@ -392,73 +447,125 @@ export class Vpc extends Component {
     };
   }
 
-  /** @internal */
-  public static get(
-    name: string,
-    args: ec2.GetVpcArgs,
-    opts?: ComponentResourceOptions,
-  ) {
-    return new VpcRef(name, args, opts);
-  }
-}
-
-class VpcRef extends Component {
-  private _vpc: Output<ec2.GetVpcResult>;
-  private _publicSubnets: Output<ec2.GetSubnetsResult>;
-  private _privateSubnets: Output<ec2.GetSubnetsResult>;
-  private _securityGroups: Output<ec2.GetSecurityGroupsResult>;
-
-  constructor(
-    name: string,
-    args: ec2.GetVpcArgs,
-    opts?: ComponentResourceOptions,
-  ) {
-    super(__pulumiType + "Ref", name, args, opts);
-
-    this._vpc = ec2.getVpcOutput(args);
-    this._publicSubnets = ec2.getSubnetsOutput({
-      filters: [
-        { name: "vpc-id", values: [this._vpc.id] },
-        { name: "tag:Name", values: ["*Public*"] },
-      ],
-    });
-    this._privateSubnets = ec2.getSubnetsOutput({
-      filters: [
-        { name: "vpc-id", values: [this._vpc.id] },
-        { name: "tag:Name", values: ["*Private*"] },
-      ],
-    });
-    this._securityGroups = ec2.getSecurityGroupsOutput({
-      filters: [{ name: "vpc-id", values: [this._vpc.id] }],
-    });
-  }
-
   /**
-   * The VPC ID.
+   * Reference an existing VPC with the given ID. This is useful when you
+   * create a VPC in one stage and want to share it in another stage. It avoids having to
+   * create a new VPC in the other stage.
+   *
+   * :::tip
+   * You can use the `static get` method to share VPCs across stages.
+   * :::
+   *
+   * @param name The name of the component.
+   * @param vpcID The ID of the existing VPC.
+   *
+   * @example
+   * Imagine you create a VPC in the `dev` stage. And in your personal stage `frank`,
+   * instead of creating a new VPC, you want to share the VPC from `dev`.
+   *
+   * ```ts title="sst.config.ts"
+   * const vpc = $app.stage === "frank"
+   *   ? sst.aws.Vpc.get("MyVPC", "vpc-0be8fa4de860618bb")
+   *   : new sst.aws.Vpc("MyVPC");
+   * ```
+   *
+   * Here `vpc-0be8fa4de860618bb` is the ID of the VPC created in the `dev` stage.
+   * You can find this by outputting the VPC ID in the `dev` stage.
+   *
+   * ```ts title="sst.config.ts"
+   * return {
+   *   vpc: vpc.id
+   * };
+   * ```
    */
-  public get id() {
-    return this._vpc.id;
-  }
+  public static get(name: string, vpcID: Input<string>) {
+    const vpc = ec2.Vpc.get(`${name}Vpc`, vpcID);
+    const internetGateway = ec2.InternetGateway.get(
+      `${name}InstanceGateway`,
+      ec2.getInternetGatewayOutput({
+        filters: [{ name: "attachment.vpc-id", values: [vpc.id] }],
+      }).internetGatewayId,
+    );
+    const securityGroup = ec2.SecurityGroup.get(
+      `${name}SecurityGroup`,
+      ec2
+        .getSecurityGroupsOutput({
+          filters: [
+            { name: "group-name", values: ["*SecurityGroup*"] },
+            { name: "vpc-id", values: [vpc.id] },
+          ],
+        })
+        .ids.apply((ids) => {
+          if (!ids.length)
+            throw new Error(`Security group not found in VPC ${vpcID}`);
+          return ids[0];
+        }),
+    );
+    const privateSubnets = ec2
+      .getSubnetsOutput({
+        filters: [
+          { name: "vpc-id", values: [vpc.id] },
+          { name: "tag:Name", values: ["*Private*"] },
+        ],
+      })
+      .ids.apply((ids) =>
+        ids.map((id, i) => ec2.Subnet.get(`${name}PrivateSubnet${i + 1}`, id)),
+      );
+    const privateRouteTables = privateSubnets.apply((subnets) =>
+      subnets.map((subnet, i) =>
+        ec2.RouteTable.get(
+          `${name}PrivateRouteTable${i + 1}`,
+          ec2.getRouteTableOutput({ subnetId: subnet.id }).routeTableId,
+        ),
+      ),
+    );
+    const publicSubnets = ec2
+      .getSubnetsOutput({
+        filters: [
+          { name: "vpc-id", values: [vpc.id] },
+          { name: "tag:Name", values: ["*Public*"] },
+        ],
+      })
+      .ids.apply((ids) =>
+        ids.map((id, i) => ec2.Subnet.get(`${name}PublicSubnet${i + 1}`, id)),
+      );
+    const publicRouteTables = publicSubnets.apply((subnets) =>
+      subnets.map((subnet, i) =>
+        ec2.RouteTable.get(
+          `${name}PublicRouteTable${i + 1}`,
+          ec2.getRouteTableOutput({ subnetId: subnet.id }).routeTableId,
+        ),
+      ),
+    );
+    const natGateways = publicSubnets.apply((subnets) =>
+      subnets.map((subnet, i) =>
+        ec2.NatGateway.get(
+          `${name}NatGateway${i + 1}`,
+          ec2.getNatGatewayOutput({ subnetId: subnet.id }).id,
+        ),
+      ),
+    );
+    const elasticIps = natGateways.apply((nats) =>
+      nats.map((nat, i) =>
+        ec2.Eip.get(
+          `${name}ElasticIp${i + 1}`,
+          nat.allocationId as Output<string>,
+        ),
+      ),
+    );
 
-  /**
-   * A list of public subnet IDs in the VPC.
-   */
-  public get publicSubnets() {
-    return this._publicSubnets.ids;
-  }
-
-  /**
-   * A list of private subnet IDs in the VPC.
-   */
-  public get privateSubnets() {
-    return this._privateSubnets.ids;
-  }
-
-  /**
-   * A list of VPC security group IDs.
-   */
-  public get securityGroups() {
-    return this._securityGroups.ids;
+    return new Vpc(name, {
+      ref: true,
+      vpc,
+      internetGateway,
+      securityGroup,
+      privateSubnets,
+      privateRouteTables,
+      publicSubnets,
+      publicRouteTables,
+      natGateways,
+      elasticIps,
+    } satisfies VpcRef as VpcArgs);
   }
 }
 

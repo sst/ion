@@ -59,6 +59,11 @@ if (!cmd || cmd === "components") {
     else if (sourceFile === "platform/src/config.ts")
       await generateConfigDoc(component);
     else if (sourceFile.endsWith("/dns.ts")) await generateDnsDoc(component);
+    else if (
+      sourceFile.endsWith("/aws/permission.ts") ||
+      sourceFile.endsWith("/cloudflare/binding.ts")
+    )
+      await generateLinkableDoc(component);
     else {
       const sdkName = component.name.split("/")[2];
       const sdk = sdks.find(
@@ -167,7 +172,7 @@ function generateCliDoc() {
           `#### Args`,
           ...cmd.args.flatMap((a) => [
             `- <p><code class="key">${renderCliArgName(a)}</code></p>`,
-            renderCliDescription(a.description),
+            `<p>${renderCliDescription(a.description)}</p>`,
           ]),
           `</Section>`
         );
@@ -183,7 +188,7 @@ function generateCliDoc() {
             `- <p><code class="key">${f.name}</code> ${renderCliFlagType(
               f.type
             )}</p>`,
-            renderCliDescription(f.description),
+            `<p>${renderCliDescription(f.description)}</p>`,
           ]),
           `</Section>`
         );
@@ -232,7 +237,7 @@ function generateCliDoc() {
               `#### Args`,
               ...subcmd.args.flatMap((a) => [
                 `- <p><code class="key">${a.name}</code></p>`,
-                renderCliDescription(a.description),
+                `<p>${renderCliDescription(a.description)}</p>`,
               ]),
               `</Section>`
             );
@@ -245,7 +250,7 @@ function generateCliDoc() {
               `#### Flags`,
               ...subcmd.flags.flatMap((f) => [
                 `- <p><code class="key">${f.name}</code></p>`,
-                renderCliDescription(f.description),
+                `<p>${renderCliDescription(f.description)}</p>`,
               ]),
               `</Section>`
             );
@@ -277,8 +282,22 @@ function generateCliDoc() {
   }
 
   function renderCliFlagType(type: CliCommand["flags"][number]["type"]) {
-    return `<code class="primitive">${type === "bool" ? "boolean" : type
-      }</code>`;
+    if (type.startsWith("[") && type.endsWith("]")) {
+      return type
+        .substring(1, type.length - 1)
+        .split(",")
+        .map((t: string) =>
+          [
+            `<code class="symbol">&ldquo;</code>`,
+            `<code class="primitive">${t}</code>`,
+            `<code class="symbol">&rdquo;</code>`,
+          ].join("")
+        )
+        .join(`<code class="symbol"> | </code>`);
+    }
+
+    if (type === "bool") return `<code class="primitive">boolean</code>`;
+    return `<code class="primitive">${type}</code>`;
   }
 }
 
@@ -402,6 +421,46 @@ async function generateDnsDoc(module: TypeDoc.DeclarationReflection) {
       renderHeader(
         `${title} DNS Adapter`,
         `Reference doc for the \`sst.${dnsProvider}.dns\` adapter.`
+      ),
+      renderSourceMessage(sourceFile),
+      renderImports(outputFilePath),
+      renderBodyBegin(),
+      renderAbout(useModuleComment(module)),
+      renderFunctions(module, useModuleFunctions(module), {
+        title: "Functions",
+      }),
+      renderInterfacesAtH2Level(module),
+      renderBodyEnd(),
+    ]
+      .flat()
+      .join("\n")
+  );
+}
+
+async function generateLinkableDoc(module: TypeDoc.DeclarationReflection) {
+  const name = module.name.split("/")[1];
+  const sourceFile = module.sources![0].fileName;
+  const outputFilePath = path.join(
+    "src/content/docs/docs/component",
+    `${module.name.split("/").slice(1).join("/")}.mdx`
+  );
+  const copy = {
+    "components/aws/permission": {
+      title: "AWS",
+      namespace: "sst.aws.permission",
+    },
+    "components/cloudflare/binding": {
+      title: "Cloudflare",
+      namespace: "sst.cloudflare.binding",
+    },
+  }[module.name]!;
+
+  fs.writeFileSync(
+    outputFilePath,
+    [
+      renderHeader(
+        `${copy.title} Linkable helper`,
+        `Reference doc for the \`${copy.namespace}\` helper.`
       ),
       renderSourceMessage(sourceFile),
       renderImports(outputFilePath),
@@ -648,9 +707,17 @@ function renderType(
         `<code class="primitive">args</code>`,
         `<code class="symbol">: </code>`,
         renderedType,
+        `<code class="symbol">, </code>`,
+        `<code class="primitive">opts</code>`,
+        `<code class="symbol">: </code>`,
+        `[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)`,
+        `<code class="symbol">, </code>`,
+        `<code class="primitive">name</code>`,
+        `<code class="symbol">: </code>`,
+        `<code class="primitive">string</code>`,
+        `<code class="symbol">)</code>`,
         `<code class="symbol"> => </code>`,
         `<code class="primitive">void</code>`,
-        `<code class="symbol">)</code>`,
       ].join("");
     }
     if (type.name === "Input") {
@@ -668,6 +735,19 @@ function renderType(
     }[type.name];
     if (dnsProvider) {
       return `[<code class="type">sst.${dnsProvider}.dns</code>](/docs/component/${dnsProvider}/dns/)`;
+    }
+    const linkableProvider = {
+      AwsPermission: {
+        doc: "aws/permission/",
+        namespace: "sst.aws.permission",
+      },
+      CloudflareBinding: {
+        doc: "cloudflare/binding/",
+        namespace: "sst.cloudflare.binding",
+      },
+    }[type.name];
+    if (linkableProvider) {
+      return `[<code class="type">${linkableProvider.namespace}</code>](/docs/component/${linkableProvider.doc})`;
     }
     // types in the same doc (links to the class ie. `subscribe()` return type)
     if (isModuleComponent(module) && type.name === useClassName(module)) {
@@ -714,6 +794,9 @@ function renderType(
         : "";
       return `[<code class="type">${type.name}</code>](/docs/component/aws/${externalModule}/${hash})`;
     }
+    if (type.name === "Resource" || type.name === "Constructor") {
+      return `<code class="type">${type.name}</code>`;
+    }
 
     // @ts-expect-error
     delete type._project;
@@ -738,9 +821,14 @@ function renderType(
     if (type.name === "T") {
       return `<code class="primitive">${type.name}</code>`;
     }
-    if (type.name === "Output" || type.name === "Input") {
+    if (
+      type.name === "Output" ||
+      type.name === "OutputInstance" ||
+      type.name === "Input"
+    ) {
+      const typeName = type.name === "OutputInstance" ? "Output" : type.name;
       return [
-        `<code class="primitive">${type.name}</code>`,
+        `<code class="primitive">${typeName}</code>`,
         `<code class="symbol">&lt;</code>`,
         renderSomeType(type.typeArguments?.[0]!),
         `<code class="symbol">&gt;</code>`,
@@ -1225,7 +1313,7 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
       if (
         link.type &&
         link.type.type === "reference" &&
-        link.type.name === "Output" &&
+        (link.type.name === "Output" || link.type.name === "OutputInstance") &&
         (link.type.typeArguments![0].type === "intrinsic" ||
           link.type.typeArguments![0].type === "union")
       ) {
@@ -1235,7 +1323,8 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
       else if (link.type && link.type.type === "union") {
         linkType = link.type;
         linkType.types = linkType.types.map((t) =>
-          t.type === "reference" && t.name === "Output"
+          t.type === "reference" &&
+            (t.name === "Output" || t.name === "OutputInstance")
             ? t.typeArguments![0]
             : t
         );
@@ -1596,7 +1685,9 @@ function isModuleComponent(module: TypeDoc.DeclarationReflection) {
   return (
     sourceFile !== "platform/src/config.ts" &&
     sourceFile !== "platform/src/global-config.d.ts" &&
-    !sourceFile.endsWith("/dns.ts")
+    !sourceFile.endsWith("/dns.ts") &&
+    !sourceFile.endsWith("/aws/permission.ts") &&
+    !sourceFile.endsWith("/cloudflare/binding.ts")
   );
 }
 function useModuleComment(module: TypeDoc.DeclarationReflection) {
@@ -1754,6 +1845,34 @@ function patchCode() {
       // anyways as we will link to the pulumi docs.
       .replace("export import $util", "export const $util")
   );
+  // patch Linkable
+  fs.cpSync(
+    "../platform/src/components/linkable.ts",
+    "../platform/src/components/linkable.ts.bk"
+  );
+  fs.writeFileSync(
+    "../platform/src/components/linkable.ts",
+    fs
+      .readFileSync("../platform/src/components/linkable.ts")
+      .toString()
+      .trim()
+      // replace generic <Properties>
+      .replace("properties: Properties", "properties: Record<string, any>")
+      .replace(
+        "public get properties() {",
+        "public get properties(): Record<string, any> {"
+      )
+      // replace generic <Resource>
+      .replaceAll(`cls: { new (...args: any[]): Resource }`, `cls: Constructor`)
+      // replace Definition.include
+      .replace(
+        /include\?\: \{[^}]*\}/,
+        `include?: (AwsPermission | CloudflareBinding)`
+      ) +
+    "\ntype Constructor = {};\n" +
+    "\ntype AwsPermission = {};\n" +
+    "\ntype CloudflareBinding = {};\n"
+  );
 }
 
 function restoreCode() {
@@ -1764,6 +1883,11 @@ function restoreCode() {
   );
   // restore global
   fs.rmSync("../platform/src/global-config.d.ts");
+  // restore Linkable
+  fs.renameSync(
+    "../platform/src/components/linkable.ts.bk",
+    "../platform/src/components/linkable.ts"
+  );
 }
 
 async function buildComponents() {
@@ -1778,6 +1902,7 @@ async function buildComponents() {
     entryPoints: [
       "../platform/src/config.ts",
       "../platform/src/global-config.d.ts",
+      "../platform/src/components/linkable.ts",
       "../platform/src/components/secret.ts",
       "../platform/src/components/aws/apigateway-websocket.ts",
       "../platform/src/components/aws/apigateway-websocket-route.ts",
@@ -1833,6 +1958,8 @@ async function buildComponents() {
       "../platform/src/components/cloudflare/dns.ts",
       "../platform/src/components/vercel/dns.ts",
       "../platform/src/components/aws/cdn.ts",
+      "../platform/src/components/aws/permission.ts",
+      "../platform/src/components/cloudflare/binding.ts",
     ],
     tsconfig: "../platform/tsconfig.json",
   });

@@ -43,7 +43,7 @@ export interface AuthorizerArgs extends ApiGatewayV1AuthorizerArgs {
  */
 export class ApiGatewayV1Authorizer extends Component {
   private readonly authorizer: apigateway.Authorizer;
-  private readonly fn?: Output<sst.aws.Function>;
+  private readonly fn?: Output<Function>;
   private readonly permission?: lambda.Permission;
 
   constructor(
@@ -98,7 +98,7 @@ export class ApiGatewayV1Authorizer extends Component {
       if (!fn) return;
 
       return Function.fromDefinition(`${name}Function`, fn, {
-        description: `${api.name} authorizer`,
+        description: interpolate`${api.name} authorizer`,
       });
     }
 
@@ -119,17 +119,20 @@ export class ApiGatewayV1Authorizer extends Component {
 
     function createAuthorizer() {
       return new apigateway.Authorizer(
-        `${name}Authorizer`,
-        transform(args.transform?.authorizer, {
-          restApi: api.id,
-          type,
-          name: args.name,
-          providerArns: args.userPools,
-          authorizerUri: fn?.nodes.function.invokeArn,
-          authorizerResultTtlInSeconds: args.ttl,
-          identitySource: args.identitySource,
-        }),
-        { parent: self },
+        ...transform(
+          args.transform?.authorizer,
+          `${name}Authorizer`,
+          {
+            restApi: api.id,
+            type,
+            name: args.name,
+            providerArns: args.userPools,
+            authorizerUri: fn?.nodes.function.invokeArn,
+            authorizerResultTtlInSeconds: args.ttl,
+            identitySource: args.identitySource,
+          },
+          { parent: self },
+        ),
       );
     }
   }

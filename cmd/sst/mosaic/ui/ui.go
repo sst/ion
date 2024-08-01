@@ -2,8 +2,10 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/sst/ion/cmd/sst/mosaic/aws"
+	"github.com/sst/ion/cmd/sst/mosaic/cloudflare"
 	"github.com/sst/ion/pkg/project"
 
 	"golang.org/x/crypto/ssh/terminal"
@@ -30,7 +33,7 @@ const (
 
 const (
 	IconX     = "✕"
-	IconCheck = "✔︎"
+	IconCheck = "✓"
 )
 
 type UI struct {
@@ -166,7 +169,7 @@ func (u *UI) Event(unknown interface{}) {
 
 	case *project.StackCommandEvent:
 		u.reset()
-		u.header("", evt.App, evt.Stage)
+		u.header(evt.Version, evt.App, evt.Stage)
 		u.blank()
 		if evt.Command == "deploy" {
 			u.mode = ProgressModeDeploy
@@ -203,7 +206,7 @@ func (u *UI) Event(unknown interface{}) {
 
 	case *apitype.ResourcePreEvent:
 		u.timing[evt.Metadata.URN] = time.Now()
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" {
+		if evt.Metadata.Type == "pulumi:pulumi:Stack" || evt.Metadata.Type == "sst:sst:LinkRef" {
 			return
 		}
 
@@ -223,7 +226,7 @@ func (u *UI) Event(unknown interface{}) {
 		break
 
 	case *apitype.ResOutputsEvent:
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" {
+		if evt.Metadata.Type == "pulumi:pulumi:Stack" || evt.Metadata.Type == "sst:sst:LinkRef" {
 			return
 		}
 
@@ -306,16 +309,16 @@ func (u *UI) Event(unknown interface{}) {
 		}
 
 		if evt.Severity == "info#err" {
-			if strings.HasPrefix(evt.Message, "Downloading provider") {
-				u.printEvent(TEXT_INFO, "Info", strings.TrimSpace(ansi.Strip(evt.Message)))
-			} else {
-				u.printEvent(
-					TEXT_DIM,
-					"Log",
-					strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace),
-				)
-			}
+			u.printEvent(
+				TEXT_DIM,
+				"Log",
+				strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace),
+			)
 		}
+
+	case *project.ProviderDownloadEvent:
+		u.printEvent(TEXT_INFO, "Info", "Downloading provider "+evt.Name+" v"+evt.Version)
+		break
 
 	case *project.CompleteEvent:
 		if evt.Old {
@@ -372,14 +375,12 @@ func (u *UI) Event(unknown interface{}) {
 				}
 			}
 		}
-
 		if len(evt.Errors) == 0 && !evt.Finished {
 			u.println(
 				TEXT_DANGER_BOLD.Render(IconX),
 				TEXT_NORMAL_BOLD.Render("  Interrupted    "),
 			)
 		}
-
 		if len(evt.Errors) > 0 {
 			u.println(
 				TEXT_DANGER_BOLD.Render(IconX),
@@ -390,65 +391,73 @@ func (u *UI) Event(unknown interface{}) {
 				if status.URN != "" {
 					u.println(TEXT_DANGER_BOLD.Render("   " + u.FormatURN(status.URN)))
 				}
-				u.println(TEXT_NORMAL.Render("   " + strings.Join(parseError(status.Message), "\n   ")))
+				u.print(TEXT_NORMAL.Render("   " + strings.Join(parseError(status.Message), "\n   ")))
+				importDiffs, ok := evt.ImportDiffs[status.URN]
+				if ok {
+					isSSTComponent := strings.Contains(status.URN, "::sst")
+					if isSSTComponent {
+						u.println(TEXT_NORMAL.Render("\n\nSet the following in your transform:"))
+					}
+					if !isSSTComponent {
+						u.println(TEXT_NORMAL.Render("\n\nSet the following:"))
+					}
+					for _, diff := range importDiffs {
+						value, _ := json.Marshal(diff.Old)
+						if diff.Old == nil {
+							value = []byte("undefined")
+						}
+						u.print(TEXT_NORMAL.Render("   - "))
+						if isSSTComponent {
+							u.print(TEXT_INFO.Render("`args." + string(diff.Input) + " = " + string(value) + "`;"))
+						}
+						if !isSSTComponent {
+							u.print(TEXT_INFO.Render("`" + string(diff.Input) + ": " + string(value) + "`;"))
+						}
+						u.println()
+					}
+				} else {
+					u.println()
+				}
 			}
 		}
-
-		if len(evt.ImportDiffs) > 0 {
-			u.blank()
-			u.println(TEXT_NORMAL_BOLD.Render("   Import Errors"))
-
-			for _, diff := range evt.ImportDiffs {
-				u.print(TEXT_NORMAL.Render("   " + u.FormatURN(diff.URN)))
-				u.print(TEXT_NORMAL_BOLD.Render(" " + diff.Input))
-				u.print(TEXT_NORMAL.Render(" should be "))
-				u.print(TEXT_INFO.Render(fmt.Sprintf("%v ", diff.Old)))
-				u.println(TEXT_DIM.Render(fmt.Sprintf("(was %v)", diff.New)))
-			}
-		}
-
 		u.blank()
+	case *cloudflare.WorkerBuildEvent:
+		if len(evt.Errors) > 0 {
+			u.printEvent(TEXT_DANGER, "Build Error", u.functionName(evt.WorkerID)+" "+strings.Join(evt.Errors, "\n"))
+			return
+		}
+		u.printEvent(TEXT_INFO, "Build", u.functionName(evt.WorkerID))
+	case *cloudflare.WorkerUpdatedEvent:
+		u.printEvent(TEXT_INFO, "Reload", u.functionName(evt.WorkerID))
+	case *cloudflare.WorkerInvokedEvent:
+		url, _ := url.Parse(evt.TailEvent.Event.Request.URL)
+		u.printEvent(
+			u.getColor(evt.WorkerID),
+			TEXT_NORMAL_BOLD.Render(fmt.Sprintf("%-11s", "Invoke")),
+			u.functionName(evt.WorkerID)+" "+evt.TailEvent.Event.Request.Method+" "+url.Path,
+		)
+		for _, log := range evt.TailEvent.Logs {
+			duration := time.UnixMilli(log.Timestamp).Sub(time.UnixMilli(evt.TailEvent.EventTimestamp))
+			formattedDuration := fmt.Sprintf("%.9s", fmt.Sprintf("+%v", duration))
+
+			line := []string{}
+			for _, part := range log.Message {
+				switch v := part.(type) {
+				case string:
+					line = append(line, v)
+				case map[string]interface{}:
+					data, _ := json.Marshal(v)
+					line = append(line, string(data))
+				}
+			}
+
+			for _, item := range strings.Split(strings.Join(line, " "), "\n") {
+				u.printEvent(u.getColor(evt.WorkerID), formattedDuration, item)
+			}
+		}
+		u.printEvent(u.getColor(evt.WorkerID), "Done", evt.TailEvent.Outcome)
 	}
 
-	// if evt.WorkerBuildEvent != nil {
-	// 	if len(evt.WorkerBuildEvent.Errors) > 0 {
-	// 		u.printEvent(TEXT_DANGER, "Build Error", u.functionName(evt.WorkerBuildEvent.WorkerID)+" "+strings.Join(evt.WorkerBuildEvent.Errors, "\n"))
-	// 		return
-	// 	}
-	// 	u.printEvent(TEXT_INFO, "Build", u.functionName(evt.WorkerBuildEvent.WorkerID))
-	// }
-	// if evt.WorkerUpdatedEvent != nil {
-	// 	u.printEvent(TEXT_INFO, "Reload", u.functionName(evt.WorkerUpdatedEvent.WorkerID))
-	// }
-	// if evt.WorkerInvokedEvent != nil {
-	// 	url, _ := url.Parse(evt.WorkerInvokedEvent.TailEvent.Event.Request.URL)
-	// 	u.printEvent(
-	// 		u.getColor(evt.WorkerInvokedEvent.WorkerID),
-	// 		TEXT_NORMAL_BOLD.Render(fmt.Sprintf("%-11s", "Invoke")),
-	// 		u.functionName(evt.WorkerInvokedEvent.WorkerID)+" "+evt.WorkerInvokedEvent.TailEvent.Event.Request.Method+" "+url.Path,
-	// 	)
-
-	// 	for _, log := range evt.WorkerInvokedEvent.TailEvent.Logs {
-	// 		duration := time.UnixMilli(log.Timestamp).Sub(time.UnixMilli(evt.WorkerInvokedEvent.TailEvent.EventTimestamp))
-	// 		formattedDuration := fmt.Sprintf("%.9s", fmt.Sprintf("+%v", duration))
-
-	// 		line := []string{}
-	// 		for _, part := range log.Message {
-	// 			switch v := part.(type) {
-	// 			case string:
-	// 				line = append(line, v)
-	// 			case map[string]interface{}:
-	// 				data, _ := json.Marshal(v)
-	// 				line = append(line, string(data))
-	// 			}
-	// 		}
-
-	// 		for _, item := range strings.Split(strings.Join(line, " "), "\n") {
-	// 			u.printEvent(u.getColor(evt.WorkerInvokedEvent.WorkerID), formattedDuration, item)
-	// 		}
-	// 	}
-	// 	u.printEvent(u.getColor(evt.WorkerInvokedEvent.WorkerID), "Done", evt.WorkerInvokedEvent.TailEvent.Outcome)
-	// }
 }
 
 var COLORS = []lipgloss.Style{
@@ -560,7 +569,7 @@ func (u *UI) FormatURN(urn string) string {
 		if parent == "" {
 			break
 		}
-		if parent.Type().DisplayName() == "pulumi:pulumi:Stack" {
+		if parent.Type().DisplayName() == "pulumi:pulumi:Stack" || parent.Type().DisplayName() == "sst:sst:LinkRef" {
 			break
 		}
 		child = parent

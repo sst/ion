@@ -236,6 +236,11 @@ export interface BucketSubscriberArgs {
   };
 }
 
+interface BucketRef {
+  ref: boolean;
+  bucket: s3.BucketV2;
+}
+
 /**
  * The `Bucket` component lets you add an [AWS S3 Bucket](https://aws.amazon.com/s3/) to
  * your app.
@@ -290,8 +295,8 @@ export interface BucketSubscriberArgs {
  */
 export class Bucket extends Component implements Link.Linkable {
   private constructorName: string;
-  private bucket: Output<s3.BucketV2>;
   private isSubscribed: boolean = false;
+  private bucket: Output<s3.BucketV2>;
 
   constructor(
     name: string,
@@ -299,6 +304,13 @@ export class Bucket extends Component implements Link.Linkable {
     opts?: ComponentResourceOptions,
   ) {
     super(__pulumiType, name, args, opts);
+    this.constructorName = name;
+
+    if (args && "ref" in args) {
+      const ref = args as BucketRef;
+      this.bucket = output(ref.bucket);
+      return;
+    }
 
     const parent = this;
     const publicAccess = normalizePublicAccess();
@@ -308,25 +320,33 @@ export class Bucket extends Component implements Link.Linkable {
     const policy = createBucketPolicy();
     createCorsRule();
 
-    this.constructorName = name;
     // Ensure the policy is created when the bucket is used in another component
     // (ie. bucket.name). Also, a bucket can only have one policy. We want to ensure
     // the policy created here is created first. And SST will throw an error if
     // another policy is created after this one.
     this.bucket = policy.apply(() => bucket);
 
-    function createBucket() {
-      const input = transform(args?.transform?.bucket, {
-        forceDestroy: true,
-      });
+    function normalizePublicAccess() {
+      return output(args?.public).apply((v) => v ?? false);
+    }
 
-      if (!input.bucket) {
+    function createBucket() {
+      const transformed = transform(
+        args?.transform?.bucket,
+        `${name}Bucket`,
+        {
+          forceDestroy: true,
+        },
+        { parent },
+      );
+
+      if (!transformed[1].bucket) {
         const randomId = new RandomId(
           `${name}Id`,
           { byteLength: 6 },
           { parent },
         );
-        input.bucket = randomId.dec.apply((dec) =>
+        transformed[1].bucket = randomId.dec.apply((dec) =>
           prefixName(
             63,
             name,
@@ -335,21 +355,24 @@ export class Bucket extends Component implements Link.Linkable {
         );
       }
 
-      return new s3.BucketV2(`${name}Bucket`, input, { parent });
+      return new s3.BucketV2(...transformed);
     }
 
     function createPublicAccess() {
       return publicAccess.apply((publicAccess) => {
         return new s3.BucketPublicAccessBlock(
-          `${name}PublicAccessBlock`,
-          transform(args?.transform?.publicAccessBlock, {
-            bucket: bucket.bucket,
-            blockPublicAcls: true,
-            blockPublicPolicy: !publicAccess,
-            ignorePublicAcls: true,
-            restrictPublicBuckets: !publicAccess,
-          }),
-          { parent },
+          ...transform(
+            args?.transform?.publicAccessBlock,
+            `${name}PublicAccessBlock`,
+            {
+              bucket: bucket.bucket,
+              blockPublicAcls: true,
+              blockPublicPolicy: !publicAccess,
+              ignorePublicAcls: true,
+              restrictPublicBuckets: !publicAccess,
+            },
+            { parent },
+          ),
         );
       });
     }
@@ -379,15 +402,18 @@ export class Bucket extends Component implements Link.Linkable {
         });
 
         return new s3.BucketPolicy(
-          `${name}Policy`,
-          transform(args?.transform?.policy, {
-            bucket: bucket.bucket,
-            policy: iam.getPolicyDocumentOutput({ statements }).json,
-          }),
-          {
-            parent,
-            dependsOn: publicAccessBlock,
-          },
+          ...transform(
+            args?.transform?.policy,
+            `${name}Policy`,
+            {
+              bucket: bucket.bucket,
+              policy: iam.getPolicyDocumentOutput({ statements }).json,
+            },
+            {
+              parent,
+              dependsOn: publicAccessBlock,
+            },
+          ),
         );
       });
     }
@@ -397,32 +423,31 @@ export class Bucket extends Component implements Link.Linkable {
         if (cors === false) return;
 
         return new s3.BucketCorsConfigurationV2(
-          `${name}Cors`,
-          transform(args?.transform?.cors, {
-            bucket: bucket.bucket,
-            corsRules: [
-              {
-                allowedHeaders: cors?.allowHeaders ?? ["*"],
-                allowedMethods: cors?.allowMethods ?? [
-                  "DELETE",
-                  "GET",
-                  "HEAD",
-                  "POST",
-                  "PUT",
-                ],
-                allowedOrigins: cors?.allowOrigins ?? ["*"],
-                exposeHeaders: cors?.exposeHeaders,
-                maxAgeSeconds: toSeconds(cors?.maxAge ?? "0 seconds"),
-              },
-            ],
-          }),
-          { parent },
+          ...transform(
+            args?.transform?.cors,
+            `${name}Cors`,
+            {
+              bucket: bucket.bucket,
+              corsRules: [
+                {
+                  allowedHeaders: cors?.allowHeaders ?? ["*"],
+                  allowedMethods: cors?.allowMethods ?? [
+                    "DELETE",
+                    "GET",
+                    "HEAD",
+                    "POST",
+                    "PUT",
+                  ],
+                  allowedOrigins: cors?.allowOrigins ?? ["*"],
+                  exposeHeaders: cors?.exposeHeaders,
+                  maxAgeSeconds: toSeconds(cors?.maxAge ?? "0 seconds"),
+                },
+              ],
+            },
+            { parent },
+          ),
         );
       });
-    }
-
-    function normalizePublicAccess() {
-      return output(args?.public).apply((v) => v ?? false);
     }
   }
 
@@ -457,6 +482,44 @@ export class Bucket extends Component implements Link.Linkable {
        */
       bucket: this.bucket,
     };
+  }
+
+  /**
+   * Reference an existing bucket with the given bucket name. This is useful when you
+   * create a bucket in one stage and want to share it in another stage. It avoids having to
+   * create a new bucket in the other stage.
+   *
+   * :::tip
+   * You can use the `static get` method to share buckets across stages.
+   * :::
+   *
+   * @param name The name of the component.
+   * @param bucketName The name of the existing S3 Bucket.
+   *
+   * @example
+   * Imagine you create a bucket in the `dev` stage. And in your personal stage `frank`,
+   * instead of creating a new bucket, you want to share the bucket from `dev`.
+   *
+   * ```ts title="sst.config.ts"
+   * const bucket = $app.stage === "frank"
+   *   ? sst.aws.Bucket.get("MyBucket", "app-dev-mybucket-12345678")
+   *   : new sst.aws.Bucket("MyBucket");
+   * ```
+   *
+   * Here `app-dev-mybucket-12345678` is the auto-generated bucket name for the bucket created
+   * in the `dev` stage. You can find this by outputting the bucket name in the `dev` stage.
+   *
+   * ```ts title="sst.config.ts"
+   * return {
+   *   bucket: bucket.name
+   * };
+   * ```
+   */
+  public static get(name: string, bucketName: string) {
+    return new Bucket(name, {
+      ref: true,
+      bucket: s3.BucketV2.get(`${name}Bucket`, bucketName),
+    } as BucketArgs);
   }
 
   /**

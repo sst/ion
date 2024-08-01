@@ -74,7 +74,7 @@ func (m *footer) Start(ctx context.Context) {
 			width, _, _ := terminal.GetSize(int(os.Stdout.Fd()))
 			switch evt := val.(type) {
 			case lineMsg:
-				m.Render(width, "")
+				m.clear()
 				fmt.Println(evt)
 			default:
 				m.Update(val)
@@ -85,19 +85,36 @@ func (m *footer) Start(ctx context.Context) {
 	}
 }
 
+func (m *footer) clear() {
+	oldLines := strings.Split(m.previous, "\n")
+	out := &bytes.Buffer{}
+	if len(oldLines) > 0 {
+		for i := range oldLines {
+			out.WriteString(ansi.EraseEntireLine)
+			if i < len(oldLines)-1 {
+				out.WriteString(ansi.CursorUp1)
+			}
+		}
+	}
+	os.Stdout.Write(out.Bytes())
+	m.previous = ""
+}
+
 func (m *footer) Render(width int, next string) {
 	oldLines := strings.Split(m.previous, "\n")
 	nextLines := strings.Split(next, "\n")
 
 	out := &bytes.Buffer{}
 
-	if next == m.previous {
-		return
-	}
+	// if next == m.previous {
+	// 	return
+	// }
 
 	if len(oldLines) > 0 {
 		for i := range oldLines {
-			out.WriteString(ansi.EraseEntireLine)
+			if i < len(oldLines)-len(nextLines) || next == "" {
+				out.WriteString(ansi.EraseEntireLine)
+			}
 			if i < len(oldLines)-1 {
 				out.WriteString(ansi.CursorUp1)
 			}
@@ -110,6 +127,7 @@ func (m *footer) Render(width int, next string) {
 		}
 		truncated := ansi.Truncate(line, width, "…")
 		out.WriteString(truncated)
+		out.WriteString(ansi.EraseLine(0))
 		if i < len(nextLines)-1 {
 			out.WriteString("\r\n")
 		}
@@ -159,7 +177,7 @@ func (m *footer) Update(msg any) {
 		m.Reset()
 		break
 	case *apitype.ResourcePreEvent:
-		if resource.URN(msg.Metadata.URN).Type().DisplayName() == "pulumi:pulumi:Stack" {
+		if msg.Metadata.Type == "pulumi:pulumi:Stack" || msg.Metadata.Type == "sst:sst:LinkRef" {
 			break
 		}
 		if msg.Metadata.Old != nil && msg.Metadata.Old.Parent != "" {
@@ -168,10 +186,10 @@ func (m *footer) Update(msg any) {
 		if msg.Metadata.New != nil && msg.Metadata.New.Parent != "" {
 			m.parents[msg.Metadata.URN] = msg.Metadata.New.Parent
 		}
-		if msg.Metadata.Op == apitype.OpSame {
+		if msg.Metadata.Op == apitype.OpSame || msg.Metadata.Op == apitype.OpRead {
 			m.skipped++
 		}
-		if msg.Metadata.Op != apitype.OpSame {
+		if msg.Metadata.Op != apitype.OpSame && msg.Metadata.Op != apitype.OpRead {
 			m.pending = append(m.pending, msg)
 		}
 	case *apitype.SummaryEvent:
@@ -254,10 +272,11 @@ func (m *footer) View(width int) string {
 		}
 	}
 	if m.skipped > 0 {
-		label = fmt.Sprintf("%-11s [%d skipped]", label, m.skipped)
+		label = fmt.Sprintf("%-11s", label)
+		label += TEXT_DIM.Render(fmt.Sprintf(" %d skipped", m.skipped))
 	}
 	result = append(result, spinner+"  "+label)
-	return lipgloss.NewStyle().Width(width).Render(lipgloss.JoinVertical(lipgloss.Top, result...))
+	return lipgloss.NewStyle().MaxWidth(width).Render(lipgloss.JoinVertical(lipgloss.Top, result...))
 }
 
 func (u *footer) removePending(urn string) {

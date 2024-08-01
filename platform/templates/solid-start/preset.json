@@ -13,12 +13,6 @@
             "path": "/overrides/nitropack",
             "value": "npm:nitropack-nightly@latest"
           }
-        ],
-        "regex": [
-          {
-            "find": "\"dev\":\\s*\"([^\"]+)\"",
-            "replace": "\"dev\": \"sst dev $1\""
-          }
         ]
       }
     },
@@ -37,7 +31,7 @@
         "",
         "export default defineConfig({",
         "  server: {",
-        "    preset: \"aws-lambda\",",
+        "    preset: \"aws-lambda-streaming\",",
         "  },",
         "});"
       ]
