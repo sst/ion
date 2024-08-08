@@ -1,19 +1,17 @@
 package resource
 
 import (
+	"context"
 	"os"
 	"os/exec"
-	"sync"
+
+	"golang.org/x/sync/semaphore"
 )
 
-// Global semaphore to limit concurrent executions
-var (
-	maxConcurrentExecutions = 4
-	executionSemaphore      = make(chan struct{}, maxConcurrentExecutions)
-	once                    sync.Once
-)
-
-type Run struct {}
+// Semaphore to limit concurrent executions
+type Run struct {
+	executionSemaphore *semaphore.Weighted
+}
 
 type RunInputs struct {
 	Command string 						`json:"command"`
@@ -25,8 +23,15 @@ type RunInputs struct {
 type RunOutputs struct {
 }
 
+func NewRun() *Run {
+	// Make a channel with a buffer size of 4 and fill it
+	return &Run{
+		executionSemaphore: semaphore.NewWeighted(4),
+	}
+}
+
 func (r *Run) Create(input *RunInputs, output *CreateResult[RunOutputs]) error {
-	err := executeCommand(input)
+	err := r.executeCommand(input)
 	if err != nil {
 		return err
 	}
@@ -39,7 +44,7 @@ func (r *Run) Create(input *RunInputs, output *CreateResult[RunOutputs]) error {
 }
 
 func (r *Run) Update(input *UpdateInput[RunInputs, RunOutputs], output *UpdateResult[RunOutputs]) error {
-	err := executeCommand(&input.News)
+	err := r.executeCommand(&input.News)
 	if err != nil {
 		return err
 	}
@@ -51,20 +56,9 @@ func (r *Run) Update(input *UpdateInput[RunInputs, RunOutputs], output *UpdateRe
 }
 
 
-func executeCommand(input *RunInputs) error {
-	// Initialize the semaphore if it hasn't been already
-	once.Do(func() {
-		for i := 0; i < maxConcurrentExecutions; i++ {
-			executionSemaphore <- struct{}{}
-		}
-	})
-	
-	// Acquire a semaphore slot
-	<-executionSemaphore
-	defer func() {
-		// Release the semaphore slot when done
-		executionSemaphore <- struct{}{}
-	}()
+func (r *Run) executeCommand(input *RunInputs) error {
+	r.executionSemaphore.Acquire(context.Background(), 1)
+	defer r.executionSemaphore.Release(1)
 
 	cmd := exec.Command("sh", "-c", input.Command)
 	cmd.Stdout = os.Stdout
