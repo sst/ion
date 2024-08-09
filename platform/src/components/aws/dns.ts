@@ -32,7 +32,7 @@
  */
 
 import { AliasRecord, Dns, Record } from "../dns";
-import { sanitizeToPascalCase } from "../naming";
+import { logicalName } from "../naming";
 import { HostedZoneLookup } from "./providers/hosted-zone-lookup";
 import { ComponentResourceOptions, output } from "@pulumi/pulumi";
 import { Transform, transform } from "../component";
@@ -55,10 +55,19 @@ export interface DnsArgs {
    */
   zone?: Input<string>;
   /**
-   * Set to `true` to allow the creation of new DNS records that can replace existing ones.
+   * Set to `true` if you want to let the new DNS records replace the existing ones.
    *
-   * This is useful for switching a domain to a new site without removing old DNS records,
-   * helping to prevent downtime.
+   * :::tip
+   * Use this to migrate over your domain without any downtime.
+   * :::
+   *
+   * This is useful if your domain is currently used by another app and you want to switch it
+   * to your current app. Without setting this, you'll first have to remove the existing DNS
+   * records and then add the new one. This can cause downtime.
+   *
+   * You can avoid this by setting this to `true` and the existing DNS records will be replaced
+   * without any downtime. Just make sure that when you remove your old app, you don't remove
+   * the DNS records.
    *
    * @default `false`
    * @example
@@ -149,7 +158,7 @@ export function dns(args: DnsArgs = {}) {
     opts: ComponentResourceOptions,
   ) {
     return output(partial).apply((partial) => {
-      const nameSuffix = sanitizeToPascalCase(partial.name);
+      const nameSuffix = logicalName(partial.name);
       const zoneId = lookupZone();
       const dnsRecord = createRecord();
       return dnsRecord;

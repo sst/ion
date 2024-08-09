@@ -372,7 +372,7 @@ Disable running this function [Live](/docs/live/) in `sst dev`.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">Object</code><code class="symbol">&gt;</code>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">false</code><code class="symbol"> | </code><code class="primitive">Object</code><code class="symbol">&gt;</code>
 </InlineSection>
 - <p>[<code class="key">format?</code>](#logging-format)</p>
 - <p>[<code class="key">retention?</code>](#logging-retention)</p>
@@ -381,8 +381,15 @@ Disable running this function [Live](/docs/live/) in `sst dev`.
 <InlineSection>
 **Default** <code class="primitive">&lcub;retention: "forever", format: "text"&rcub;</code>
 </InlineSection>
-Configure the function logs in CloudWatch.
+Configure the function logs in CloudWatch. Or pass in `false` to disable writing logs.
 
+```js
+{
+  logging: false
+}
+```
+When set to `false`, the function is not given permissions to write to CloudWatch.
+Logs.
 </Segment>
 <NestedTitle id="logging-format" Tag="h4" parent="logging.">format?</NestedTitle>
 <Segment>
@@ -460,15 +467,17 @@ And might end up being more [cost effective](https://docs.aws.amazon.com/lambda/
 **Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
-The name for the function. This is displayed in the AWS Console.
+The name for the function. This is the name that's displayed in the AWS Console.
 
-:::note
+:::caution
 Changing the name will create a new function and delete the old one.
 :::
 
+By default, the name is generated from the app name, stage name, and component name.
+
 ```js
 {
-  name: ""
+  name: "my-function"
 }
 ```
 </Segment>
@@ -1243,7 +1252,7 @@ The AWS Lambda function.
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** [<code class="type">LogGroup</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/)
+**Type** <code class="primitive">Output</code><code class="symbol">&lt;</code><code class="primitive">undefined</code><code class="symbol"> | </code>[<code class="type">LogGroup</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cloudwatch/loggroup/)<code class="symbol">&gt;</code>
 </InlineSection>
 </Section>
 The CloudWatch Log Group the function logs are stored.

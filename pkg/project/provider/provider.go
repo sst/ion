@@ -13,17 +13,16 @@ import (
 	"os"
 	"time"
 
+	"github.com/sst/ion/pkg/flag"
 	"golang.org/x/exp/slog"
 	"golang.org/x/sync/errgroup"
 )
 
 type Home interface {
-	Bootstrap(app, stage string) error
-
+	Bootstrap() error
 	getData(key, app, stage string) (io.Reader, error)
 	putData(key, app, stage string, data io.Reader) error
 	removeData(key, app, stage string) error
-
 	setPassphrase(app, stage string, passphrase string) error
 	getPassphrase(app, stage string) (string, error)
 }
@@ -83,12 +82,15 @@ func Passphrase(backend Home, app, stage string) (string, error) {
 
 	if passphrase == "" {
 		slog.Info("passphrase not found, setting passphrase", "app", app, "stage", stage)
-		bytes := make([]byte, 32)
-		_, err := rand.Read(bytes)
-		if err != nil {
-			return "", err
+		passphrase = flag.SST_PASSPHRASE
+		if passphrase == "" {
+			bytes := make([]byte, 32)
+			_, err := rand.Read(bytes)
+			if err != nil {
+				return "", err
+			}
+			passphrase = base64.StdEncoding.EncodeToString(bytes)
 		}
-		passphrase = base64.StdEncoding.EncodeToString(bytes)
 		err = backend.setPassphrase(app, stage, passphrase)
 		if err != nil {
 			return "", err

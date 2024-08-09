@@ -38,11 +38,12 @@ type BuildFailedEvent struct {
 }
 
 type StackInput struct {
-	Out     chan interface{}
-	OnFiles func(files []string)
-	Command string
-	Target  []string
-	Dev     bool
+	Out        chan interface{}
+	OnFiles    func(files []string)
+	Command    string
+	Target     []string
+	ServerPort int
+	Dev        bool
 }
 
 type ConcurrentUpdateEvent struct{}
@@ -127,6 +128,7 @@ type StackCommandEvent struct {
 	Stage   string
 	Config  string
 	Command string
+	Version string
 }
 
 type Error struct {
@@ -152,6 +154,7 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 		Stage:   p.app.Stage,
 		Config:  p.PathConfig(),
 		Command: input.Command,
+		Version: p.Version(),
 	})
 
 	updateID := cuid2.Generate()
@@ -204,7 +207,7 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 	}
 	env["PULUMI_CONFIG_PASSPHRASE"] = passphrase
 	env["PULUMI_SKIP_UPDATE_CHECK"] = "true"
-	env["PULUMI_DISABLE_AUTOMATIC_PLUGIN_ACQUISITION"] = "true"
+	// env["PULUMI_DISABLE_AUTOMATIC_PLUGIN_ACQUISITION"] = "true"
 	env["NODE_OPTIONS"] = "--enable-source-maps --no-deprecation"
 
 	cli := map[string]interface{}{
@@ -216,6 +219,9 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 			"work":     p.PathWorkingDir(),
 			"platform": p.PathPlatformDir(),
 		},
+	}
+	if input.ServerPort != 0 {
+		cli["rpc"] = fmt.Sprintf("http://localhost:%v/rpc", input.ServerPort)
 	}
 	cliBytes, err := json.Marshal(cli)
 	if err != nil {
@@ -280,8 +286,12 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 	}
 	slog.Info("tracked files")
 
+	pulumiPath := flag.SST_PULUMI_PATH
+	if pulumiPath == "" {
+		pulumiPath = filepath.Join(global.BinPath(), "..")
+	}
 	pulumi, err := auto.NewPulumiCommand(&auto.PulumiCommandOptions{
-		Root:             filepath.Join(global.BinPath(), ".."),
+		Root:             pulumiPath,
 		SkipVersionCheck: true,
 	})
 	if err != nil {
@@ -864,4 +874,50 @@ func getNotNilFields(v interface{}) []interface{} {
 	}
 
 	return result
+}
+
+func (p *Project) GetCompleted(ctx context.Context) (*CompleteEvent, error) {
+	passphrase, err := provider.Passphrase(p.home, p.app.Name, p.app.Stage)
+	if err != nil {
+		return nil, err
+	}
+	_, err = p.PullState()
+	if err != nil {
+		return nil, err
+	}
+	pulumi, err := auto.NewPulumiCommand(&auto.PulumiCommandOptions{
+		Root:             filepath.Join(global.BinPath(), ".."),
+		SkipVersionCheck: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ws, err := auto.NewLocalWorkspace(ctx,
+		auto.Pulumi(pulumi),
+		auto.WorkDir(p.PathWorkingDir()),
+		auto.PulumiHome(global.ConfigDir()),
+		auto.Project(workspace.Project{
+			Name:    tokens.PackageName(p.app.Name),
+			Runtime: workspace.NewProjectRuntimeInfo("nodejs", nil),
+			Backend: &workspace.ProjectBackend{
+				URL: fmt.Sprintf("file://%v", p.PathWorkingDir()),
+			},
+		}),
+		auto.EnvVars(
+			map[string]string{
+				"PULUMI_CONFIG_PASSPHRASE": passphrase,
+			},
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+	stack, err := auto.UpsertStack(ctx,
+		p.app.Stage,
+		ws,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return getCompletedEvent(ctx, stack)
 }

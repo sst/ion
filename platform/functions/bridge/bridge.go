@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -14,7 +15,6 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -154,54 +154,14 @@ func run() error {
 
 	prefix := fmt.Sprintf("ion/%s/%s/%s", SST_APP, SST_STAGE, workerID)
 	slog.Info("prefix", "prefix", prefix)
-
-	writer := iot_writer.New(mqttClient, prefix+"/response")
-	var conn net.Conn
-	var connLock sync.Mutex
-	timer := time.NewTimer(time.Second * 5)
-	go func() {
-		for {
-			connLock.Lock()
-			slog.Info("connecting to lambda runtime api")
-			conn, err = net.Dial("tcp", LAMBDA_RUNTIME_API)
-			if err != nil {
-				cancel()
-				return
-			}
-			timer.Reset(time.Second * 5)
-			connLock.Unlock()
-			slog.Info("waiting for response")
-			io.Copy(writer, conn)
-			writer.Flush()
-		}
-	}()
-	/*
-		go func() {
-			select {
-			case <-timer.C:
-				slog.Info("timer expired")
-				cancel()
-				return
-			case <-ctx.Done():
-				return
-			}
-		}()
-	*/
-
 	slog.Info("get lambda runtime api", "url", LAMBDA_RUNTIME_API)
 
-	if token := mqttClient.Subscribe(prefix+"/request", 1, func(c MQTT.Client, m MQTT.Message) {
-		slog.Info("iot", "topic", m.Topic())
-		payload := m.Payload()
-		topic := m.Topic()
-		slog.Info("received message", "topic", topic, "payload", string(payload))
-		go func() {
-			connLock.Lock()
-			defer connLock.Unlock()
-			timer.Stop()
-			conn.Write(payload)
-			slog.Info("wrote request")
-		}()
+	requestChan := make(chan iot_writer.ReadMsg, 1000)
+	reader := iot_writer.NewReader()
+	if token := mqttClient.Subscribe(prefix+"/request/#", 1, func(c MQTT.Client, m MQTT.Message) {
+		for _, msg := range reader.Read(m) {
+			requestChan <- msg
+		}
 	}); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
@@ -217,6 +177,9 @@ func run() error {
 	initPayload, err := json.Marshal(map[string]interface{}{"functionID": SST_FUNCTION_ID, "env": env})
 	if err != nil {
 		return err
+	}
+	if token := mqttClient.Publish(prefix+"/init", 1, false, initPayload); token.Wait() && token.Error() != nil {
+		return token.Error()
 	}
 	if token := mqttClient.Subscribe(prefix+"/reboot", 1, func(c MQTT.Client, m MQTT.Message) {
 		slog.Info("received reboot message")
@@ -236,25 +199,85 @@ func run() error {
 		return token.Error()
 	}
 
-	if token := mqttClient.Publish(prefix+"/init", 1, false, initPayload); token.Wait() && token.Error() != nil {
-		return token.Error()
-	}
-
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 
-	select {
-	case <-sigs:
+	go func() {
+		<-sigs
 		cancel()
-		break
-	case <-ctx.Done():
-		break
-	}
+	}()
 
-	slog.Info("exiting")
+	defer func() {
+		mqttClient.Publish(prefix+"/shutdown", 1, false, initPayload).Wait()
+	}()
 
-	if token := mqttClient.Publish(prefix+"/shutdown", 1, false, initPayload); token.Wait() && token.Error() != nil {
-		return token.Error()
+	for {
+		slog.Info("dialing lambda runtime api")
+		conn, err := net.Dial("tcp", LAMBDA_RUNTIME_API)
+		if err != nil {
+			return err
+		}
+		requestID, err := forwardRequest(ctx, requestChan, conn)
+		if err != nil {
+			return err
+		}
+		writer := iot_writer.New(mqttClient, prefix+"/response/"+requestID)
+		err = forwardResponse(ctx, writer, conn)
+		if err != nil {
+			return err
+		}
 	}
-	return nil
+}
+
+type msg struct {
+	time      time.Time
+	data      []byte
+	requestID string
+}
+
+func forwardRequest(ctx context.Context, requestChan chan iot_writer.ReadMsg, conn net.Conn) (string, error) {
+	count := 0
+	for {
+		select {
+		case payload := <-requestChan:
+			if len(payload.Data) == 0 {
+				return payload.RequestID, nil
+			}
+			count++
+			conn.Write(payload.Data)
+			continue
+		case <-ctx.Done():
+			return "", fmt.Errorf("context cancelled")
+		}
+	}
+}
+
+func forwardResponse(ctx context.Context, writer *iot_writer.IoTWriter, conn net.Conn) error {
+	slog.Info("forwarding response")
+	buf := make([]byte, 1024)
+	for {
+		conn.SetReadDeadline(time.Now().Add(time.Second * 1))
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled")
+		default:
+			n, err := conn.Read(buf)
+			if err != nil {
+				if errors.Is(err, net.ErrClosed) || errors.Is(err, io.EOF) {
+					writer.Flush()
+					return nil
+				}
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					continue
+				}
+				slog.Info("read error", "err", err)
+				return err
+			}
+			if n == 0 {
+				writer.Flush()
+				return nil
+			}
+			writer.Write(buf[:n])
+		}
+	}
 }

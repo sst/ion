@@ -15,10 +15,23 @@ import { Cdn } from "./cdn.js";
 import { Bucket } from "./bucket.js";
 import { Component } from "../component.js";
 import { Link } from "../link.js";
+import { DevArgs } from "../dev.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { URL_UNAVAILABLE } from "./linkable.js";
 
 export interface NuxtArgs extends SsrSiteArgs {
+  /**
+   * Configure how this component works in `sst dev`.
+   *
+   * :::note
+   * In `sst dev` your Nuxt app is run in dev mode; it's not deployed.
+   * :::
+   *
+   * Instead of deploying your Nuxt app, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   */
+  dev?: DevArgs["dev"];
   /**
    * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
    *
@@ -423,12 +436,10 @@ export class Nuxt extends Component implements Link.Linkable {
           assetsPath,
           // create 1 behaviour for each top level asset file/folder
           staticRoutes: fs
-            .readdirSync(path.join(outputPath, assetsPath))
-            .map((item) =>
-              fs.statSync(path.join(outputPath, assetsPath, item)).isDirectory()
-                ? `${item}/*`
-                : item,
-            ),
+            .readdirSync(path.join(outputPath, assetsPath), {
+              withFileTypes: true,
+            })
+            .map((item) => (item.isDirectory() ? `${item.name}/*` : item.name)),
         };
       });
     }

@@ -21,7 +21,7 @@ import { Component, Prettify, Transform, transform } from "../component.js";
 import { Link } from "../link.js";
 import { VisibleError } from "../error.js";
 import type { Input } from "../input.js";
-import { prefixName } from "../naming.js";
+import { physicalName } from "../naming.js";
 import { RETENTION } from "./logging.js";
 import {
   cloudwatch,
@@ -190,16 +190,18 @@ export interface FunctionArgs {
    */
   live?: Input<false>;
   /**
-   * The name for the function. This is displayed in the AWS Console.
+   * The name for the function. This is the name that's displayed in the AWS Console.
    *
-   * :::note
+   * :::caution
    * Changing the name will create a new function and delete the old one.
    * :::
+   *
+   * By default, the name is generated from the app name, stage name, and component name.
    *
    * @example
    * ```js
    * {
-   *   name: ""
+   *   name: "my-function"
    * }
    * ```
    */
@@ -428,38 +430,49 @@ export interface FunctionArgs {
    */
   injections?: Input<string[]>;
   /**
-   * Configure the function logs in CloudWatch.
+   * Configure the function logs in CloudWatch. Or pass in `false` to disable writing logs.
    * @default `{retention: "forever", format: "text"}`
+   * @example
+   * ```js
+   * {
+   *   logging: false
+   * }
+   * ```
+   * When set to `false`, the function is not given permissions to write to CloudWatch.
+   * Logs.
    */
-  logging?: Input<{
-    /**
-     * The duration the function logs are kept in CloudWatch.
-     * @default `forever`
-     * @example
-     * ```js
-     * {
-     *   logging: {
-     *     retention: "1 week"
-     *   }
-     * }
-     * ```
-     */
-    retention?: Input<keyof typeof RETENTION>;
-    /**
-     * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
-     * of the Lambda function.
-     * @default `"text"`
-     * @example
-     * ```js
-     * {
-     *   logging: {
-     *     format: "json"
-     *   }
-     * }
-     * ```
-     */
-    format?: Input<"text" | "json">;
-  }>;
+  logging?: Input<
+    | false
+    | {
+        /**
+         * The duration the function logs are kept in CloudWatch.
+         * @default `forever`
+         * @example
+         * ```js
+         * {
+         *   logging: {
+         *     retention: "1 week"
+         *   }
+         * }
+         * ```
+         */
+        retention?: Input<keyof typeof RETENTION>;
+        /**
+         * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
+         * of the Lambda function.
+         * @default `"text"`
+         * @example
+         * ```js
+         * {
+         *   logging: {
+         *     format: "json"
+         *   }
+         * }
+         * ```
+         */
+        format?: Input<"text" | "json">;
+      }
+  >;
   /**
    * The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
    * of the Lambda function.
@@ -919,7 +932,7 @@ export interface FunctionArgs {
 export class Function extends Component implements Link.Linkable {
   private function: Output<lambda.Function>;
   private role?: iam.Role;
-  private logGroup: cloudwatch.LogGroup;
+  private logGroup: Output<cloudwatch.LogGroup | undefined>;
   private fnUrl: Output<lambda.FunctionUrl | undefined>;
   private missingSourcemap?: boolean;
 
@@ -1048,11 +1061,15 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function normalizeLogging() {
-      return output(args.logging).apply((logging) => ({
-        ...logging,
-        retention: logging?.retention ?? "forever",
-        format: logging?.format ?? "text",
-      }));
+      return output(args.logging).apply((logging) => {
+        if (logging === false) return undefined;
+
+        return {
+          ...logging,
+          retention: logging?.retention ?? "forever",
+          format: logging?.format ?? "text",
+        };
+      });
     }
 
     function normalizeUrl() {
@@ -1147,7 +1164,8 @@ export class Function extends Component implements Link.Linkable {
             });
             if (result.type === "error") {
               throw new Error(
-                "Failed to build function: " + result.errors.join("\n").trim(),
+                `Failed to build function "${args.handler}": ` +
+                  result.errors.join("\n").trim(),
               );
             }
             return result;
@@ -1299,14 +1317,18 @@ export class Function extends Component implements Link.Linkable {
             inlinePolicies: policy.apply(({ statements }) =>
               statements ? [{ name: "inline", policy: policy.json }] : [],
             ),
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+            managedPolicyArns: logging.apply((logging) => [
+              ...(logging
+                ? [
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                  ]
+                : []),
               ...(args.vpc
                 ? [
                     "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
                   ]
                 : []),
-            ],
+            ]),
           },
           { parent },
         ),
@@ -1396,7 +1418,7 @@ export class Function extends Component implements Link.Linkable {
         {
           key: interpolate`assets/${name}-code-${bundleHash}.zip`,
           bucket: region.apply((region) =>
-            bootstrap.forRegion(region).then((d) => d.bucket),
+            bootstrap.forRegion(region).then((d) => d.asset),
           ),
           source: zipPath.apply((zipPath) => new asset.FileArchive(zipPath)),
         },
@@ -1408,74 +1430,78 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function createLogGroup() {
-      return new cloudwatch.LogGroup(
-        ...transform(
-          args.transform?.logGroup,
-          `${name}LogGroup`,
-          {
-            name: `/aws/lambda/${prefixName(64, `${name}Function`)}`,
-            retentionInDays: logging.apply(
-              (logging) => RETENTION[logging.retention],
-            ),
-          },
-          { parent },
-        ),
-      );
+      return logging.apply((logging) => {
+        if (!logging) return;
+
+        return new cloudwatch.LogGroup(
+          ...transform(
+            args.transform?.logGroup,
+            `${name}LogGroup`,
+            {
+              name: interpolate`/aws/lambda/${
+                args.name ?? physicalName(64, `${name}Function`)
+              }`,
+              retentionInDays: RETENTION[logging.retention],
+            },
+            { parent },
+          ),
+        );
+      });
     }
 
     function createFunction() {
-      const transformed = transform(
-        args.transform?.function,
-        `${name}Function`,
-        {
-          name: args.name,
-          description: all([args.description, dev]).apply(
-            ([description, dev]) =>
-              dev
-                ? description
-                  ? `${description.substring(0, 240)} (live)`
-                  : "live"
-                : `${description ?? ""}`,
-          ),
-          code: new asset.FileArchive(
-            path.join($cli.paths.platform, "functions", "empty-function"),
-          ),
-          handler: unsecret(handler),
-          role: args.role ?? role!.arn,
-          runtime,
-          timeout: timeout.apply((timeout) => toSeconds(timeout)),
-          memorySize: memory.apply((memory) => toMBs(memory)),
-          environment: {
-            variables: environment,
-          },
-          architectures,
-          loggingConfig: {
-            logFormat: logging.apply((logging) =>
-              logging.format === "json" ? "JSON" : "Text",
+      return all([logging, logGroup]).apply(([logging, logGroup]) => {
+        const transformed = transform(
+          args.transform?.function,
+          `${name}Function`,
+          {
+            name: args.name,
+            description: all([args.description, dev]).apply(
+              ([description, dev]) =>
+                dev
+                  ? description
+                    ? `${description.substring(0, 240)} (live)`
+                    : "live"
+                  : `${description ?? ""}`,
             ),
-            logGroup: logGroup.name,
+            code: new asset.FileArchive(
+              path.join($cli.paths.platform, "functions", "empty-function"),
+            ),
+            handler: unsecret(handler),
+            role: args.role ?? role!.arn,
+            runtime,
+            timeout: timeout.apply((timeout) => toSeconds(timeout)),
+            memorySize: memory.apply((memory) => toMBs(memory)),
+            environment: {
+              variables: environment,
+            },
+            architectures,
+            loggingConfig: logging && {
+              logFormat: logging.format === "json" ? "JSON" : "Text",
+              logGroup: logGroup!.name,
+            },
+            vpcConfig: args.vpc && {
+              securityGroupIds: output(args.vpc).securityGroups,
+              subnetIds: output(args.vpc).subnets,
+            },
+            layers: args.layers,
           },
-          vpcConfig: args.vpc && {
-            securityGroupIds: output(args.vpc).securityGroups,
-            subnetIds: output(args.vpc).subnets,
+          { parent },
+        );
+        return new lambda.Function(
+          transformed[0],
+          {
+            ...transformed[1],
+            runtime: all([transformed[1].runtime, dev]).apply(
+              ([runtime, dev]) => (dev ? "provided.al2023" : runtime!),
+            ),
+            architectures: all([transformed[1].architectures, dev]).apply(
+              ([architectures, dev]) => (dev ? ["x86_64"] : architectures!),
+            ),
           },
-          layers: args.layers,
-        },
-        { parent },
-      );
-      return new lambda.Function(
-        transformed[0],
-        {
-          ...transformed[1],
-          runtime: all([transformed[1].runtime, dev]).apply(([runtime, dev]) =>
-            dev ? "provided.al2023" : runtime!,
-          ),
-          architectures: all([transformed[1].architectures, dev]).apply(
-            ([architectures, dev]) => (dev ? ["x86_64"] : architectures!),
-          ),
-        },
-        transformed[2],
-      );
+          transformed[2],
+        );
+      });
     }
 
     function createUrl() {

@@ -16,6 +16,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/sst/ion/internal/fs"
 	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/flag"
 	"github.com/sst/ion/pkg/js"
 	"github.com/sst/ion/pkg/project/provider"
 )
@@ -181,7 +182,7 @@ console.log("~j" + JSON.stringify(mod.app({
 				return nil, util.NewReadableError(nil, `You must specify a "home" provider in the project configuration file.`)
 			}
 
-			if _, ok := proj.app.Providers[proj.app.Home]; !ok {
+			if _, ok := proj.app.Providers[proj.app.Home]; !ok && proj.app.Home != "local" {
 				proj.app.Providers[proj.app.Home] = map[string]interface{}{}
 			}
 
@@ -228,6 +229,7 @@ console.log("~j" + JSON.stringify(mod.app({
 func (proj *Project) LoadHome() error {
 	slog.Info("loading home")
 	loadedProviders := make(map[string]provider.Provider)
+
 	for key, args := range proj.app.Providers {
 		var match provider.Provider
 		switch key {
@@ -253,15 +255,20 @@ func (proj *Project) LoadHome() error {
 		loadedProviders[key] = match
 	}
 
-	p, ok := loadedProviders[proj.app.Home]
-	if !ok {
+	var home provider.Home
+
+	switch proj.app.Home {
+	case "local":
+		home = provider.NewLocalHome()
+	case "aws":
+		home = provider.NewAwsHome(loadedProviders["aws"].(*provider.AwsProvider))
+	case "cloudflare":
+		home = provider.NewCloudflareHome(loadedProviders["cloudflare"].(*provider.CloudflareProvider))
+	default:
 		return fmt.Errorf("Home provider %s is invalid", proj.app.Home)
 	}
-	home, ok := p.(provider.Home)
-	if !ok {
-		return fmt.Errorf("Home provider %s is invalid", proj.app.Home)
-	}
-	err := home.Bootstrap(proj.app.Name, proj.app.Stage)
+
+	err := home.Bootstrap()
 	if err != nil {
 		return fmt.Errorf("Error initializing %s:\n   %w", proj.app.Home, err)
 	}
@@ -313,7 +320,7 @@ func (p *Project) Provider(name string) (provider.Provider, bool) {
 }
 
 func (p *Project) Cleanup() error {
-	if os.Getenv("SST_NO_ARTIFACT_CLEANUP") != "" {
+	if !flag.SST_NO_CLEANUP {
 		return nil
 	}
 	return os.RemoveAll(

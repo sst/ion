@@ -15,7 +15,6 @@ import { Link } from "../link.js";
 import { Input } from "../input.js";
 import { globSync } from "glob";
 import { BucketFile, BucketFiles } from "./providers/bucket-files.js";
-import { DistributionInvalidation } from "./providers/distribution-invalidation.js";
 import {
   BaseStaticSiteArgs,
   buildApp,
@@ -25,8 +24,22 @@ import {
 import { cloudfront, iam } from "@pulumi/aws";
 import { URL_UNAVAILABLE } from "./linkable.js";
 import { DevArgs } from "../dev.js";
+import { OriginAccessControl } from "./providers/origin-access-control.js";
+import { physicalName } from "../naming.js";
 
-export interface StaticSiteArgs extends BaseStaticSiteArgs, DevArgs {
+export interface StaticSiteArgs extends BaseStaticSiteArgs {
+  /**
+   * Configure how this component works in `sst dev`.
+   *
+   * :::note
+   * In `sst dev` your static site is run in dev mode; it's not deployed.
+   * :::
+   *
+   * Instead of deploying your static site, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   */
+  dev?: DevArgs["dev"];
   /**
    * Path to the directory where your static site is located. By default this assumes your static site is in the root of your SST app.
    *
@@ -394,12 +407,12 @@ export class StaticSite extends Component implements Link.Linkable {
     }
 
     const outputPath = buildApp(name, args.build, sitePath, environment);
-    const access = createCloudFrontOriginAccessIdentity();
+    const access = createCloudFrontOriginAccessControl();
     const bucket = createS3Bucket();
     const bucketFile = uploadAssets();
     const cloudfrontFunction = createCloudfrontFunction();
+    const invalidation = buildInvalidation();
     const distribution = createDistribution();
-    createDistributionInvalidation();
     this.assets = bucket;
     this.cdn = distribution;
 
@@ -413,10 +426,10 @@ export class StaticSite extends Component implements Link.Linkable {
       },
     });
 
-    function createCloudFrontOriginAccessIdentity() {
-      return new cloudfront.OriginAccessIdentity(
-        `${name}OriginAccessIdentity`,
-        {},
+    function createCloudFrontOriginAccessControl() {
+      return new OriginAccessControl(
+        `${name}S3AccessControl`,
+        { name: physicalName(64, name) },
         { parent },
       );
     }
@@ -457,8 +470,8 @@ export class StaticSite extends Component implements Link.Linkable {
                     {
                       principals: [
                         {
-                          type: "AWS",
-                          identifiers: [access.iamArn],
+                          type: "Service",
+                          identifiers: ["cloudfront.amazonaws.com"],
                         },
                       ],
                       actions: ["s3:GetObject"],
@@ -542,8 +555,9 @@ export class StaticSite extends Component implements Link.Linkable {
             {
               bucketName: bucket.name,
               files: bucketFiles,
+              purge: true,
             },
-            { parent, ignoreChanges: $dev ? ["*"] : undefined },
+            { parent },
           );
         },
       );
@@ -605,9 +619,7 @@ export class StaticSite extends Component implements Link.Linkable {
                 originId: "s3",
                 domainName: bucket.nodes.bucket.bucketRegionalDomainName,
                 originPath: "",
-                s3OriginConfig: {
-                  originAccessIdentity: access.cloudfrontAccessIdentityPath,
-                },
+                originAccessControlId: access.id,
               },
             ],
             defaultRootObject: indexPage,
@@ -652,6 +664,7 @@ export class StaticSite extends Component implements Link.Linkable {
               ],
             },
             domain: args.domain,
+            invalidation,
             wait: !$dev,
           },
           // create distribution after s3 upload finishes
@@ -660,11 +673,11 @@ export class StaticSite extends Component implements Link.Linkable {
       );
     }
 
-    function createDistributionInvalidation() {
-      all([outputPath, args.invalidation]).apply(
+    function buildInvalidation() {
+      return all([outputPath, args.invalidation]).apply(
         ([outputPath, invalidationRaw]) => {
           // Normalize invalidation
-          if (invalidationRaw === false) return;
+          if (invalidationRaw === false) return false;
           const invalidation = {
             wait: false,
             paths: "all" as const,
@@ -674,7 +687,7 @@ export class StaticSite extends Component implements Link.Linkable {
           // Build invalidation paths
           const invalidationPaths =
             invalidation.paths === "all" ? ["/*"] : invalidation.paths;
-          if (invalidationPaths.length === 0) return;
+          if (invalidationPaths.length === 0) return false;
 
           // Calculate a hash based on the contents of the S3 files. This will be
           // used to determine if we need to invalidate our CloudFront cache.
@@ -692,19 +705,11 @@ export class StaticSite extends Component implements Link.Linkable {
             hash.update(fs.readFileSync(path.resolve(outputPath, filePath))),
           );
 
-          new DistributionInvalidation(
-            `${name}Invalidation`,
-            {
-              distributionId: distribution.nodes.distribution.id,
-              paths: invalidationPaths,
-              version: hash.digest("hex"),
-              wait: invalidation.wait,
-            },
-            {
-              parent,
-              ignoreChanges: $dev ? ["*"] : undefined,
-            },
-          );
+          return {
+            paths: invalidationPaths,
+            token: hash.digest("hex"),
+            wait: invalidation.wait,
+          };
         },
       );
     }

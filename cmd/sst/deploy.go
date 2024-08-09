@@ -6,6 +6,7 @@ import (
 	"github.com/sst/ion/cmd/sst/cli"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/pkg/project"
+	"github.com/sst/ion/pkg/server"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -26,6 +27,14 @@ func CmdDeploy(c *cli.Cli) error {
 	out := make(chan interface{})
 	defer close(out)
 	ui := ui.New(c.Context)
+	s, err := server.New()
+	if err != nil {
+		return err
+	}
+	wg.Go(func() error {
+		defer c.Cancel()
+		return s.Start(c.Context, p)
+	})
 	wg.Go(func() error {
 		for evt := range out {
 			ui.Event(evt)
@@ -33,10 +42,12 @@ func CmdDeploy(c *cli.Cli) error {
 		return nil
 	})
 	defer ui.Destroy()
+	defer c.Cancel()
 	err = p.Run(c.Context, &project.StackInput{
-		Command: "deploy",
-		Out:     out,
-		Target:  target,
+		Command:    "deploy",
+		Out:        out,
+		Target:     target,
+		ServerPort: s.Port,
 	})
 	if err != nil {
 		return err

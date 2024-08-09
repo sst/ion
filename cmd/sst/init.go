@@ -37,9 +37,11 @@ func CmdInit(cli *cli.Cli) error {
 	}
 
 	fmt.Print("\033[?25l")
+	// orange
+	fmt.Print("\033[38;2;255;127;0m")
 	for _, line := range logo {
 		for _, char := range line {
-			color.New(color.FgYellow).Print(string(char))
+			fmt.Print(string(char))
 			time.Sleep(5 * time.Millisecond)
 		}
 		fmt.Println()
@@ -125,9 +127,9 @@ func CmdInit(cli *cli.Cli) error {
 	fmt.Println()
 
 	p := promptui.Select{
+		Items:        []string{"Yes", "No"},
 		Label:        "‏‏‎ ‎Continue",
 		HideSelected: true,
-		Items:        []string{"Yes", "No"},
 		HideHelp:     true,
 	}
 

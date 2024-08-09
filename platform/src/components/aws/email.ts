@@ -171,7 +171,7 @@ interface EmailRef {
  * You can link it to a function or your Next.js app to send emails.
  *
  * ```ts {3} title="sst.config.ts"
- * const api = new sst.aws.Function("MyApi", {
+ * new sst.aws.Function("MyApi", {
  *   handler: "sender.handler",
  *   link: [email]
  * });
@@ -350,14 +350,15 @@ export class Email extends Component implements Link.Linkable {
 
   /**
    * Reference an existing Email component with the given Amazon SES identity. This is useful
-   * when you created an SES identity in one stage and you want to reference it in another stage.
+   * when you create an SES identity in one stage and want to share it in another stage. It
+   * avoids having to create a new Email component in the other stage.
    *
    * @param name The name of the component.
-   * @param sender The email address or domain name of the SES identity.
+   * @param sender The email address or domain name of the existing SES identity.
    *
    * @example
-   * Imagine you created an Email component in the `dev` stage. And in your personal stage,
-   * ie. `frank`, instead of creating a new sender, you want to reuse the same sender from `dev`.
+   * Imagine you create an Email component in the `dev` stage. And in your personal stage `frank`,
+   * instead of creating a new component, you want to share the one from `dev`.
    *
    * ```ts title="sst.config.ts"
    * const email = $app.stage === "frank"

@@ -157,11 +157,7 @@ func (vt *VT) Start(cmd *exec.Cmd) error {
 		vt.TERM = "xterm-256color"
 	}
 
-	env := os.Environ()
-	if cmd.Env != nil {
-		env = cmd.Env
-	}
-	cmd.Env = append(env, "TERM="+vt.TERM)
+	cmd.Env = append(cmd.Env, "TERM="+vt.TERM)
 
 	// Start the command with a pty.
 	var err error
@@ -317,6 +313,20 @@ func (vt *VT) Resize(w int, h int) {
 	default:
 		vt.activeScreen = vt.altScreen
 	}
+	/*
+		nextScrollback := [][]cell{}
+		currentRow := []cell{}
+		for _, row := range vt.primaryScrollback {
+			for col, c := range row {
+				if col >= w {
+					nextScrollback = append(nextScrollback, currentRow)
+					currentRow = []cell{}
+				}
+				currentRow = append(currentRow, c)
+			}
+		}
+		vt.primaryScrollback = nextScrollback
+	*/
 
 	_ = pty.Setsize(vt.pty, &pty.Winsize{
 		Cols: uint16(w),

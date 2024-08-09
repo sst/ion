@@ -169,7 +169,7 @@ func (u *UI) Event(unknown interface{}) {
 
 	case *project.StackCommandEvent:
 		u.reset()
-		u.header("", evt.App, evt.Stage)
+		u.header(evt.Version, evt.App, evt.Stage)
 		u.blank()
 		if evt.Command == "deploy" {
 			u.mode = ProgressModeDeploy
@@ -206,7 +206,7 @@ func (u *UI) Event(unknown interface{}) {
 
 	case *apitype.ResourcePreEvent:
 		u.timing[evt.Metadata.URN] = time.Now()
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" {
+		if evt.Metadata.Type == "pulumi:pulumi:Stack" || evt.Metadata.Type == "sst:sst:LinkRef" {
 			return
 		}
 
@@ -226,7 +226,7 @@ func (u *UI) Event(unknown interface{}) {
 		break
 
 	case *apitype.ResOutputsEvent:
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" {
+		if evt.Metadata.Type == "pulumi:pulumi:Stack" || evt.Metadata.Type == "sst:sst:LinkRef" {
 			return
 		}
 
@@ -300,6 +300,7 @@ func (u *UI) Event(unknown interface{}) {
 
 		if evt.Severity == "info" {
 			for _, line := range strings.Split(strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace), "\n") {
+				slog.Info("line", "line", line)
 				u.printEvent(
 					TEXT_DIM,
 					"Log",
@@ -327,7 +328,7 @@ func (u *UI) Event(unknown interface{}) {
 		u.complete = evt
 		u.blank()
 		if len(evt.Errors) == 0 && evt.Finished {
-			u.print(TEXT_SUCCESS_BOLD.Render("+"))
+			u.print(TEXT_SUCCESS_BOLD.Render(IconCheck))
 			if len(u.timing) == 0 {
 				if u.mode == ProgressModeRemove {
 					u.print(TEXT_NORMAL_BOLD.Render("  No resources to remove"))
@@ -396,10 +397,10 @@ func (u *UI) Event(unknown interface{}) {
 				if ok {
 					isSSTComponent := strings.Contains(status.URN, "::sst")
 					if isSSTComponent {
-						u.println(TEXT_NORMAL.Render(". Set the following values: "))
+						u.println(TEXT_NORMAL.Render("\n\nSet the following in your transform:"))
 					}
 					if !isSSTComponent {
-						u.println(TEXT_NORMAL.Render(". Set the following values in transform: "))
+						u.println(TEXT_NORMAL.Render("\n\nSet the following:"))
 					}
 					for _, diff := range importDiffs {
 						value, _ := json.Marshal(diff.Old)
@@ -408,10 +409,10 @@ func (u *UI) Event(unknown interface{}) {
 						}
 						u.print(TEXT_NORMAL.Render("   - "))
 						if isSSTComponent {
-							u.print(TEXT_INFO.Render("`args." + string(diff.Input) + " = " + string(value) + "`;"))
+							u.print(TEXT_INFO.Render("`args." + string(diff.Input) + " = " + string(value) + ";`"))
 						}
 						if !isSSTComponent {
-							u.print(TEXT_INFO.Render("`" + string(diff.Input) + ": " + string(value) + "`;"))
+							u.print(TEXT_INFO.Render("`" + string(diff.Input) + ": " + string(value) + ",`"))
 						}
 						u.println()
 					}
@@ -569,7 +570,7 @@ func (u *UI) FormatURN(urn string) string {
 		if parent == "" {
 			break
 		}
-		if parent.Type().DisplayName() == "pulumi:pulumi:Stack" {
+		if parent.Type().DisplayName() == "pulumi:pulumi:Stack" || parent.Type().DisplayName() == "sst:sst:LinkRef" {
 			break
 		}
 		child = parent

@@ -34,7 +34,12 @@ export default $config({
   },
   // Your app's resources
   async run() {
-    new sst.aws.Bucket("MyBucket");
+    const bucket = new sst.aws.Bucket("MyBucket");
+
+    // Your app's outputs
+    return {
+      bucket: bucket.name
+    };
   }
 });
 ```
@@ -113,7 +118,7 @@ You need to configure an environment in the Console to be able to auto-deploy to
 You can pass in your own `target` function to customize this behaviour and the machine
 that'll be used to run the build.
 
-```ts
+```ts title="sst.config.ts"
 console: {
   autodeploy: {
     target(event) {
@@ -162,7 +167,7 @@ Git push events for branches, pull requests, and tags are currently supported.
 
 By default, this is what the `target` function looks like:
 
-```ts
+```ts title="sst.config.ts"
 target(event) {
   if (event.type === "branch" && event.action === "pushed") {
     return {
@@ -191,7 +196,7 @@ You can change the default behavior by passing in your own `target` function.
 For example, to auto-deploy to the `production` stage when you git push to the
 `main` branch.
 
-```ts
+```ts title="sst.config.ts"
 target(event) {
   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
     return { stage: "production" };
@@ -202,7 +207,7 @@ target(event) {
 If you don't want to auto-deploy for a given event, you can return `undefined`. For
 example, to skip any deploys to the `staging` stage.
 
-```ts {2}
+```ts title="sst.config.ts" {2}
 target(event) {
   if (event.type === "branch" && event.branch === "staging") return;
   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
@@ -223,7 +228,7 @@ If a target is not returned, the app will not be deployed.
 In addition to the `stage` you can also configure the `runner` that will run the build.
 For example, to use a larger machine for the `production` stage.
 
-```ts
+```ts title="sst.config.ts"
 target(event) {
   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
     return {
@@ -255,13 +260,16 @@ app(input)
 <InlineSection>
 **Returns** [<code class="type">App</code>](#app)
 </InlineSection>
-The config for your app. It needs to return an object of type [`App`](#app-1).
+The config for your app. It needs to return an object of type [`App`](#app-1). The `app`
+function is evaluated when your app loads.
 
-:::tip
-The `app` function is evaluated when your app loads.
+:::caution
+You cannot define any components or resources in the `app` function.
 :::
 
-```ts
+Here's an example of a simple `app` function.
+
+```ts title="sst.config.ts"
 app(input) {
   return {
     name: "my-sst-app",
@@ -299,7 +307,7 @@ You can optionally return an object that'll be displayed as the output in the CL
 
 For example, here we return the name of the bucket we created.
 
-```ts
+```ts title="sst.config.ts"
 async run() {
   const bucket = new sst.aws.Bucket("MyBucket");
 
@@ -309,10 +317,17 @@ async run() {
 }
 ```
 
-This will display the following in the CLI.
+This will display the following in the CLI on `sst deploy` and `sst dev`.
 
 ```bash frame=\"none\"
 bucket: bucket-jOaikGu4rla
+```
+
+These outputs are also written to a `.sst/output.json` file after every successful deploy.
+It contains the above outputs in JSON.
+
+```json title=".sst/output.json"
+{"bucket": "bucket-jOaikGu4rla"}
 ```
 </Segment>
 
@@ -321,29 +336,19 @@ bucket: bucket-jOaikGu4rla
 <Segment>
 <Section type="parameters">
 <InlineSection>
-**Type** <code class="symbol">&ldquo;</code><code class="primitive">aws</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">cloudflare</code><code class="symbol">&rdquo;</code>
+**Type** <code class="symbol">&ldquo;</code><code class="primitive">aws</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">cloudflare</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">local</code><code class="symbol">&rdquo;</code>
 </InlineSection>
 </Section>
 The provider SST will use to store the state for your app. The state keeps track of all your resources and secrets. The state is generated locally and backed up in your cloud provider.
 
+
+Currently supports AWS, Cloudflare and local.
+
 :::tip
-SST uses the `home` provider to store the state for your app.
+SST uses the `home` provider to store the state for your app. If you use the local provider it will be saved on your machine. You can see where by running `sst version`.
 :::
 
-Currently supports AWS and Cloudflare.
-
-Setting the `home` provider is the same as setting the `providers` list. So if you set `home` to `aws`, it's the same as doing:
-
-```ts
-{
-  home: "aws",
-  providers: {
-    aws: true
-  }
-}
-```
-
-If you want to configure your home provider, you can:
+If you want to configure the aws or cloudflare home provider, you can:
 
 ```ts
 {
@@ -464,7 +469,7 @@ Configure how your resources are handled on `sst remove`:
 - `retain-all`: Retains all your resources on remove.
 
 :::tip
-It's a good idea to use `retain` for your production stage.
+If you change your removal policy, you'll need to deploy your app once for it to take effect.
 :::
 
 Retain resources if it's the _production_ stage, otherwise remove all resources.
@@ -1211,7 +1216,7 @@ The service used to run the build. Currently, only AWS CodeBuild is supported.
 <InlineSection>
 **Default** <code class="primitive">1 hour</code>
 </InlineSection>
-The timeout for the build. CodeBuild supports a timeout of up to 8 hours.
+The timeout for the build. It can be from `5 minutes` to `1 hour`.
 
 </Segment>
 ### stage

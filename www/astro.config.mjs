@@ -52,9 +52,13 @@ const sidebar = [
   {
     label: "How to",
     items: [
-      // { label: "Migrate from SST", link: "/docs/migrate-from-sst/" },
-      // { label: "Import Resources", link: "/docs/import-resources/" },
+      { label: "IAM Credentials", link: "/docs/iam-credentials/" },
+      { label: "Migrate From v2", link: "/docs/migrate-from-v2/" },
       { label: "Custom Domains", link: "/docs/custom-domains/" },
+      { label: "Import Resources", link: "/docs/import-resources/" },
+      { label: "Set up a Monorepo", link: "/docs/set-up-a-monorepo/" },
+      { label: "Share Across Stages", link: "/docs/share-across-stages/" },
+      { label: "Reference Resources", link: "/docs/reference-resources/" },
     ],
   },
   {
@@ -172,8 +176,16 @@ const sidebar = [
         link: "/docs/component/aws/cognito-user-pool-client/",
       },
       {
+        label: "BucketTopicSubscriber",
+        link: "/docs/component/aws/bucket-topic-subscriber/",
+      },
+      {
         label: "ApiGatewayV2UrlRoute",
         link: "/docs/component/aws/apigatewayv2-url-route/",
+      },
+      {
+        label: "BucketQueueSubscriber",
+        link: "/docs/component/aws/bucket-queue-subscriber/",
       },
       {
         label: "ApiGatewayV1Authorizer",
@@ -198,6 +210,10 @@ const sidebar = [
       {
         label: "DynamoLambdaSubscriber",
         link: "/docs/component/aws/dynamo-lambda-subscriber/",
+      },
+      {
+        label: "ApiGatewayV2PrivateRoute",
+        link: "/docs/component/aws/apigatewayv2-private-route/",
       },
       {
         label: "RealtimeLambdaSubscriber",

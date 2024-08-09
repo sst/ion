@@ -13,16 +13,14 @@ import {
 } from "@pulumi/pulumi";
 import { Cdn, CdnArgs } from "./cdn.js";
 import { Function, FunctionArgs } from "./function.js";
-import { DistributionInvalidation } from "./providers/distribution-invalidation.js";
 import { useProvider } from "./helpers/provider.js";
 import { Bucket, BucketArgs } from "./bucket.js";
 import { BucketFile, BucketFiles } from "./providers/bucket-files.js";
-import { sanitizeToPascalCase } from "../naming.js";
+import { logicalName, physicalName } from "../naming.js";
 import { Input } from "../input.js";
 import { transform, type Prettify, type Transform } from "../component.js";
 import { VisibleError } from "../error.js";
 import { Cron } from "./cron.js";
-import { OriginAccessIdentity } from "./providers/origin-access-identity.js";
 import { BaseSiteFileOptions } from "../base/base-site.js";
 import { BaseSsrSiteArgs } from "../base/base-ssr-site.js";
 import {
@@ -33,7 +31,7 @@ import {
   lambda,
   types,
 } from "@pulumi/aws";
-import { DevArgs } from "../dev.js";
+import { OriginAccessControl } from "./providers/origin-access-control.js";
 
 type CloudFrontFunctionConfig = { injections: string[] };
 type EdgeFunctionConfig = { function: Unwrap<FunctionArgs> };
@@ -57,7 +55,7 @@ type OriginGroupConfig = {
 };
 
 export type Plan = ReturnType<typeof validatePlan>;
-export interface SsrSiteArgs extends BaseSsrSiteArgs, DevArgs {
+export interface SsrSiteArgs extends BaseSsrSiteArgs {
   domain?: CdnArgs["domain"];
   permissions?: FunctionArgs["permissions"];
   cachePolicy?: Input<string>;
@@ -227,14 +225,14 @@ export function createBucket(
   partition: Output<string>,
   args: SsrSiteArgs,
 ) {
-  const access = createCloudFrontOriginAccessIdentity();
+  const access = createCloudFrontOriginAccessControl();
   const bucket = createS3Bucket();
   return { access, bucket };
 
-  function createCloudFrontOriginAccessIdentity() {
-    return new OriginAccessIdentity(
-      `${name}OriginAccessIdentity`,
-      {},
+  function createCloudFrontOriginAccessControl() {
+    return new OriginAccessControl(
+      `${name}S3AccessControl`,
+      { name: physicalName(64, name) },
       { parent },
     );
   }
@@ -252,10 +250,8 @@ export function createBucket(
                   {
                     principals: [
                       {
-                        type: "AWS",
-                        identifiers: [
-                          interpolate`arn:${partition}:iam::cloudfront:user/CloudFront Origin Access Identity ${access.id}`,
-                        ],
+                        type: "Service",
+                        identifiers: ["cloudfront.amazonaws.com"],
                       },
                     ],
                     actions: ["s3:GetObject"],
@@ -312,7 +308,7 @@ export function createServersAndDistribution(
   name: string,
   args: SsrSiteArgs,
   outputPath: Output<string>,
-  access: OriginAccessIdentity,
+  access: OriginAccessControl,
   bucket: Bucket,
   plan: Input<Plan>,
 ) {
@@ -325,8 +321,8 @@ export function createServersAndDistribution(
     const edgeFunctions = createEdgeFunctions();
     const origins = buildOrigins();
     const originGroups = buildOriginGroups();
+    const invalidation = buildInvalidation();
     const distribution = createDistribution();
-    createDistributionInvalidation();
     createWarmer();
 
     return {
@@ -415,6 +411,7 @@ export function createServersAndDistribution(
           {
             bucketName: bucket.name,
             files: bucketFiles,
+            purge: false,
           },
           { parent },
         );
@@ -472,7 +469,7 @@ export function createServersAndDistribution(
       Object.entries(plan.cloudFrontFunctions ?? {}).forEach(
         ([fnName, { injections }]) => {
           functions[fnName] = new cloudfront.Function(
-            `${name}CloudfrontFunction${sanitizeToPascalCase(fnName)}`,
+            `${name}CloudfrontFunction${logicalName(fnName)}`,
             {
               runtime: "cloudfront-js-1.0",
               code: `
@@ -503,7 +500,7 @@ function handler(event) {
           });
 
           const fn = new Function(
-            `${name}Edge${sanitizeToPascalCase(fnName)}`,
+            `${name}Edge${logicalName(fnName)}`,
             {
               runtime: "nodejs20.x",
               timeout: "20 seconds",
@@ -594,9 +591,7 @@ function handler(event) {
         originId: name,
         domainName: bucket.nodes.bucket.bucketRegionalDomainName,
         originPath: props.originPath ? `/${props.originPath}` : "",
-        s3OriginConfig: {
-          originAccessIdentity: interpolate`origin-access-identity/cloudfront/${access.id}`,
-        },
+        originAccessControlId: access.id,
       };
     }
 
@@ -604,7 +599,7 @@ function handler(event) {
       const fn = new Function(
         ...transform(
           args.transform?.server,
-          `${name}${sanitizeToPascalCase(fnName)}`,
+          `${name}${logicalName(fnName)}`,
           {
             description: `${name} server`,
             runtime: "nodejs20.x",
@@ -666,7 +661,7 @@ function handler(event) {
       const fn = new Function(
         ...transform(
           args.transform?.imageOptimization,
-          `${name}${sanitizeToPascalCase(fnName)}`,
+          `${name}${logicalName(fnName)}`,
           {
             timeout: "25 seconds",
             logging: {
@@ -820,6 +815,99 @@ function handler(event) {
       ].join("\n");
     }
 
+    function buildInvalidation() {
+      return all([outputPath, args.invalidation]).apply(
+        ([outputPath, invalidationRaw]) => {
+          // Normalize invalidation
+          if (invalidationRaw === false) return false;
+          const invalidation = {
+            wait: false,
+            paths: "all",
+            ...invalidationRaw,
+          };
+
+          // We will generate a hash based on the contents of the S3 files with cache enabled.
+          // This will be used to determine if we need to invalidate our CloudFront cache.
+          const s3Origin = Object.values(plan.origins).find(
+            (origin) => origin.s3,
+          )?.s3;
+          if (!s3Origin) return false;
+          const cachedS3Files = s3Origin.copy.filter((file) => file.cached);
+          if (cachedS3Files.length === 0) return false;
+
+          // Build invalidation paths
+          const invalidationPaths: string[] = [];
+          if (invalidation.paths === "all") {
+            invalidationPaths.push("/*");
+          } else if (invalidation.paths === "versioned") {
+            cachedS3Files.forEach((item) => {
+              if (!item.versionedSubDir) return false;
+              invalidationPaths.push(
+                path.posix.join("/", item.to, item.versionedSubDir, "*"),
+              );
+            });
+          } else {
+            invalidationPaths.push(...(invalidation?.paths || []));
+          }
+          if (invalidationPaths.length === 0) return false;
+
+          // Build build ID
+          let invalidationBuildId: string;
+          if (plan.buildId) {
+            invalidationBuildId = plan.buildId;
+          } else {
+            const hash = crypto.createHash("md5");
+
+            cachedS3Files.forEach((item) => {
+              // The below options are needed to support following symlinks when building zip files:
+              // - nodir: This will prevent symlinks themselves from being copied into the zip.
+              // - follow: This will follow symlinks and copy the files within.
+
+              // For versioned files, use file path for digest since file version in name should change on content change
+              if (item.versionedSubDir) {
+                globSync("**", {
+                  dot: true,
+                  nodir: true,
+                  follow: true,
+                  cwd: path.resolve(
+                    outputPath,
+                    item.from,
+                    item.versionedSubDir,
+                  ),
+                }).forEach((filePath) => hash.update(filePath));
+              }
+
+              // For non-versioned files, use file content for digest
+              if (invalidation.paths !== "versioned") {
+                globSync("**", {
+                  ignore: item.versionedSubDir
+                    ? [path.posix.join(item.versionedSubDir, "**")]
+                    : undefined,
+                  dot: true,
+                  nodir: true,
+                  follow: true,
+                  cwd: path.resolve(outputPath, item.from),
+                }).forEach((filePath) =>
+                  hash.update(
+                    fs.readFileSync(
+                      path.resolve(outputPath, item.from, filePath),
+                    ),
+                  ),
+                );
+              }
+            });
+            invalidationBuildId = hash.digest("hex");
+          }
+
+          return {
+            paths: invalidationPaths,
+            token: invalidationBuildId,
+            wait: invalidation.wait,
+          };
+        },
+      );
+    }
+
     function createDistribution() {
       return new Cdn(
         ...transform(
@@ -841,6 +929,7 @@ function handler(event) {
               })),
             customErrorResponses: plan.errorResponses,
             domain: args.domain,
+            invalidation,
           },
           // create distribution after assets are uploaded
           { dependsOn: bucketFile, parent },
@@ -905,104 +994,6 @@ function handler(event) {
           input: JSON.stringify({}),
         },
         { parent },
-      );
-    }
-
-    function createDistributionInvalidation() {
-      all([outputPath, args.invalidation]).apply(
-        ([outputPath, invalidationRaw]) => {
-          // Normalize invalidation
-          if (invalidationRaw === false) return;
-          const invalidation = {
-            wait: false,
-            paths: "all",
-            ...invalidationRaw,
-          };
-
-          // We will generate a hash based on the contents of the S3 files with cache enabled.
-          // This will be used to determine if we need to invalidate our CloudFront cache.
-          const s3Origin = Object.values(plan.origins).find(
-            (origin) => origin.s3,
-          )?.s3;
-          if (!s3Origin) return;
-          const cachedS3Files = s3Origin.copy.filter((file) => file.cached);
-          if (cachedS3Files.length === 0) return;
-
-          // Build invalidation paths
-          const invalidationPaths: string[] = [];
-          if (invalidation.paths === "all") {
-            invalidationPaths.push("/*");
-          } else if (invalidation.paths === "versioned") {
-            cachedS3Files.forEach((item) => {
-              if (!item.versionedSubDir) return;
-              invalidationPaths.push(
-                path.posix.join("/", item.to, item.versionedSubDir, "*"),
-              );
-            });
-          } else {
-            invalidationPaths.push(...(invalidation?.paths || []));
-          }
-          if (invalidationPaths.length === 0) return;
-
-          // Build build ID
-          let invalidationBuildId: string;
-          if (plan.buildId) {
-            invalidationBuildId = plan.buildId;
-          } else {
-            const hash = crypto.createHash("md5");
-
-            cachedS3Files.forEach((item) => {
-              // The below options are needed to support following symlinks when building zip files:
-              // - nodir: This will prevent symlinks themselves from being copied into the zip.
-              // - follow: This will follow symlinks and copy the files within.
-
-              // For versioned files, use file path for digest since file version in name should change on content change
-              if (item.versionedSubDir) {
-                globSync("**", {
-                  dot: true,
-                  nodir: true,
-                  follow: true,
-                  cwd: path.resolve(
-                    outputPath,
-                    item.from,
-                    item.versionedSubDir,
-                  ),
-                }).forEach((filePath) => hash.update(filePath));
-              }
-
-              // For non-versioned files, use file content for digest
-              if (invalidation.paths !== "versioned") {
-                globSync("**", {
-                  ignore: item.versionedSubDir
-                    ? [path.posix.join(item.versionedSubDir, "**")]
-                    : undefined,
-                  dot: true,
-                  nodir: true,
-                  follow: true,
-                  cwd: path.resolve(outputPath, item.from),
-                }).forEach((filePath) =>
-                  hash.update(
-                    fs.readFileSync(
-                      path.resolve(outputPath, item.from, filePath),
-                    ),
-                  ),
-                );
-              }
-            });
-            invalidationBuildId = hash.digest("hex");
-          }
-
-          new DistributionInvalidation(
-            `${name}Invalidation`,
-            {
-              distributionId: distribution.nodes.distribution.id,
-              paths: invalidationPaths,
-              version: invalidationBuildId,
-              wait: invalidation.wait,
-            },
-            { parent },
-          );
-        },
       );
     }
   });

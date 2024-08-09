@@ -5,7 +5,7 @@ import {
   runtime,
   output,
 } from "@pulumi/pulumi";
-import { prefixName } from "./naming.js";
+import { physicalName } from "./naming.js";
 import { VisibleError } from "./error.js";
 import { getRegionOutput } from "@pulumi/aws";
 
@@ -49,6 +49,7 @@ export class Component extends ComponentResource {
     }
     super(type, name, args, {
       transformations: [
+        // Ensure logical and physical names are prefixed
         (args) => {
           // Ensure names are prefixed with parent's name
           if (
@@ -104,7 +105,6 @@ export class Component extends ComponentResource {
               "aws:iam/userPolicy:UserPolicy",
               "aws:cloudfront/cachePolicy:CachePolicy",
               "aws:cloudfront/distribution:Distribution",
-              "aws:cloudfront/originAccessIdentity:OriginAccessIdentity",
               "aws:cloudwatch/eventRule:EventRule",
               "aws:cloudwatch/eventTarget:EventTarget",
               "aws:cloudwatch/logGroup:LogGroup",
@@ -141,17 +141,17 @@ export class Component extends ComponentResource {
               // ie. "-1234567" is automatically added
               types: ["aws:lb/loadBalancer:LoadBalancer"],
               field: "name",
-              cb: () => prefixName(24, args.name),
+              cb: () => physicalName(24, args.name),
             },
             {
               types: ["aws:rds/cluster:Cluster"],
               field: "clusterIdentifier",
-              cb: () => prefixName(63, args.name).toLowerCase(),
+              cb: () => physicalName(63, args.name).toLowerCase(),
             },
             {
               types: ["aws:rds/clusterInstance:ClusterInstance"],
               field: "identifier",
-              cb: () => prefixName(63, args.name).toLowerCase(),
+              cb: () => physicalName(63, args.name).toLowerCase(),
             },
             {
               types: [
@@ -161,14 +161,14 @@ export class Component extends ComponentResource {
                 "aws:lambda/function:Function",
               ],
               field: "name",
-              cb: () => prefixName(64, args.name),
+              cb: () => physicalName(64, args.name),
             },
             {
               types: ["aws:sqs/queue:Queue"],
               field: "name",
               cb: () =>
                 output(args.props.fifoQueue).apply((fifo) =>
-                  prefixName(80, args.name, fifo ? ".fifo" : undefined),
+                  physicalName(80, args.name, fifo ? ".fifo" : undefined),
                 ),
             },
             {
@@ -178,7 +178,7 @@ export class Component extends ComponentResource {
                 getRegionOutput(undefined, {
                   provider: args.opts.provider,
                 }).name.apply((region) =>
-                  prefixName(
+                  physicalName(
                     64,
                     args.name,
                     `-${region.toLowerCase().replace(/-/g, "")}`,
@@ -191,16 +191,17 @@ export class Component extends ComponentResource {
                 "aws:apigateway/restApi:RestApi",
                 "aws:apigatewayv2/api:Api",
                 "aws:apigatewayv2/authorizer:Authorizer",
+                "aws:apigatewayv2/vpcLink:VpcLink",
                 "aws:cognito/userPool:UserPool",
                 "aws:iot/authorizer:Authorizer",
               ],
               field: "name",
-              cb: () => prefixName(128, args.name),
+              cb: () => physicalName(128, args.name),
             },
             {
               types: ["aws:iot/topicRule:TopicRule"],
               field: "name",
-              cb: () => prefixName(128, args.name).replaceAll("-", "_"),
+              cb: () => physicalName(128, args.name).replaceAll("-", "_"),
             },
             {
               types: [
@@ -210,12 +211,12 @@ export class Component extends ComponentResource {
                 "aws:ecs/cluster:Cluster",
               ],
               field: "name",
-              cb: () => prefixName(255, args.name),
+              cb: () => physicalName(255, args.name),
             },
             {
               types: ["aws:rds/subnetGroup:SubnetGroup"],
               field: "name",
-              cb: () => prefixName(255, args.name).toLowerCase(),
+              cb: () => physicalName(255, args.name).toLowerCase(),
             },
             {
               types: [
@@ -231,7 +232,7 @@ export class Component extends ComponentResource {
               cb: () => ({
                 // @ts-expect-error
                 ...args.tags,
-                Name: prefixName(255, args.name),
+                Name: physicalName(255, args.name),
               }),
             },
             {
@@ -239,13 +240,13 @@ export class Component extends ComponentResource {
               field: "name",
               cb: () =>
                 output(args.props.fifoTopic).apply((fifo) =>
-                  prefixName(256, args.name, fifo ? ".fifo" : undefined),
+                  physicalName(256, args.name, fifo ? ".fifo" : undefined),
                 ),
             },
             {
               types: ["aws:appsync/graphQLApi:GraphQLApi"],
               field: "name",
-              cb: () => prefixName(65536, args.name),
+              cb: () => physicalName(65536, args.name),
             },
             {
               types: [
@@ -255,12 +256,12 @@ export class Component extends ComponentResource {
                 "cloudflare:index/queue:Queue",
               ],
               field: "name",
-              cb: () => prefixName(64, args.name).toLowerCase(),
+              cb: () => physicalName(64, args.name).toLowerCase(),
             },
             {
               types: ["cloudflare:index/workersKvNamespace:WorkersKvNamespace"],
               field: "title",
-              cb: () => prefixName(64, args.name).toLowerCase(),
+              cb: () => physicalName(64, args.name).toLowerCase(),
             },
           ];
 
@@ -278,6 +279,10 @@ export class Component extends ComponentResource {
             opts: args.opts,
           };
         },
+        // When renaming a CloudFront function, when `deleteBeforeReplace` is not set,
+        // the engine tries to remove the existing function first, and fails with in-use
+        // error. Setting `deleteBeforeReplace` to `false` seems to force the new one
+        // gets created and attached first.
         (args) => {
           let override = {};
           if (args.type === "aws:cloudfront/function:Function") {
@@ -288,6 +293,14 @@ export class Component extends ComponentResource {
             opts: { ...args.opts, ...override },
           };
         },
+        // Set child resources `retainOnDelete` if set on component
+        (args) => ({
+          props: args.props,
+          opts: {
+            ...args.opts,
+            retainOnDelete: args.opts.retainOnDelete ?? opts?.retainOnDelete,
+          },
+        }),
         ...(opts?.transformations ?? []),
       ],
       ...opts,

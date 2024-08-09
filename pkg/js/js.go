@@ -69,9 +69,9 @@ const __dirname = topLevelFileUrlToPath(new topLevelURL(".", import.meta.url))
 				},
 			},
 		},
-		Packages: esbuild.PackagesExternal,
 		External: []string{
 			"@pulumi/*",
+			"undici",
 			"@pulumiverse/*",
 			"@sst-provider/*",
 			"@aws-sdk/*",

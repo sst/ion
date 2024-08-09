@@ -14,17 +14,18 @@ import (
 	"time"
 
 	"github.com/nrednav/cuid2"
+	"github.com/pulumi/pulumi/sdk/v3"
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
-	"github.com/joho/godotenv"
 	"github.com/sst/ion/cmd/sst/cli"
-	"github.com/sst/ion/cmd/sst/mosaic/server"
+	"github.com/sst/ion/cmd/sst/mosaic/dev"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
 	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/project/provider"
+	"github.com/sst/ion/pkg/server"
 	"github.com/sst/ion/pkg/telemetry"
 )
 
@@ -79,7 +80,6 @@ func main() {
 }
 
 func run() error {
-	godotenv.Load()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	interruptChannel := make(chan os.Signal, 1)
@@ -311,18 +311,18 @@ var root = &cli.Command{
 					"```bash frame=\"none\"",
 					"sst dev",
 					"```",
-					"By default, this starts a multiplexer with processes that deploy your app, run your functions, or start your frontend.",
+					"By default, this starts a multiplexer with processes that deploy your app, run your functions, and start your frontend.",
 					"",
 					"![sst dev multiplexer mode](../../../../assets/docs/cli/sst-dev-multiplexer-mode.png)",
 					"",
-					"You can navigate to these panes through the sidebar. These include panes that:",
+					"Each process is run in a separate pane that you can click on in the sidebar. These",
+					"include processes that:",
 					"",
 					"1. Watch your `sst.config.ts` and deploy your app",
 					"2. Run your functions [Live](/docs/live/) and logs their invocations",
-					"3. Start processes for components that have `dev.autostart` enabled",
+					"3. Run the dev mode for components that have `dev.autostart` enabled",
 					"   - Components like `Service` and frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.",
-					"   - These components are not deployed",
-					"   - Instead their `dev.command` is run as a process",
+					"   - It starts their `dev.command` in a separate pane",
 					"   - And loads any [linked resources](/docs/linking) in the environment",
 					"",
 					"The multiplexer makes it so that you won't have to start your frontend or",
@@ -331,6 +331,15 @@ var root = &cli.Command{
 					":::tip",
 					"The `sst dev` CLI also starts your frontend. So you don't need to start it",
 					"separately.",
+					":::",
+					"",
+					"While `sst dev` does a deploy when it starts up, it does not deploy components like",
+					"`Service`, or the frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.",
+					"That's because these have their own dev modes that the multiplexer starts.",
+					"",
+					":::note",
+					"The `Service` component and the frontends like `Nextjs` or `StaticSite` are not",
+					"deployed by `sst dev`.",
 					":::",
 					"",
 					"Optionally, you can disable the multiplexer and run `sst dev` in basic mode.",
@@ -362,7 +371,7 @@ var root = &cli.Command{
 			Flags: []cli.Flag{
 				{
 					Name: "mode",
-					Type: "[basic,mosaic]",
+					Type: "string",
 					Description: cli.Description{
 						Short: "Use mode=basic to turn off multiplexer",
 						Long:  "Defaults to using the multiplexer or `mosaic` mode. Use `basic` to turn it off.",
@@ -442,7 +451,35 @@ var root = &cli.Command{
 			Name: "diff",
 			Description: cli.Description{
 				Short: "See what changes will be made",
-				Long:  strings.Join([]string{}, "\n"),
+				Long: strings.Join([]string{
+					"Builds your app to see what changes will be made when you deploy it.",
+					"",
+					"It displays a list of resources that will be created, updated, or deleted.",
+					"For each of these resources, it'll also show the properties that are changing.",
+					"",
+					":::tip",
+					"Run a `sst diff` to see what changes will be made when you deploy your app.",
+					":::",
+					"",
+					"This is useful for cases when you pull some changes from a teammate and want to",
+					"see what will be deployed; before doing the actual deploy.",
+					"",
+					"Optionall, you can diff a specific set of resources by passing in a list of their URNs.",
+					"",
+					"```bash frame=\"none\"",
+					"sst diff --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets",
+					"```",
+					"",
+					"By default, this compares to the last deploy of the given stage as it would be",
+					"deployed using `sst deploy`. But if you are working in dev mode using `sst dev`,",
+					"you can use the `--dev` flag.",
+					"",
+					"```bash frame=\"none\"",
+					"sst diff --dev",
+					"```",
+					"",
+					"This is useful because in dev mode, you app is deployed a little differently.",
+				}, "\n"),
 			},
 			Flags: []cli.Flag{
 				{
@@ -458,7 +495,7 @@ var root = &cli.Command{
 					Description: cli.Description{
 						Short: "Compare to sst dev",
 						Long: strings.Join([]string{
-							"Compare to sst dev",
+							"Compare to the dev of this stage.",
 						}, "\n"),
 					},
 				},
@@ -855,7 +892,7 @@ var root = &cli.Command{
 						}
 						url, _ := server.Discover(p.PathConfig(), p.App().Stage)
 						if url != "" {
-							server.Deploy(c.Context, url)
+							dev.Deploy(c.Context, url)
 						}
 						ui.Success(fmt.Sprintf("Removed \"%s\" for stage \"%s\"", key, p.App().Stage))
 						return nil
@@ -895,6 +932,15 @@ var root = &cli.Command{
 					Description: cli.Description{
 						Short: "A command to run",
 						Long:  "A command to run.",
+					},
+				},
+			},
+			Flags: []cli.Flag{
+				{
+					Name: "target",
+					Description: cli.Description{
+						Short: "Target to run against",
+						Long:  "Target to run against.",
 					},
 				},
 			},
@@ -953,80 +999,7 @@ var root = &cli.Command{
 					},
 				},
 			},
-			Run: func(c *cli.Cli) error {
-				p, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer p.Cleanup()
-
-				backend := p.Backend()
-				links, err := provider.GetLinks(backend, p.App().Name, p.App().Stage)
-				if err != nil {
-					return err
-				}
-				var args []string
-				for _, arg := range c.Arguments() {
-					args = append(args, strings.Fields(arg)...)
-				}
-				cwd, _ := os.Getwd()
-				currentDir := cwd
-				for {
-					newPath := filepath.Join(currentDir, "node_modules", ".bin") + string(os.PathListSeparator) + os.Getenv("PATH")
-					os.Setenv("PATH", newPath)
-					parentDir := filepath.Dir(currentDir)
-					if parentDir == currentDir {
-						break
-					}
-					currentDir = parentDir
-				}
-				if len(args) == 0 {
-					args = append(args, "sh")
-				}
-				cmd := exec.Command(
-					args[0],
-					args[1:]...,
-				)
-				// Get the environment variables
-				envs := os.Environ()
-
-				// Filter the environment variables to exclude AWS_PROFILE
-				filteredEnvs := make([]string, 0, len(envs))
-				for _, val := range envs {
-					if !strings.HasPrefix(val, "AWS_PROFILE=") {
-						filteredEnvs = append(filteredEnvs, val)
-					}
-				}
-				cmd.Env = append(cmd.Env,
-					filteredEnvs...,
-				)
-				cmd.Env = append(cmd.Env,
-					fmt.Sprintf("PS1=%s/%s> ", p.App().Name, p.App().Stage),
-				)
-
-				for resource, value := range links {
-					jsonValue, err := json.Marshal(value)
-					if err != nil {
-						return err
-					}
-					envVar := fmt.Sprintf("SST_RESOURCE_%s=%s", resource, jsonValue)
-					cmd.Env = append(cmd.Env, envVar)
-				}
-				cmd.Env = append(cmd.Env, fmt.Sprintf(`SST_RESOURCE_App={"name": "%s", "stage": "%s" }`, p.App().Name, p.App().Stage))
-
-				for key, val := range p.Env() {
-					key = strings.ReplaceAll(key, "SST_", "")
-					cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, val))
-				}
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				cmd.Stdin = os.Stdin
-				err = cmd.Run()
-				if err != nil {
-					return util.NewReadableError(err, err.Error())
-				}
-				return nil
-			},
+			Run: CmdShell,
 		},
 		{
 			Name: "remove",
@@ -1103,7 +1076,9 @@ var root = &cli.Command{
 				Long:  `Prints the current version of the CLI.`,
 			},
 			Run: func(cli *cli.Cli) error {
-				fmt.Println(version)
+				fmt.Println("sst", version)
+				fmt.Println("pulumi", sdk.Version)
+				fmt.Println("config", global.ConfigDir())
 				return nil
 			},
 		},

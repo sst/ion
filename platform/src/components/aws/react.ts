@@ -21,11 +21,24 @@ import { Cdn } from "./cdn.js";
 import { Bucket } from "./bucket.js";
 import { Component } from "../component.js";
 import { Link } from "../link.js";
+import { DevArgs } from "../dev.js";
 import type { Input } from "../input.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { URL_UNAVAILABLE } from "./linkable.js";
 
 export interface ReactArgs extends SsrSiteArgs {
+  /**
+   * Configure how this component works in `sst dev`.
+   *
+   * :::note
+   * In `sst dev` your React app is run in dev mode; it's not deployed.
+   * :::
+   *
+   * Instead of deploying your React app, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   */
+  dev?: DevArgs["dev"];
   /**
    * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
    *
@@ -444,12 +457,10 @@ export class React extends Component implements Link.Linkable {
             : undefined,
           // create 1 behaviour for each top level asset file/folder
           staticRoutes: fs
-            .readdirSync(path.join(outputPath, assetsPath))
-            .map((item) =>
-              fs.statSync(path.join(outputPath, assetsPath, item)).isDirectory()
-                ? `${item}/*`
-                : item,
-            ),
+            .readdirSync(path.join(outputPath, assetsPath), {
+              withFileTypes: true,
+            })
+            .map((item) => (item.isDirectory() ? `${item.name}/*` : item.name)),
         };
       });
     }
@@ -479,36 +490,36 @@ export class React extends Component implements Link.Linkable {
             defaultRootObject: indexPage,
             errorResponses: !serverConfig
               ? [
-                  {
-                    errorCode: 403,
-                    responsePagePath: interpolate`/${indexPage}`,
-                    responseCode: 200,
-                  },
-                  {
-                    errorCode: 404,
-                    responsePagePath: interpolate`/${indexPage}`,
-                    responseCode: 200,
-                  },
-                ]
+                {
+                  errorCode: 403,
+                  responsePagePath: interpolate`/${indexPage}`,
+                  responseCode: 200,
+                },
+                {
+                  errorCode: 404,
+                  responsePagePath: interpolate`/${indexPage}`,
+                  responseCode: 200,
+                },
+              ]
               : [],
             edgeFunctions:
               edge && serverConfig
                 ? {
-                    server: {
-                      function: serverConfig,
-                    },
-                  }
+                  server: {
+                    function: serverConfig,
+                  },
+                }
                 : undefined,
             origins: {
               ...(edge || !serverConfig
                 ? {}
                 : {
+                  server: {
                     server: {
-                      server: {
-                        function: serverConfig,
-                      },
+                      function: serverConfig,
                     },
-                  }),
+                  },
+                }),
               s3: {
                 s3: {
                   copy: [
@@ -524,35 +535,35 @@ export class React extends Component implements Link.Linkable {
             behaviors: [
               ...(!serverConfig
                 ? [
-                    {
-                      cacheType: "static",
-                      cfFunction: "serverCfFunction",
-                      origin: "s3",
-                    } as const,
-                  ]
+                  {
+                    cacheType: "static",
+                    cfFunction: "serverCfFunction",
+                    origin: "s3",
+                  } as const,
+                ]
                 : [
-                    edge
-                      ? ({
-                          cacheType: "server",
-                          cfFunction: "serverCfFunction",
-                          edgeFunction: "server",
-                          origin: "s3",
-                        } as const)
-                      : ({
-                          cacheType: "server",
-                          cfFunction: "serverCfFunction",
-                          origin: "server",
-                        } as const),
-                    ...buildMeta.staticRoutes.map(
-                      (route) =>
-                        ({
-                          cacheType: "static",
-                          pattern: route,
-                          cfFunction: "staticCfFunction",
-                          origin: "s3",
-                        }) as const,
-                    ),
-                  ]),
+                  edge
+                    ? ({
+                      cacheType: "server",
+                      cfFunction: "serverCfFunction",
+                      edgeFunction: "server",
+                      origin: "s3",
+                    } as const)
+                    : ({
+                      cacheType: "server",
+                      cfFunction: "serverCfFunction",
+                      origin: "server",
+                    } as const),
+                  ...buildMeta.staticRoutes.map(
+                    (route) =>
+                      ({
+                        cacheType: "static",
+                        pattern: route,
+                        cfFunction: "staticCfFunction",
+                        origin: "s3",
+                      }) as const,
+                  ),
+                ]),
             ],
           });
         },

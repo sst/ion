@@ -186,7 +186,8 @@ function generateCliDoc() {
           `#### Flags`,
           ...cmd.flags.flatMap((f) => [
             `- <p><code class="key">${f.name}</code> ${renderCliFlagType(
-              f.type)}</p>`,
+              f.type
+            )}</p>`,
             `<p>${renderCliDescription(f.description)}</p>`,
           ]),
           `</Section>`
@@ -318,7 +319,8 @@ async function generateExamplesDocs() {
           renderTdComment(module.children![0].comment?.summary!),
           ...renderRunFunction(module),
           ``,
-          `View the [full example](${config.github}/tree/dev/examples/${module.name.split("/")[0]
+          `View the [full example](${config.github}/tree/dev/examples/${
+            module.name.split("/")[0]
           }).`,
           ``,
         ];
@@ -438,21 +440,18 @@ async function generateDnsDoc(module: TypeDoc.DeclarationReflection) {
 
 async function generateLinkableDoc(module: TypeDoc.DeclarationReflection) {
   const name = module.name.split("/")[1];
-  console.log({ name });
-  console.log(module.name);
   const sourceFile = module.sources![0].fileName;
-  console.log({ sourceFile });
   const outputFilePath = path.join(
     "src/content/docs/docs/component",
     `${module.name.split("/").slice(1).join("/")}.mdx`
   );
   const copy = {
     "components/aws/permission": {
-      title: "AWS Permission",
+      title: "AWS",
       namespace: "sst.aws.permission",
     },
     "components/cloudflare/binding": {
-      title: "Cloudflare Binding",
+      title: "Cloudflare",
       namespace: "sst.cloudflare.binding",
     },
   }[module.name]!;
@@ -461,8 +460,8 @@ async function generateLinkableDoc(module: TypeDoc.DeclarationReflection) {
     outputFilePath,
     [
       renderHeader(
-        `${copy.title} Linkable Adapter`,
-        `Reference doc for the \`${copy.namespace}\` adapter.`
+        `${copy.title} Linkable helper`,
+        `Reference doc for the \`${copy.namespace}\` helper.`
       ),
       renderSourceMessage(sourceFile),
       renderImports(outputFilePath),
@@ -522,23 +521,23 @@ async function generateComponentDoc(
             : []),
           ...(sdk
             ? renderFunctions(
-              sdk,
-              useModuleFunctions(sdk),
-              sdk.name === "realtime" ? { prefix: sdk.name } : undefined
-            )
+                sdk,
+                useModuleFunctions(sdk),
+                sdk.name === "realtime" ? { prefix: sdk.name } : undefined
+              )
             : []),
           ...(sdk ? renderInterfacesAtH3Level(sdk) : []),
         ];
         return lines.length
           ? [
-            ``,
-            `## SDK`,
-            ``,
-            `Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.`,
-            ``,
-            `---`,
-            ...lines,
-          ]
+              ``,
+              `## SDK`,
+              ``,
+              `Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.`,
+              ``,
+              `---`,
+              ...lines,
+            ]
           : [];
       })(),
       renderMethods(component),
@@ -686,8 +685,8 @@ function renderType(
   function renderArrayType(type: TypeDoc.ArrayType) {
     return type.elementType.type === "union"
       ? `<code class="symbol">(</code>${renderSomeType(
-        type.elementType
-      )}<code class="symbol">)[]</code>`
+          type.elementType
+        )}<code class="symbol">)[]</code>`
       : `${renderSomeType(type.elementType)}<code class="symbol">[]</code>`;
   }
   function renderTypescriptType(type: TypeDoc.ReferenceType) {
@@ -757,8 +756,9 @@ function renderType(
     }
     // types in the same doc (links to an interface)
     if (useModuleInterfaces(module).find((i) => i.name === type.name)) {
-      return `[<code class="type">${type.name
-        }</code>](#${type.name.toLowerCase()})`;
+      return `[<code class="type">${
+        type.name
+      }</code>](#${type.name.toLowerCase()})`;
     }
     // types in different doc
     const externalModule = {
@@ -766,6 +766,7 @@ function renderType(
       ApiGatewayV1LambdaRoute: "apigatewayv1-lambda-route",
       ApiGatewayV2Authorizer: "apigatewayv2-authorizer",
       ApiGatewayV2LambdaRoute: "apigatewayv2-lambda-route",
+      ApiGatewayV2PrivateRoute: "apigatewayv2-private-route",
       ApiGatewayV2UrlRoute: "apigatewayv2-url-route",
       ApiGatewayWebSocketRoute: "apigateway-websocket-route",
       AppSyncDataSource: "app-sync-data-source",
@@ -774,6 +775,8 @@ function renderType(
       Bucket: "bucket",
       BucketArgs: "bucket",
       BucketLambdaSubscriber: "bucket-lambda-subscriber",
+      BucketQueueSubscriber: "bucket-queue-subscriber",
+      BucketTopicSubscriber: "bucket-topic-subscriber",
       Cdn: "cdn",
       CdnArgs: "cdn",
       CognitoIdentityProvider: "cognito-identity-provider",
@@ -810,8 +813,9 @@ function renderType(
   function renderSstSdkType(type: TypeDoc.ReferenceType) {
     // types in the same doc (links to an interface)
     if (useModuleInterfaces(module).find((i) => i.name === type.name)) {
-      return `[<code class="type">${type.name
-        }</code>](#${type.name.toLowerCase()})`;
+      return `[<code class="type">${
+        type.name
+      }</code>](#${type.name.toLowerCase()})`;
     } else if (type.name === "T") {
       return `<code class="primitive">string</code>`;
     }
@@ -891,8 +895,9 @@ function renderType(
         console.error(type);
         throw new Error(`Unsupported @pulumi provider input type`);
       }
-      return `[<code class="type">${type.name
-        }</code>](https://www.pulumi.com/registry/packages/${provider}/api-docs/${link}/#${type.name.toLowerCase()})`;
+      return `[<code class="type">${
+        type.name
+      }</code>](https://www.pulumi.com/registry/packages/${provider}/api-docs/${link}/#${type.name.toLowerCase()})`;
     } else if (cls.startsWith("types/")) {
       console.error(type);
       throw new Error(`Unsupported @pulumi provider class type`);
@@ -1028,7 +1033,8 @@ function renderVariables(module: TypeDoc.DeclarationReflection) {
       // nested props (ie. `.nodes`)
       ...useNestedTypes(v.type!, v.name).flatMap(
         ({ depth, prefix, subType }) => [
-          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${depth === 0 ? "h4" : "h5"
+          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${
+            depth === 0 ? "h4" : "h5"
           }" parent="${prefix}.">${renderName(subType)}</NestedTitle>`,
           `<Segment>`,
           `<Section type="parameters">`,
@@ -1065,7 +1071,7 @@ function renderFunctions(
       `<Section type="signature">`,
       "```ts",
       (opts?.prefix ? `${opts.prefix}.` : "") +
-      renderSignature(f.signatures![0]),
+        renderSignature(f.signatures![0]),
       "```",
       `</Section>`
     );
@@ -1203,7 +1209,7 @@ function renderMethod(
     `<Section type="signature">`,
     "```ts",
     (method.flags.isStatic ? `${useClassName(module)}.` : "") +
-    renderSignature(method.signatures![0]),
+      renderSignature(method.signatures![0]),
     "```",
     `</Section>`
   );
@@ -1258,14 +1264,16 @@ function renderProperties(module: TypeDoc.DeclarationReflection) {
       // nested props (ie. `.nodes`)
       ...useNestedTypes(g.getSignature!.type!, g.name).flatMap(
         ({ depth, prefix, subType }) => [
-          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${depth === 0 ? "h4" : "h5"
+          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${
+            depth === 0 ? "h4" : "h5"
           }" parent="${prefix}.">${renderName(subType)}</NestedTitle>`,
           `<Segment>`,
           `<Section type="parameters">`,
           `<InlineSection>`,
-          `**Type** ${subType.kind === TypeDoc.ReflectionKind.Property
-            ? renderType(module, subType.type!)
-            : renderType(module, subType.getSignature!.type!)
+          `**Type** ${
+            subType.kind === TypeDoc.ReflectionKind.Property
+              ? renderType(module, subType.type!)
+              : renderType(module, subType.getSignature!.type!)
           }`,
           `</InlineSection>`,
           `</Section>`,
@@ -1297,6 +1305,9 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
 
   // Filter out private `properties`
   const propertiesType = properties.type as TypeDoc.ReflectionType;
+  if (propertiesType.declaration === undefined) {
+    console.log(properties);
+  }
   const links = (propertiesType.declaration.children || []).filter(
     (c) => !c.comment?.modifierTags.has("@internal")
   );
@@ -1328,7 +1339,7 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
         linkType = link.type;
         linkType.types = linkType.types.map((t) =>
           t.type === "reference" &&
-            (t.name === "Output" || t.name === "OutputInstance")
+          (t.name === "Output" || t.name === "OutputInstance")
             ? t.typeArguments![0]
             : t
         );
@@ -1448,33 +1459,35 @@ function renderInterfacesAtH2Level(
             ({ depth, prefix, subType }) => {
               return subType.kind === TypeDoc.ReflectionKind.Method
                 ? renderMethod(module, subType, {
-                  methodTitle: `<NestedTitle id="${useLinkHashes(module).get(
-                    subType
-                  )}" Tag="${depth === 0 ? "h4" : "h5"
+                    methodTitle: `<NestedTitle id="${useLinkHashes(module).get(
+                      subType
+                    )}" Tag="${
+                      depth === 0 ? "h4" : "h5"
                     }" parent="${prefix}.">${renderName(
                       subType
                     )}</NestedTitle>`,
-                  parametersTitle: `**Parameters**`,
-                })
+                    parametersTitle: `**Parameters**`,
+                  })
                 : [
-                  `<NestedTitle id="${useLinkHashes(module).get(
-                    subType
-                  )}" Tag="${depth === 0 ? "h4" : "h5"
-                  }" parent="${prefix}.">${renderName(
-                    subType
-                  )}</NestedTitle>`,
-                  `<Segment>`,
-                  `<Section type="parameters">`,
-                  `<InlineSection>`,
-                  `**Type** ${renderType(module, subType.type!)}`,
-                  `</InlineSection>`,
-                  `</Section>`,
-                  ...renderDefaultTag(module, subType),
-                  ...renderDescription(subType),
-                  ``,
-                  ...renderExamples(subType),
-                  `</Segment>`,
-                ];
+                    `<NestedTitle id="${useLinkHashes(module).get(
+                      subType
+                    )}" Tag="${
+                      depth === 0 ? "h4" : "h5"
+                    }" parent="${prefix}.">${renderName(
+                      subType
+                    )}</NestedTitle>`,
+                    `<Segment>`,
+                    `<Section type="parameters">`,
+                    `<InlineSection>`,
+                    `**Type** ${renderType(module, subType.type!)}`,
+                    `</InlineSection>`,
+                    `</Section>`,
+                    ...renderDefaultTag(module, subType),
+                    ...renderDescription(subType),
+                    ``,
+                    ...renderExamples(subType),
+                    `</Segment>`,
+                  ];
             }
           )
         );
@@ -1482,8 +1495,9 @@ function renderInterfacesAtH2Level(
         console.debug(`   - interface method ${prop.name}`);
         lines.push(
           ...renderMethod(module, prop, {
-            methodTitle: `### ${prop.flags.isStatic ? "static " : ""
-              }${renderName(prop)}`,
+            methodTitle: `### ${
+              prop.flags.isStatic ? "static " : ""
+            }${renderName(prop)}`,
             parametersTitle: `#### Parameters`,
           })
         );
@@ -1522,7 +1536,8 @@ function renderInterfacesAtH3Level(module: TypeDoc.DeclarationReflection) {
       // nested props (ie. `.domain`, `.transform`)
       ...useNestedTypes(int.type!, int.name).flatMap(
         ({ depth, prefix, subType }) => [
-          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${depth === 0 ? "h4" : "h5"
+          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${
+            depth === 0 ? "h4" : "h5"
           }" parent="${prefix}.">${renderName(subType)}</NestedTitle>`,
           `<Segment>`,
           `<Section type="parameters">`,
@@ -1575,11 +1590,11 @@ function renderDescription(
   const str = renderTdComment(prop.comment?.summary);
   return opts?.indent
     ? [
-      str
-        .split("\n")
-        .map((line) => `  ${line}`)
-        .join("\n"),
-    ]
+        str
+          .split("\n")
+          .map((line) => `  ${line}`)
+          .join("\n"),
+      ]
     : [str];
 }
 
@@ -1598,12 +1613,12 @@ function renderDefaultTag(
     // Otherwise render it as a comment ie. No domains configured
     defaultTag.content.length === 1 && defaultTag.content[0].kind === "code"
       ? `**Default** ${renderType(module, {
-        type: "intrinsic",
-        name: defaultTag.content[0].text
-          .replace(/`/g, "")
-          .replace(/{/g, "&lcub;")
-          .replace(/}/g, "&rcub;"),
-      } as TypeDoc.SomeType)}`
+          type: "intrinsic",
+          name: defaultTag.content[0].text
+            .replace(/`/g, "")
+            .replace(/{/g, "&lcub;")
+            .replace(/}/g, "&rcub;"),
+        } as TypeDoc.SomeType)}`
       : `**Default** ${renderTdComment(defaultTag.content)}`,
     `</InlineSection>`,
   ];
@@ -1808,10 +1823,10 @@ function useNestedTypes(
         : []),
       ...(subType.kind === TypeDoc.ReflectionKind.Accessor
         ? useNestedTypes(
-          subType.getSignature?.type!,
-          `${prefix}.${subType.name}`,
-          depth + 1
-        )
+            subType.getSignature?.type!,
+            `${prefix}.${subType.name}`,
+            depth + 1
+          )
         : []),
     ]);
 
@@ -1824,7 +1839,7 @@ function useNestedTypes(
 
 function configureLogger() {
   if (process.env.DEBUG) return;
-  console.debug = () => { };
+  console.debug = () => {};
 }
 
 function patchCode() {
@@ -1873,27 +1888,9 @@ function patchCode() {
         /include\?\: \{[^}]*\}/,
         `include?: (AwsPermission | CloudflareBinding)`
       ) +
-    "\ntype Constructor = {};\n" +
-    "\ntype AwsPermission = {};\n" +
-    "\ntype CloudflareBinding = {};\n"
-  );
-  // patch Cloudflare Binding
-  fs.cpSync(
-    "../platform/src/components/cloudflare/binding.ts",
-    "../platform/src/components/cloudflare/binding.ts.bk"
-  );
-  fs.writeFileSync(
-    "../platform/src/components/cloudflare/binding.ts",
-    fs
-      .readFileSync("../platform/src/components/cloudflare/binding.ts")
-      .toString()
-      .trim()
-      // replace generic <Properties>
-      .replace("type: T", "type: string")
-      .replace(
-        `properties: Extract<Binding, { type: T }>["properties"]`,
-        "properties: Record<string, any>"
-      )
+      "\ntype Constructor = {};\n" +
+      "\ntype AwsPermission = {};\n" +
+      "\ntype CloudflareBinding = {};\n"
   );
 }
 
@@ -1910,11 +1907,6 @@ function restoreCode() {
     "../platform/src/components/linkable.ts.bk",
     "../platform/src/components/linkable.ts"
   );
-  // restore Cloudflare Binding
-  fs.renameSync(
-    "../platform/src/components/cloudflare/binding.ts.bk",
-    "../platform/src/components/cloudflare/binding.ts"
-  );
 }
 
 async function buildComponents() {
@@ -1930,61 +1922,64 @@ async function buildComponents() {
       "../platform/src/config.ts",
       "../platform/src/global-config.d.ts",
       "../platform/src/components/linkable.ts",
-      //"../platform/src/components/secret.ts",
-      //"../platform/src/components/aws/apigateway-websocket.ts",
-      //"../platform/src/components/aws/apigateway-websocket-route.ts",
-      //"../platform/src/components/aws/apigatewayv1.ts",
-      //"../platform/src/components/aws/apigatewayv1-authorizer.ts",
-      //"../platform/src/components/aws/apigatewayv1-lambda-route.ts",
-      //"../platform/src/components/aws/apigatewayv2.ts",
-      //"../platform/src/components/aws/apigatewayv2-authorizer.ts",
-      //"../platform/src/components/aws/apigatewayv2-lambda-route.ts",
-      //"../platform/src/components/aws/apigatewayv2-url-route.ts",
-      //"../platform/src/components/aws/app-sync.ts",
-      //"../platform/src/components/aws/app-sync-data-source.ts",
-      //"../platform/src/components/aws/app-sync-function.ts",
-      //"../platform/src/components/aws/app-sync-resolver.ts",
-      //"../platform/src/components/aws/bucket.ts",
-      //"../platform/src/components/aws/bucket-lambda-subscriber.ts",
-      //"../platform/src/components/aws/cluster.ts",
-      //"../platform/src/components/aws/cognito-identity-pool.ts",
-      //"../platform/src/components/aws/cognito-user-pool.ts",
-      //"../platform/src/components/aws/cognito-user-pool-client.ts",
-      //"../platform/src/components/aws/cron.ts",
-      //"../platform/src/components/aws/dynamo.ts",
-      //"../platform/src/components/aws/dynamo-lambda-subscriber.ts",
-      //"../platform/src/components/aws/email.ts",
-      //"../platform/src/components/aws/function.ts",
-      //"../platform/src/components/aws/postgres.ts",
-      //"../platform/src/components/aws/vector.ts",
-      //"../platform/src/components/aws/astro.ts",
-      //"../platform/src/components/aws/nextjs.ts",
-      //"../platform/src/components/aws/nuxt.ts",
-      //"../platform/src/components/aws/realtime.ts",
-      //"../platform/src/components/aws/realtime-lambda-subscriber.ts",
-      //"../platform/src/components/aws/remix.ts",
-      //"../platform/src/components/aws/queue.ts",
-      //"../platform/src/components/aws/queue-lambda-subscriber.ts",
-      //"../platform/src/components/aws/kinesis-stream.ts",
-      //"../platform/src/components/aws/kinesis-stream-lambda-subscriber.ts",
-      //"../platform/src/components/aws/router.ts",
-      //"../platform/src/components/aws/service.ts",
-      //"../platform/src/components/aws/sns-topic.ts",
-      //"../platform/src/components/aws/sns-topic-lambda-subscriber.ts",
-      //"../platform/src/components/aws/sns-topic-queue-subscriber.ts",
-      //"../platform/src/components/aws/solid-start.ts",
-      //"../platform/src/components/aws/static-site.ts",
-      //"../platform/src/components/aws/svelte-kit.ts",
-      //"../platform/src/components/aws/vpc.ts",
-      //"../platform/src/components/cloudflare/worker.ts",
-      //"../platform/src/components/cloudflare/bucket.ts",
-      //"../platform/src/components/cloudflare/d1.ts",
-      //"../platform/src/components/cloudflare/kv.ts",
-      //// internal
-      //"../platform/src/components/aws/dns.ts",
-      //"../platform/src/components/cloudflare/dns.ts",
-      //"../platform/src/components/vercel/dns.ts",
-      //"../platform/src/components/aws/cdn.ts",
+      "../platform/src/components/secret.ts",
+      "../platform/src/components/aws/apigateway-websocket.ts",
+      "../platform/src/components/aws/apigateway-websocket-route.ts",
+      "../platform/src/components/aws/apigatewayv1.ts",
+      "../platform/src/components/aws/apigatewayv1-authorizer.ts",
+      "../platform/src/components/aws/apigatewayv1-lambda-route.ts",
+      "../platform/src/components/aws/apigatewayv2.ts",
+      "../platform/src/components/aws/apigatewayv2-authorizer.ts",
+      "../platform/src/components/aws/apigatewayv2-lambda-route.ts",
+      "../platform/src/components/aws/apigatewayv2-private-route.ts",
+      "../platform/src/components/aws/apigatewayv2-url-route.ts",
+      "../platform/src/components/aws/app-sync.ts",
+      "../platform/src/components/aws/app-sync-data-source.ts",
+      "../platform/src/components/aws/app-sync-function.ts",
+      "../platform/src/components/aws/app-sync-resolver.ts",
+      "../platform/src/components/aws/bucket.ts",
+      "../platform/src/components/aws/bucket-lambda-subscriber.ts",
+      "../platform/src/components/aws/bucket-queue-subscriber.ts",
+      "../platform/src/components/aws/bucket-topic-subscriber.ts",
+      "../platform/src/components/aws/cluster.ts",
+      "../platform/src/components/aws/cognito-identity-pool.ts",
+      "../platform/src/components/aws/cognito-user-pool.ts",
+      "../platform/src/components/aws/cognito-user-pool-client.ts",
+      "../platform/src/components/aws/cron.ts",
+      "../platform/src/components/aws/dynamo.ts",
+      "../platform/src/components/aws/dynamo-lambda-subscriber.ts",
+      "../platform/src/components/aws/email.ts",
+      "../platform/src/components/aws/function.ts",
+      "../platform/src/components/aws/postgres.ts",
+      "../platform/src/components/aws/vector.ts",
+      "../platform/src/components/aws/astro.ts",
+      "../platform/src/components/aws/nextjs.ts",
+      "../platform/src/components/aws/nuxt.ts",
+      "../platform/src/components/aws/realtime.ts",
+      "../platform/src/components/aws/realtime-lambda-subscriber.ts",
+      "../platform/src/components/aws/remix.ts",
+      "../platform/src/components/aws/queue.ts",
+      "../platform/src/components/aws/queue-lambda-subscriber.ts",
+      "../platform/src/components/aws/kinesis-stream.ts",
+      "../platform/src/components/aws/kinesis-stream-lambda-subscriber.ts",
+      "../platform/src/components/aws/router.ts",
+      "../platform/src/components/aws/service.ts",
+      "../platform/src/components/aws/sns-topic.ts",
+      "../platform/src/components/aws/sns-topic-lambda-subscriber.ts",
+      "../platform/src/components/aws/sns-topic-queue-subscriber.ts",
+      "../platform/src/components/aws/solid-start.ts",
+      "../platform/src/components/aws/static-site.ts",
+      "../platform/src/components/aws/svelte-kit.ts",
+      "../platform/src/components/aws/vpc.ts",
+      "../platform/src/components/cloudflare/worker.ts",
+      "../platform/src/components/cloudflare/bucket.ts",
+      "../platform/src/components/cloudflare/d1.ts",
+      "../platform/src/components/cloudflare/kv.ts",
+      // internal
+      "../platform/src/components/aws/dns.ts",
+      "../platform/src/components/cloudflare/dns.ts",
+      "../platform/src/components/vercel/dns.ts",
+      "../platform/src/components/aws/cdn.ts",
       "../platform/src/components/aws/permission.ts",
       "../platform/src/components/cloudflare/binding.ts",
     ],
