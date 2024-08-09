@@ -11,8 +11,8 @@
   --sl-line-height: 1.8;
 
   --sl-text-code: 0.9375rem;
-	--sl-text-code-sm: 0.8125rem;
-	--sl-text-code-xs: 0.6875rem;
+  --sl-text-code-sm: 0.8125rem;
+  --sl-text-code-xs: 0.6875rem;
 
   --sl-mobile-toc-height: 3.5rem;
 
@@ -20,10 +20,10 @@
   --icon-opacity: 0.85;
 
   --sl-text-h1: 2.5rem;
-	--sl-text-h2: 1.875rem;
-	--sl-text-h3: 1.5rem;
-	--sl-text-h4: 1.125rem;
-	--sl-text-h5: 1rem;
+  --sl-text-h2: 1.875rem;
+  --sl-text-h3: 1.5rem;
+  --sl-text-h4: 1.125rem;
+  --sl-text-h5: 1rem;
 
   --sl-nav-pad-x: 1rem;
 
@@ -46,18 +46,18 @@
 
 /* Dark mode colors. */
 :root {
-	--sl-color-accent-low: hsl(198, 39%, 27%);
-	--sl-color-accent: hsl(198, 39%, 56%);
-	--sl-color-accent-high: hsl(198, 39%, 84%);
-	--sl-color-white: #FFFFFF;
-	--sl-color-gray-1: hsl(var(--hue), var(--sat), 93%);
-	--sl-color-gray-2: hsl(var(--hue), var(--sat), 87%);
-	--sl-color-gray-3: hsl(var(--hue), var(--sat), 59%);
-	--sl-color-gray-4: hsl(var(--hue), var(--sat), 39%);
-	--sl-color-gray-5: hsl(var(--hue), var(--sat), 26%);
-	--sl-color-gray-6: hsl(var(--hue), var(--sat), 19%);
-	--sl-color-black: hsl(var(--hue), var(--sat), 14%);
-	--sl-color-black-alpha: hsla(var(--hue), var(--sat), 14%, 80%);
+  --sl-color-accent-low: hsl(198, 39%, 27%);
+  --sl-color-accent: hsl(198, 39%, 56%);
+  --sl-color-accent-high: hsl(198, 39%, 84%);
+  --sl-color-white: #FFFFFF;
+  --sl-color-gray-1: hsl(var(--hue), var(--sat), 93%);
+  --sl-color-gray-2: hsl(var(--hue), var(--sat), 87%);
+  --sl-color-gray-3: hsl(var(--hue), var(--sat), 59%);
+  --sl-color-gray-4: hsl(var(--hue), var(--sat), 39%);
+  --sl-color-gray-5: hsl(var(--hue), var(--sat), 26%);
+  --sl-color-gray-6: hsl(var(--hue), var(--sat), 19%);
+  --sl-color-black: hsl(var(--hue), var(--sat), 14%);
+  --sl-color-black-alpha: hsla(var(--hue), var(--sat), 14%, 80%);
 
   --sl-color-text-accent: var(--sl-color-accent);
 
@@ -100,22 +100,42 @@
 
   --dialog-background-color: hsla(var(--hue), var(--sat), 18%, 93%);
   --sl-color-backdrop-overlay: hsla(var(--hue), var(--sat), 14%, 50%);
+
+  --lander-border-top-color: hsl(var(--hue), var(--sat), 24%);
+  --lander-border-bottom-color: hsl(var(--hue), var(--sat), 20%);
+  --lander-background-top-color: hsl(var(--hue), var(--sat), 17%);
+  --lander-background-bottom-color: hsl(var(--hue), var(--sat), 15%);
+
+  --lander-code-inner-glow-color: rgba(255, 255, 255, 0.02);
+
+  --lander-code-shadow-color: 240deg 26% 6%;
+  --lander-code-shadow:
+    0px 1px 1.5px hsl(var(--lander-code-shadow-color) / 0.04),
+    0.1px 5.1px 7.7px hsl(var(--lander-code-shadow-color) / 0.04),
+    0.1px 8.6px 12.9px hsl(var(--lander-code-shadow-color) / 0.04),
+    0.1px 12px 18px hsl(var(--lander-code-shadow-color) / 0.08),
+    0.2px 15.7px 23.6px hsl(var(--lander-code-shadow-color) / 0.08),
+    0.2px 20.3px 30.5px hsl(var(--lander-code-shadow-color) / 0.08),
+    0.3px 26px 39px hsl(var(--lander-code-shadow-color) / 0.08),
+    0.3px 33.4px 50.1px hsl(var(--lander-code-shadow-color) / 0.1),
+    0.4px 42.9px 64.4px hsl(var(--lander-code-shadow-color) / 0.1),
+    0.6px 55px 82.5px hsl(var(--lander-code-shadow-color) / 0.1);
 }
 /* Light mode colors. */
 :root[data-theme='light'] {
-	--sl-color-accent-low: hsl(198, 39%, 84%);
-	--sl-color-accent: hsl(198, 39%, 51%);
-	--sl-color-accent-high: hsl(198, 39%, 27%);
-	--sl-color-white: hsl(var(--hue), var(--sat), 14%);
-	--sl-color-gray-1: hsl(var(--hue), var(--sat), 19%);
-	--sl-color-gray-2: hsl(var(--hue), var(--sat), 26%);
-	--sl-color-gray-3: hsl(var(--hue), var(--sat), 39%);
-	--sl-color-gray-4: hsl(var(--hue), var(--sat), 59%);
-	--sl-color-gray-5: hsl(var(--hue), var(--sat), 81%);
-	--sl-color-gray-6: hsl(var(--hue), var(--sat), 93%);
-	--sl-color-gray-7: hsl(var(--hue), var(--sat), 98%);
-	--sl-color-black: hsl(255, 100%, 100%);
-	--sl-color-black-alpha: hsl(255, 100%, 100%, 80%);
+  --sl-color-accent-low: hsl(198, 39%, 84%);
+  --sl-color-accent: hsl(198, 39%, 51%);
+  --sl-color-accent-high: hsl(198, 39%, 27%);
+  --sl-color-white: hsl(var(--hue), var(--sat), 14%);
+  --sl-color-gray-1: hsl(var(--hue), var(--sat), 19%);
+  --sl-color-gray-2: hsl(var(--hue), var(--sat), 26%);
+  --sl-color-gray-3: hsl(var(--hue), var(--sat), 39%);
+  --sl-color-gray-4: hsl(var(--hue), var(--sat), 59%);
+  --sl-color-gray-5: hsl(var(--hue), var(--sat), 81%);
+  --sl-color-gray-6: hsl(var(--hue), var(--sat), 93%);
+  --sl-color-gray-7: hsl(var(--hue), var(--sat), 98%);
+  --sl-color-black: hsl(255, 100%, 100%);
+  --sl-color-black-alpha: hsl(255, 100%, 100%, 80%);
 
   --sl-color-bg-sidebar: var(--sl-color-bg);
 
@@ -157,6 +177,26 @@
 
   --dialog-background-color: hsl(0, 0%, 97%, 0.93);
   --sl-color-backdrop-overlay: hsla(var(--hue), var(--sat), 14%, 3%);
+
+  --lander-border-top-color: hsl(var(--hue), var(--sat), 95%);
+  --lander-border-bottom-color: hsl(var(--hue), var(--sat), 92%);
+  --lander-background-top-color: hsl(var(--hue), var(--sat), 99%);
+  --lander-background-bottom-color: hsl(var(--hue), var(--sat), 98%);
+
+  --lander-code-inner-glow-color: rgba(255, 255, 255, 0.9);
+  --lander-code-shadow-color: 0deg 0% 78%;
+
+  --lander-code-shadow:
+    0px 1px 1.5px hsl(var(--lander-code-shadow-color) / 0.04),
+    0.1px 5.1px 7.7px hsl(var(--lander-code-shadow-color) / 0.04),
+    0.1px 8.6px 12.9px hsl(var(--lander-code-shadow-color) / 0.04),
+    0.1px 12px 18px hsl(var(--lander-code-shadow-color) / 0.08),
+    0.2px 15.7px 23.6px hsl(var(--lander-code-shadow-color) / 0.08),
+    0.2px 20.3px 30.5px hsl(var(--lander-code-shadow-color) / 0.08),
+    0.3px 26px 39px hsl(var(--lander-code-shadow-color) / 0.08),
+    0.3px 33.4px 50.1px hsl(var(--lander-code-shadow-color) / 0.1),
+    0.4px 42.9px 64.4px hsl(var(--lander-code-shadow-color) / 0.1),
+    0.6px 55px 82.5px hsl(var(--lander-code-shadow-color) / 0.1);
 }
 
 body {

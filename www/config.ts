@@ -4,6 +4,10 @@ export default {
     url: "https://ion.sst.dev/install",
     bash: "| bash",
   },
+  npm: {
+    command: "npm i",
+    package: "sst@ion",
+  },
   sst: "https://sst.dev",
   github: "https://github.com/sst/ion",
   discord: "https://sst.dev/discord",
