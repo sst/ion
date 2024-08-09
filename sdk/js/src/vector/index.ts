@@ -169,7 +169,7 @@ export interface RemoveEvent {
 
 export interface QueryResponse {
   /**
-   * List of result objects matching the query.
+   * List of results matching the query.
    */
   results: {
     /**
@@ -250,11 +250,11 @@ export function VectorClient<
   T extends keyof {
     // @ts-expect-error
     [key in keyof Resource as "sst.aws.Vector" extends Resource[key]["type"]
-    ? string extends key
-    ? never
-    : key
-    : never]: Resource[key];
-  },
+      ? string extends key
+        ? never
+        : key
+      : never]: Resource[key];
+  }
 >(name: T): VectorClientResponse {
   return {
     put: async (event: PutEvent) => {
