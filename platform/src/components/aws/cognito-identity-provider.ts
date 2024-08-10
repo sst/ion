@@ -1,36 +1,17 @@
-import { ComponentResourceOptions } from "@pulumi/pulumi";
+import { ComponentResourceOptions, output } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
 import { Link } from "../link";
 import { cognito } from "@pulumi/aws";
+import { CognitoIdentityProviderArgs } from "./cognito-user-pool";
+import { OpenIdConnectProvider } from "@pulumi/aws/iam";
+import { VisibleError } from "../error";
 
-export interface CognitoIdentityProviderArgs {
+export interface Args extends CognitoIdentityProviderArgs {
   /**
    * The Cognito user pool ID.
    */
   userPool: Input<string>;
-  /**
-   * The provider type. [See AWS API for valid values](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CreateIdentityProvider.html#CognitoUserPools-CreateIdentityProvider-request-ProviderType)
-   */
-  providerType: Input<string>;
-  /**
-   * The map of identity details. [See AWS API for valid values](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CreateIdentityProvider.html#CognitoUserPools-CreateIdentityProvider-request-ProviderDetails)
-   */
-  providerDetails: Input<Record<string, Input<string>>>;
-  /**
-   * The map of attribute mapping of user pool attributes. [AttributeMapping in AWS API documentation](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CreateIdentityProvider.html#CognitoUserPools-CreateIdentityProvider-request-AttributeMapping)
-   */
-  attributeMapping?: Input<Record<string, Input<string>>>;
-  /**
-   * [Transform](/docs/components#transform) how this component creates its underlying
-   * resources.
-   */
-  transform?: {
-    /**
-     * Transform the Cognito identity provider resource.
-     */
-    identityProvider?: Transform<cognito.IdentityProviderArgs>;
-  };
 }
 
 /**
@@ -43,17 +24,34 @@ export interface CognitoIdentityProviderArgs {
  *
  * You'll find this component returned by the `addIdentityProvider` method of the `CognitoUserPool` component.
  */
-export class CognitoIdentityProvider extends Component implements Link.Linkable {
+export class CognitoIdentityProvider extends Component {
   private identityProvider: cognito.IdentityProvider;
 
-  constructor(name: string, args: CognitoIdentityProviderArgs, opts?: ComponentResourceOptions) {
+  constructor(name: string, args: Args, opts?: ComponentResourceOptions) {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
 
+    const providerType = normalizeProviderType();
     const identityProvider = createIdentityProvider();
 
     this.identityProvider = identityProvider;
+
+    function normalizeProviderType() {
+      const type = output(args.type).apply(
+        (type) =>
+          ({
+            saml: "SAML",
+            oidc: "OIDC",
+            facebook: "Facebook",
+            google: "Google",
+            amazon: "LoginWithAmazon",
+            apple: "SignInWithApple",
+          })[type],
+      );
+      if (!type) throw new VisibleError(`Invalid provider type: ${args.type}`);
+      return type;
+    }
 
     function createIdentityProvider() {
       return new cognito.IdentityProvider(
@@ -62,10 +60,10 @@ export class CognitoIdentityProvider extends Component implements Link.Linkable 
           `${name}IdentityProvider`,
           {
             userPoolId: args.userPool,
-            providerName: args.providerType, // Use providerType as providerName by default
-            providerType: args.providerType,
-            providerDetails: args.providerDetails,
-            attributeMapping: args.attributeMapping,
+            providerName: name,
+            providerType,
+            providerDetails: args.details,
+            attributeMapping: args.attributes,
           },
           { parent },
         ),
@@ -89,15 +87,6 @@ export class CognitoIdentityProvider extends Component implements Link.Linkable 
        * The Cognito identity provider.
        */
       identityProvider: this.identityProvider,
-    };
-  }
-
-  /** @internal */
-  public getSSTLink() {
-    return {
-      properties: {
-        providerName: this.providerName,
-      },
     };
   }
 }

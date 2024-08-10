@@ -37,73 +37,9 @@ new CognitoIdentityProvider(name, args, opts?)
 <Section type="parameters">
 #### Parameters
 - <p><code class="key">name</code> <code class="primitive">string</code></p>
-- <p><code class="key">args</code> [<code class="type">CognitoIdentityProviderArgs</code>](#cognitoidentityproviderargs)</p>
+- <p><code class="key">args</code> [<code class="type">Args</code>](#args)</p>
 - <p><code class="key">opts?</code> [<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)</p>
 </Section>
-</Segment>
-
-## CognitoIdentityProviderArgs
-### attributeMapping?
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code><code class="symbol">&gt;</code><code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The map of attribute mapping of user pool attributes. [AttributeMapping in AWS API documentation](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CreateIdentityProvider.html#CognitoUserPools-CreateIdentityProvider-request-AttributeMapping)
-
-</Segment>
-### providerDetails
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code><code class="symbol">&gt;</code><code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The map of identity details. [See AWS API for valid values](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CreateIdentityProvider.html#CognitoUserPools-CreateIdentityProvider-request-ProviderDetails)
-
-</Segment>
-### providerType
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The provider type. [See AWS API for valid values](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/API_CreateIdentityProvider.html#CognitoUserPools-CreateIdentityProvider-request-ProviderType)
-
-</Segment>
-### transform?
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Object</code>
-</InlineSection>
-- <p>[<code class="key">identityProvider?</code>](#transform-identityprovider)</p>
-</Section>
-[Transform](/docs/components#transform) how this component creates its underlying
-resources.
-
-</Segment>
-<NestedTitle id="transform-identityprovider" Tag="h4" parent="transform.">identityProvider?</NestedTitle>
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** [<code class="type">IdentityProviderArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cognito/identityprovider/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">IdentityProviderArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cognito/identityprovider/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
-</InlineSection>
-</Section>
-Transform the Cognito identity provider resource.
-
-</Segment>
-### userPool
-<Segment>
-<Section type="parameters">
-<InlineSection>
-**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
-</InlineSection>
-</Section>
-The Cognito user pool ID.
-
 </Segment>
 
 ## Properties
@@ -138,19 +74,67 @@ The Cognito identity provider.
 The Cognito identity provider name.
 </Segment>
 
-## SDK
-
-Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.
-
----
-
-### Links
-This is accessible through the `Resource` object in the [SDK](/docs/reference/sdk/#links).
+## Args
+### attributes?
 <Segment>
 <Section type="parameters">
-- <p><code class="key">providerName</code> <code class="primitive">string</code></p>
-
-  The Cognito identity provider name.
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code><code class="symbol">&gt;</code><code class="symbol">&gt;</code>
+</InlineSection>
 </Section>
+Defines mappings between identity provider attributes and user pool attributes.
+
+</Segment>
+### details
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">Record</code><code class="symbol">&lt;</code><code class="primitive">string</code>, <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code><code class="symbol">&gt;</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+Configure the identity provider details, including the scopes, URLs, and identifiers.
+
+</Segment>
+### transform?
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Object</code>
+</InlineSection>
+- <p>[<code class="key">identityProvider?</code>](#transform-identityprovider)</p>
+</Section>
+[Transform](/docs/components#transform) how this component creates its underlying
+resources.
+
+</Segment>
+<NestedTitle id="transform-identityprovider" Tag="h4" parent="transform.">identityProvider?</NestedTitle>
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** [<code class="type">IdentityProviderArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cognito/identityprovider/#inputs)<code class="symbol"> | </code><code class="symbol">(</code><code class="primitive">args</code><code class="symbol">: </code>[<code class="type">IdentityProviderArgs</code>](https://www.pulumi.com/registry/packages/aws/api-docs/cognito/identityprovider/#inputs)<code class="symbol">, </code><code class="primitive">opts</code><code class="symbol">: </code>[<code class="type">ComponentResourceOptions</code>](https://www.pulumi.com/docs/concepts/options/)<code class="symbol">, </code><code class="primitive">name</code><code class="symbol">: </code><code class="primitive">string</code><code class="symbol">)</code><code class="symbol"> => </code><code class="primitive">void</code>
+</InlineSection>
+</Section>
+Transform the Cognito identity provider resource.
+
+</Segment>
+### type
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="symbol">&ldquo;</code><code class="primitive">oidc</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">saml</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">google</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">facebook</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">apple</code><code class="symbol">&rdquo;</code><code class="symbol"> | </code><code class="symbol">&ldquo;</code><code class="primitive">amazon</code><code class="symbol">&rdquo;</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+Type of the identity provider.
+
+</Segment>
+### userPool
+<Segment>
+<Section type="parameters">
+<InlineSection>
+**Type** <code class="primitive">Input</code><code class="symbol">&lt;</code><code class="primitive">string</code><code class="symbol">&gt;</code>
+</InlineSection>
+</Section>
+The Cognito user pool ID.
+
 </Segment>
 </div>
