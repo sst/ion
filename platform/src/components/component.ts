@@ -49,6 +49,7 @@ export class Component extends ComponentResource {
     }
     super(type, name, args, {
       transformations: [
+        // Ensure logical and physical names are prefixed
         (args) => {
           // Ensure names are prefixed with parent's name
           if (
@@ -104,11 +105,11 @@ export class Component extends ComponentResource {
               "aws:iam/userPolicy:UserPolicy",
               "aws:cloudfront/cachePolicy:CachePolicy",
               "aws:cloudfront/distribution:Distribution",
-              "aws:cloudfront/originAccessIdentity:OriginAccessIdentity",
               "aws:cloudwatch/eventRule:EventRule",
               "aws:cloudwatch/eventTarget:EventTarget",
               "aws:cloudwatch/logGroup:LogGroup",
               "aws:cognito/identityPoolRoleAttachment:IdentityPoolRoleAttachment",
+              "aws:cognito/identityProvider:IdentityProvider",
               "aws:cognito/userPoolClient:UserPoolClient",
               "aws:lambda/eventSourceMapping:EventSourceMapping",
               "aws:lambda/functionUrl:FunctionUrl",
@@ -190,6 +191,7 @@ export class Component extends ComponentResource {
                 "aws:apigateway/restApi:RestApi",
                 "aws:apigatewayv2/api:Api",
                 "aws:apigatewayv2/authorizer:Authorizer",
+                "aws:apigatewayv2/vpcLink:VpcLink",
                 "aws:cognito/userPool:UserPool",
                 "aws:iot/authorizer:Authorizer",
               ],
@@ -277,6 +279,10 @@ export class Component extends ComponentResource {
             opts: args.opts,
           };
         },
+        // When renaming a CloudFront function, when `deleteBeforeReplace` is not set,
+        // the engine tries to remove the existing function first, and fails with in-use
+        // error. Setting `deleteBeforeReplace` to `false` seems to force the new one
+        // gets created and attached first.
         (args) => {
           let override = {};
           if (args.type === "aws:cloudfront/function:Function") {
@@ -287,6 +293,14 @@ export class Component extends ComponentResource {
             opts: { ...args.opts, ...override },
           };
         },
+        // Set child resources `retainOnDelete` if set on component
+        (args) => ({
+          props: args.props,
+          opts: {
+            ...args.opts,
+            retainOnDelete: args.opts.retainOnDelete ?? opts?.retainOnDelete,
+          },
+        }),
         ...(opts?.transformations ?? []),
       ],
       ...opts,

@@ -24,6 +24,7 @@ import (
 	"github.com/sst/ion/cmd/sst/mosaic/aws/iot_writer"
 	"github.com/sst/ion/cmd/sst/mosaic/bus"
 	"github.com/sst/ion/cmd/sst/mosaic/watcher"
+	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/project/provider"
 	"github.com/sst/ion/pkg/runtime"
@@ -155,23 +156,22 @@ func Start(
 	}
 
 	var pending sync.Map
+	initChan := make(chan MQTT.Message, 1000)
+	shutdownChan := make(chan MQTT.Message, 1000)
 
 	prefix := fmt.Sprintf("ion/%s/%s", p.App().Name, p.App().Stage)
-	if token := mqttClient.Subscribe(prefix+"/+/response", 1, func(c MQTT.Client, m MQTT.Message) {
+	reader := iot_writer.NewReader()
+	if token := mqttClient.Subscribe(prefix+"/+/response/#", 1, func(c MQTT.Client, m MQTT.Message) {
 		slog.Info("iot", "topic", m.Topic())
-		workerID := strings.Split(m.Topic(), "/")[3]
-		payload := m.Payload()
-		go func() {
-			write, ok := pending.Load(workerID)
+		for _, msg := range reader.Read(m) {
+			write, ok := pending.Load(msg.ID)
 			if !ok {
-				slog.Info("asking for reboot", "workerID", workerID)
-				mqttClient.Publish(prefix+"/"+workerID+"/reboot", 1, false, []byte("reboot"))
 				return
 			}
 			casted := write.(*io.PipeWriter)
-			casted.Write(payload)
+			casted.Write(msg.Data)
 			casted.Close()
-		}()
+		}
 	}); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
@@ -183,9 +183,6 @@ func Start(
 		CurrentRequestID string
 		Env              []string
 	}
-
-	initChan := make(chan MQTT.Message, 1000)
-	shutdownChan := make(chan MQTT.Message, 1000)
 
 	type workerResponse struct {
 		response    *http.Response
@@ -321,6 +318,9 @@ func Start(
 						RequestID:  info.CurrentRequestID,
 						Input:      responseBody,
 					})
+					topic := prefix + "/" + info.WorkerID + "/ack"
+					slog.Info("acking", "topic", topic)
+					mqttClient.Publish(topic, 1, false, []byte{1}).Wait()
 				}
 				if evt.path[len(evt.path)-1] == "response" {
 					bus.Publish(&FunctionResponseEvent{
@@ -347,6 +347,7 @@ func Start(
 				}
 				// only delete if a new worker hasn't already been started
 				if existing == info {
+					slog.Info("deleting worker", "workerID", info.WorkerID)
 					delete(workers, info.WorkerID)
 				}
 				break
@@ -396,6 +397,7 @@ func Start(
 				workerID := strings.Split(m.Topic(), "/")[3]
 				existingWorker, exists := workers[workerID]
 				if exists {
+					continue
 					existingWorker.Worker.Stop()
 				}
 				var payload struct {
@@ -441,11 +443,13 @@ func Start(
 		path := strings.Split(r.URL.Path, "/")
 		slog.Info("lambda request", "path", path)
 		workerID := path[2]
-		slog.Info("lambda lock", "workerID", workerID)
-		writer := iot_writer.New(mqttClient, prefix+"/"+workerID+"/request")
+		requestID := util.RandomString(8)
+		writer := iot_writer.New(mqttClient, prefix+"/"+workerID+"/request/"+requestID)
 		read, write := io.Pipe()
-		pending.Store(workerID, write)
-		defer pending.Delete(workerID)
+		pending.Store(requestID, write)
+		defer func() {
+			pending.Delete(requestID)
+		}()
 
 		writer.Write([]byte(r.Method + " /2018-06-01/" + strings.Join(path[3:], "/") + " HTTP/1.1\r\n"))
 		for name, headers := range r.Header {
@@ -466,6 +470,7 @@ func Start(
 			io.Copy(write, r.Body)
 		}
 		writer.Flush()
+		writer.Close()
 
 		hijacker, ok := w.(http.Hijacker)
 		if !ok {

@@ -13,6 +13,7 @@ import (
 
 type EvalOptions struct {
 	Dir     string
+	Outfile string
 	Code    string
 	Env     []string
 	Globals string
@@ -22,7 +23,10 @@ type EvalOptions struct {
 }
 
 func Build(input EvalOptions) (esbuild.BuildResult, error) {
-	outfile := filepath.Join(input.Dir, ".sst", "platform", fmt.Sprintf("sst.config.%v.mjs", time.Now().UnixMilli()))
+	outfile := input.Outfile
+	if outfile == "" {
+		outfile = filepath.Join(input.Dir, ".sst", "platform", fmt.Sprintf("sst.config.%v.mjs", time.Now().UnixMilli()))
+	}
 	slog.Info("esbuild building", "out", outfile)
 	result := esbuild.Build(esbuild.BuildOptions{
 		Banner: map[string]string{
@@ -71,6 +75,7 @@ const __dirname = topLevelFileUrlToPath(new topLevelURL(".", import.meta.url))
 		},
 		External: []string{
 			"@pulumi/*",
+			"undici",
 			"@pulumiverse/*",
 			"@sst-provider/*",
 			"@aws-sdk/*",

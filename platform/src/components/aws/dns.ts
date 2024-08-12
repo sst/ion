@@ -55,10 +55,19 @@ export interface DnsArgs {
    */
   zone?: Input<string>;
   /**
-   * Set to `true` to allow the creation of new DNS records that can replace existing ones.
+   * Set to `true` if you want to let the new DNS records replace the existing ones.
    *
-   * This is useful for switching a domain to a new site without removing old DNS records,
-   * helping to prevent downtime.
+   * :::tip
+   * Use this to migrate over your domain without any downtime.
+   * :::
+   *
+   * This is useful if your domain is currently used by another app and you want to switch it
+   * to your current app. Without setting this, you'll first have to remove the existing DNS
+   * records and then add the new one. This can cause downtime.
+   *
+   * You can avoid this by setting this to `true` and the existing DNS records will be replaced
+   * without any downtime. Just make sure that when you remove your old app, you don't remove
+   * the DNS records.
    *
    * @default `false`
    * @example
@@ -84,9 +93,40 @@ export interface DnsArgs {
 export function dns(args: DnsArgs = {}) {
   return {
     provider: "aws",
+    createAlias,
     createRecord,
-    createAliasRecords,
   } satisfies Dns;
+
+  /**
+   * Creates alias records in the hosted zone.
+   *
+   * @param namePrefix The prefix to use for the resource names.
+   * @param record The alias record to create.
+   * @param opts The component resource options.
+   */
+  function createAlias(
+    namePrefix: string,
+    record: AliasRecord,
+    opts: ComponentResourceOptions,
+  ) {
+    return ["A", "AAAA"].map((type) =>
+      _createRecord(
+        namePrefix,
+        {
+          type,
+          name: record.name,
+          aliases: [
+            {
+              name: record.aliasName,
+              zoneId: record.aliasZone,
+              evaluateTargetHealth: true,
+            },
+          ],
+        },
+        opts,
+      ),
+    );
+  }
 
   /**
    * Creates a DNS record in the hosted zone.
@@ -109,37 +149,6 @@ export function dns(args: DnsArgs = {}) {
         records: [record.value],
       },
       opts,
-    );
-  }
-
-  /**
-   * Creates alias records in the hosted zone.
-   *
-   * @param namePrefix The prefix to use for the resource names.
-   * @param record The alias record to create.
-   * @param opts The component resource options.
-   */
-  function createAliasRecords(
-    namePrefix: string,
-    record: AliasRecord,
-    opts: ComponentResourceOptions,
-  ) {
-    return ["A", "AAAA"].map((type) =>
-      _createRecord(
-        namePrefix,
-        {
-          type,
-          name: record.name,
-          aliases: [
-            {
-              name: record.aliasName,
-              zoneId: record.aliasZone,
-              evaluateTargetHealth: true,
-            },
-          ],
-        },
-        opts,
-      ),
     );
   }
 

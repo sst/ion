@@ -21,7 +21,6 @@ import (
 	"github.com/sst/ion/cmd/sst/mosaic/watcher"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/project"
-	"github.com/sst/ion/pkg/rpc"
 	"github.com/sst/ion/pkg/server"
 	"golang.org/x/sync/errgroup"
 )
@@ -74,7 +73,11 @@ func CmdMosaic(c *cli.Cli) error {
 				if !ok {
 					return nil
 				}
-				nextEnv, err := dev.Env(c.Context, cwd, url)
+				query := "directory=" + cwd
+				if os.Getenv("SST_CHILD") != "" {
+					query = "name=" + os.Getenv("SST_CHILD")
+				}
+				nextEnv, err := dev.Env(c.Context, query, url)
 				if err != nil {
 					return err
 				}
@@ -196,7 +199,6 @@ func CmdMosaic(c *cli.Cli) error {
 								continue
 							}
 							dir := filepath.Join(cwd, d.Directory)
-							slog.Info("mosaic", "dev", d.Name, "directory", dir)
 							words, _ := shellquote.Split(d.Command)
 							multi.AddProcess(
 								d.Name,
@@ -206,7 +208,7 @@ func CmdMosaic(c *cli.Cli) error {
 								dir,
 								true,
 								d.Autostart,
-								multiEnv...,
+								append([]string{"SST_CHILD=" + d.Name}, multiEnv...)...,
 							)
 						}
 						break
@@ -215,11 +217,6 @@ func CmdMosaic(c *cli.Cli) error {
 			}
 		})
 	}
-
-	wg.Go(func() error {
-		defer c.Cancel()
-		return rpc.Start(c.Context, p, server)
-	})
 
 	wg.Go(func() error {
 		defer c.Cancel()

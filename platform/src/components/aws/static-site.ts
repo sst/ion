@@ -24,6 +24,8 @@ import {
 import { cloudfront, iam } from "@pulumi/aws";
 import { URL_UNAVAILABLE } from "./linkable.js";
 import { DevArgs } from "../dev.js";
+import { OriginAccessControl } from "./providers/origin-access-control.js";
+import { physicalName } from "../naming.js";
 
 export interface StaticSiteArgs extends BaseStaticSiteArgs {
   /**
@@ -405,7 +407,7 @@ export class StaticSite extends Component implements Link.Linkable {
     }
 
     const outputPath = buildApp(name, args.build, sitePath, environment);
-    const access = createCloudFrontOriginAccessIdentity();
+    const access = createCloudFrontOriginAccessControl();
     const bucket = createS3Bucket();
     const bucketFile = uploadAssets();
     const cloudfrontFunction = createCloudfrontFunction();
@@ -424,10 +426,10 @@ export class StaticSite extends Component implements Link.Linkable {
       },
     });
 
-    function createCloudFrontOriginAccessIdentity() {
-      return new cloudfront.OriginAccessIdentity(
-        `${name}OriginAccessIdentity`,
-        {},
+    function createCloudFrontOriginAccessControl() {
+      return new OriginAccessControl(
+        `${name}S3AccessControl`,
+        { name: physicalName(64, name) },
         { parent },
       );
     }
@@ -468,8 +470,8 @@ export class StaticSite extends Component implements Link.Linkable {
                     {
                       principals: [
                         {
-                          type: "AWS",
-                          identifiers: [access.iamArn],
+                          type: "Service",
+                          identifiers: ["cloudfront.amazonaws.com"],
                         },
                       ],
                       actions: ["s3:GetObject"],
@@ -617,9 +619,7 @@ export class StaticSite extends Component implements Link.Linkable {
                 originId: "s3",
                 domainName: bucket.nodes.bucket.bucketRegionalDomainName,
                 originPath: "",
-                s3OriginConfig: {
-                  originAccessIdentity: access.cloudfrontAccessIdentityPath,
-                },
+                originAccessControlId: access.id,
               },
             ],
             defaultRootObject: indexPage,
