@@ -409,10 +409,7 @@ export class Remix extends Component implements Link.Linkable {
       return;
     }
 
-    const viteConfigFile = getViteConfigFile();
-    const isUsingVite = viteConfigFile.apply(
-      (config) => typeof config === "string",
-    );
+    const viteConfig = loadViteConfig();
     const { access, bucket } = createBucket(parent, name, partition, args);
     const outputPath = buildApp(name, args, sitePath);
     const buildMeta = loadBuildMetadata();
@@ -449,26 +446,57 @@ export class Remix extends Component implements Link.Linkable {
       return output(args?.edge).apply((edge) => edge ?? false);
     }
 
-    function getViteConfigFile() {
-      return sitePath.apply((sitePath) => {
-        for (const file of [
+    function loadViteConfig() {
+      return sitePath.apply(async (sitePath) => {
+        const file = [
           "vite.config.ts",
           "vite.config.js",
           "vite.config.mts",
           "vite.config.mjs",
-        ]) {
-          if (fs.existsSync(path.join(sitePath, file))) {
-            return file;
-          }
+        ].find((filename) => fs.existsSync(path.join(sitePath, filename)));
+        if (!file) return;
+
+        let resolvedConfig;
+        try {
+          const vite = await import("vite");
+          const viteConfig = await vite.loadConfigFromFile(
+            { command: "build", mode: "production" },
+            file,
+          );
+          if (!viteConfig) throw new Error();
+
+          resolvedConfig = (await vite.resolveConfig(
+            viteConfig.config,
+            "build",
+            "production",
+          )) as Awaited<ReturnType<typeof vite.resolveConfig>> & {
+            __remixPluginContext: {
+              remixConfig: {
+                serverBuildFile: string;
+                buildDirectory: string;
+              };
+            };
+          };
+        } catch (e) {
+          throw new VisibleError(`Failed to load Vite config file "${file}"`);
         }
 
-        return undefined;
+        if (
+          resolvedConfig.__remixPluginContext.remixConfig.serverBuildFile !==
+          "index.js"
+        ) {
+          throw new VisibleError(
+            `SST does not support a custom "serverBuildFile".`,
+          );
+        }
+
+        return resolvedConfig;
       });
     }
 
     function loadBuildMetadata() {
-      return all([outputPath, viteConfigFile]).apply(
-        async ([outputPath, viteConfigFile]) => {
+      return all([outputPath, viteConfig]).apply(
+        async ([outputPath, viteConfig]) => {
           // The path for all files that need to be in the "/" directory (static assets)
           // is different when using Vite. These will be located in the "build/client"
           // path of the output by default. It will be the "public" folder when using remix config.
@@ -476,36 +504,14 @@ export class Remix extends Component implements Link.Linkable {
           let assetsVersionedSubDir = "build";
           let buildPath = path.join(outputPath, "build");
 
-          if (viteConfigFile) {
-            const vite = await import("vite");
-            const viteConfig = await vite.loadConfigFromFile(
-              { command: "build", mode: "production" },
-              viteConfigFile,
+          if (viteConfig) {
+            buildPath =
+              viteConfig.__remixPluginContext.remixConfig.buildDirectory;
+            assetsPath = path.relative(
+              viteConfig.root,
+              viteConfig.build.outDir,
             );
-            if (!viteConfig) {
-              throw new VisibleError(
-                `Failed to load Vite config file "${viteConfigFile}"`,
-              );
-            }
-            // @ts-expect-error __remixPluginContext is not in type ResolvedConfig
-            const { root, build, __remixPluginContext } =
-              await vite.resolveConfig(
-                viteConfig.config,
-                "build",
-                "production",
-              );
-
-            if (
-              __remixPluginContext.remixConfig.serverBuildFile !== "index.js"
-            ) {
-              throw new VisibleError(
-                `SST does not support a custom "serverBuildFile".`,
-              );
-            }
-
-            buildPath = __remixPluginContext.remixConfig.buildDirectory;
-            assetsPath = path.relative(root, build.outDir);
-            assetsVersionedSubDir = build.assetsDir;
+            assetsVersionedSubDir = viteConfig.build.assetsDir;
           }
 
           return {
@@ -526,10 +532,10 @@ export class Remix extends Component implements Link.Linkable {
     }
 
     function buildPlan() {
-      return all([isUsingVite, edge, buildMeta]).apply(
-        ([isUsingVite, edge, buildMeta]) => {
+      return all([viteConfig, edge, buildMeta]).apply(
+        ([viteConfig, edge, buildMeta]) => {
           const serverConfig = createServerLambdaBundle(
-            isUsingVite,
+            viteConfig,
             buildMeta.buildPath,
             edge,
           );
@@ -550,21 +556,21 @@ export class Remix extends Component implements Link.Linkable {
             },
             edgeFunctions: edge
               ? {
-                server: {
-                  function: serverConfig,
-                },
-              }
+                  server: {
+                    function: serverConfig,
+                  },
+                }
               : undefined,
             origins: {
               ...(edge
                 ? {}
                 : {
-                  server: {
                     server: {
-                      function: serverConfig,
+                      server: {
+                        function: serverConfig,
+                      },
                     },
-                  },
-                }),
+                  }),
               s3: {
                 s3: {
                   copy: [
@@ -581,16 +587,16 @@ export class Remix extends Component implements Link.Linkable {
             behaviors: [
               edge
                 ? {
-                  cacheType: "server",
-                  cfFunction: "serverCfFunction",
-                  edgeFunction: "server",
-                  origin: "s3",
-                }
+                    cacheType: "server",
+                    cfFunction: "serverCfFunction",
+                    edgeFunction: "server",
+                    origin: "s3",
+                  }
                 : {
-                  cacheType: "server",
-                  cfFunction: "serverCfFunction",
-                  origin: "server",
-                },
+                    cacheType: "server",
+                    cfFunction: "serverCfFunction",
+                    origin: "server",
+                  },
               ...buildMeta.staticRoutes.map(
                 (route) =>
                   ({
@@ -607,7 +613,7 @@ export class Remix extends Component implements Link.Linkable {
     }
 
     function createServerLambdaBundle(
-      isUsingVite: boolean,
+      viteConfig: any,
       buildPath: string,
       isEdge: boolean,
     ) {
@@ -638,7 +644,7 @@ export class Remix extends Component implements Link.Linkable {
         // When using Vite config, the output build will be "server/index.js"
         // and when using Remix config it will be `server.js`.
         `// Import the server build that was produced by 'remix build'`,
-        isUsingVite
+        viteConfig
           ? `import * as remixServerBuild from "./server/index.js";`
           : `import * as remixServerBuild from "./index.js";`,
         ``,
