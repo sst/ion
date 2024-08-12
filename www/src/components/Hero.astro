@@ -15,18 +15,8 @@ import logoAnalogDevices from "../assets/lander/analog-devices.svg?raw";
 
 const download = config.npm;
 const slug = Astro.props.entry.slug;
----
 
-{ slug !== "" &&
-  <Default {...Astro.props}><slot /></Default>
-}
-
-{ slug === "" &&
-<div class="lander">
-<div class="columns">
-  <div class="left">
-  <div class="code-block-frame">
-    <Code lang="ts" class="code-block" title="sst.config.ts" frame="terminal" code={`
+const code = `
 export default $config({
   app(input) {
     return {
@@ -42,50 +32,65 @@ export default $config({
     };
   }
 });
-    `}/>
-      <!-- <div class="blob"></div> -->
-      <div class="dot-mask"></div>
-  </div>
-  </div>
-  <div class="right">
-    <div class="row">
-      <h1>Think bigger.</h1>
-    </div>
-    <div class="row">
-      <button class="command" data-command={`${download.command} ${download.package}`}>
-        <code>{download.command}&nbsp;<span class="highlight">{download.package}</span></code>
-        <span class="copy"><Fragment set:html={copy} /><Fragment set:html={check} /></span>
-      </button>
-    </div>
-    <div class="row">
-      <div class="announcement">
-        <a target="_blank" href="https://sst.dev/blog/moving-away-from-cdk.html">Read the announcement<Icon name="right-caret" size="1.25rem" /></a>
+`;
+---
+
+{ slug !== "" &&
+  <Default {...Astro.props}><slot /></Default>
+}
+
+{ slug === "" &&
+<div class="lander">
+  <div class="columns">
+    <div class="left">
+      <div class="code-block-frame">
+        <Code lang="ts" class="code-block" title="sst.config.ts" frame="terminal" code={code} />
+        <div class="dot-mask"></div>
       </div>
-      <div class="actions">
-        <a href="/docs/">What is SST</a>
-        <a href="/docs/start/aws/nextjs">Get Started</a>
+    </div>
+    <div class="right">
+      <div class="row">
+        <h1>Think bigger.</h1>
       </div>
-      <div class="logos">
-        <p>Loved by thousands of teams</p>
-        <div class="icons">
-          <span><Fragment set:html={logoAmazon} /></span>
-          <span><Fragment set:html={logoAnalogDevices} /></span>
-          <span><Fragment set:html={logoShell} /></span>
-          <span><Fragment set:html={logoComcast} /></span>
-          <span><Fragment set:html={logoHbo} /></span>
+      <div class="row">
+        <button class="command" data-command={`${download.command} ${download.package}`}>
+          <code>{download.command}&nbsp;<span class="highlight">{download.package}</span></code>
+          <span class="copy"><Fragment set:html={copy} /><Fragment set:html={check} /></span>
+        </button>
+      </div>
+      <div class="row">
+        <div class="announcement">
+          <a target="_blank" href="https://sst.dev/blog/moving-away-from-cdk.html">Read the announcement<Icon name="right-caret" size="1.25rem" /></a>
+        </div>
+        <div class="actions">
+          <a href="/docs/">What is SST</a>
+          <a href="/docs/start/aws/nextjs">Get Started</a>
+        </div>
+        <div class="logos">
+          <p>Loved by thousands of teams</p>
+          <div class="icons">
+            <span><Fragment set:html={logoAmazon} /></span>
+            <span><Fragment set:html={logoAnalogDevices} /></span>
+            <span><Fragment set:html={logoShell} /></span>
+            <span><Fragment set:html={logoComcast} /></span>
+            <span><Fragment set:html={logoHbo} /></span>
+          </div>
         </div>
       </div>
     </div>
   </div>
-</div>
+  <div class="footer">
+    <p>&copy; 2024 Anomaly Innovations</p>
+  </div>
 </div>
 
 <style>
 .lander {
   padding: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   height: calc(100vh
     - 2 * 1.5rem /* content-panel */
     - var(--sl-nav-height)
@@ -94,9 +99,10 @@ export default $config({
   );
 }
 .columns {
+  flex: 1;
   display: flex;
   gap: 3rem;
-  /* align-items: center; */
+  align-items: center;
   /* justify-content: center; */
 }
 .left {
@@ -118,6 +124,9 @@ export default $config({
 .right .bottom {
   flex: 0;
   padding-bottom: 0.125rem;
+}
+.footer {
+  flex: 0 0 auto;
 }
 
 .announcement {
