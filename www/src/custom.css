@@ -240,25 +240,20 @@ body > .page > header button[data-open-modal] {
   border-color: var(--sl-color-hairline);
   height: var(--search-button-height);
   padding-inline-start: 10px;
-  padding-inline-end: 7px;
+  padding-inline-end: 9px;
   font-size: var(--sl-text-xs);
   color: var(--color-text-secondary);
   gap: 0.4375rem;
   background-color: var(--sl-color-black-alpha);
   line-height: normal;
 }
-body > .page > header button[data-open-modal] svg {
-  opacity: var(--icon-opacity);
+body > .page > header button[data-open-modal] > kbd {
+  background-color: transparent;
+  padding-inline-end: 0;
 }
-body > .page > header button[data-open-modal] svg:first-child {
-  width: 13px;
-  height: 13px;
-}
-body > .page > header button[data-open-modal] svg:last-child {
-  margin-left: 0.5rem;
-  width: 16px;
-  height: 16px;
-  opacity: 0.5;
+body > .page > header button[data-open-modal] > kbd kbd {
+  line-height: 1;
+  color: var(--color-text-dimmed);
 }
 /* Social icons */
 body > .page > nav .social-icons a,
