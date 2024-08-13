@@ -22,7 +22,12 @@ const isBlogPost = slug.startsWith('blog/');
         <a target="_blank" href={config.authors[author].twitter}>
           {config.authors[author].name}
         </a>
-        <span>{lastUpdated.toLocaleDateString('en-US', options)}</span>
+        <span>
+          { lastUpdated
+            ? lastUpdated.toLocaleDateString('en-US', options)
+            : "1971-01-01"
+          }
+        </span>
       </div>
     </Fragment>
   : <Fragment>
@@ -58,9 +63,9 @@ a.back-link:hover {
   text-decoration: underline;
 }
 .meta {
-  margin-top: 0;
+  margin-top: 0.125rem;
   display: flex;
-  gap: 1rem;
+  gap: 1.125rem;
   align-items: center;
 }
 .meta a {

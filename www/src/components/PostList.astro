@@ -10,7 +10,11 @@ const options = {
 
 const blog = (await getCollection('docs', ({ data, slug }) => {
   return slug.startsWith('blog/') && data.draft !== true;
-})).sort((a, b) => b.data.lastUpdated.getTime() - a.data.lastUpdated.getTime());
+})).sort(
+  (a, b) => a.data.lastUpdated && b.data.lastUpdated
+    ? b.data.lastUpdated.getTime() - a.data.lastUpdated.getTime()
+    : 0
+);
 ---
 
 <ul class="posts">
@@ -22,7 +26,12 @@ const blog = (await getCollection('docs', ({ data, slug }) => {
         <a target="_blank" href={config.authors[entry.data.author].twitter}>
           {config.authors[entry.data.author].name}
         </a>
-        <span>{entry.data.lastUpdated.toLocaleDateString('en-US', options)}</span>
+        <span>
+          { entry.data.lastUpdated
+            ? entry.data.lastUpdated.toLocaleDateString('en-US', options)
+            : "1971-01-01"
+          }
+        </span>
       </div>
     </li>
   ))}
@@ -30,6 +39,7 @@ const blog = (await getCollection('docs', ({ data, slug }) => {
 
 <style>
 .posts {
+  margin-top: calc(0.5 * var(--paragraph-spacing));
   list-style-type: none;
 }
 .posts > li.post {
@@ -49,7 +59,7 @@ const blog = (await getCollection('docs', ({ data, slug }) => {
 .posts > li.post > .meta {
   margin: 0.625rem 0 0;
   display: flex;
-  gap: 1.25rem;
+  gap: 1.125rem;
   align-items: center;
 }
 .meta a {

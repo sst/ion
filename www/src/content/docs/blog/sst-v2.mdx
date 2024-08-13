@@ -19,7 +19,7 @@ We completely rewrote SST to be simpler, faster, and easier to work with. [Check
 
 Adam and Dax also did a whole [podcast episode on SST v2](https://tomorrow.fm/8) and the rewrite process.
 
-<iframe style="border-radius:12px" src="https://open.spotify.com/embed/episode/3CFJlgN9vEcLh1P0V52gy2?utm_source=generator" width="100%" height="352" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+<iframe style="border-radius:12px" src="https://open.spotify.com/embed/episode/3CFJlgN9vEcLh1P0V52gy2?utm_source=generator" style="height: 352px!important" width="100%" height="352" frameBorder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
 
 We also did a [launch livestream](https://www.youtube.com/watch?v=v6oqlnY6-Vc) where we talked about what's new in v2, how to upgrade, and deep dive into the new codebase. We also answered some questions from the community.
 
@@ -31,7 +31,7 @@ We also did a [launch livestream](https://www.youtube.com/watch?v=v6oqlnY6-Vc) w
 
 ## Upgrade to v2
 
-In general most of the changes are ergonomic and it should be a pretty simple upgrade process. Check out our docs for the [**upgrade guide**](site.docs_url/upgrade-guide#upgrade-to-v20).
+In general most of the changes are ergonomic and it should be a pretty simple upgrade process. Check out our docs for the **upgrade guide**.
 
 ---
 
@@ -68,9 +68,9 @@ Here's a quick rundown of the major changes.
 
 - **Faster Live Lambda**
 
-  We've reworked how [Live Lambda](site.docs_url/live-lambda-development) works! It's a lot faster than before and it does not need to deploy any new infrastructure for it. So no more _Debug Stack_!
+  We've reworked how [Live Lambda](/docs/live/) works! It's a lot faster than before and it does not need to deploy any new infrastructure for it. So no more _Debug Stack_!
 
-  You can [read more about the changes here](site.docs_url/live-lambda-development#how-it-works).
+  You can [read more about the changes here](/docs/live/).
 
 - **`sst.config.ts`**
 
@@ -90,13 +90,11 @@ Here's a quick rundown of the major changes.
   } satisfies SSTConfig;
   ```
 
-  You can [read more about the new config here](site.docs_url/configuring-sst).
-
 - **New frontends**
 
-  With SST v2, we've upgraded support for all the modern frontends out there. Our [`NextjsSite`](site.docs_url/constructs/NextjsSite) construct supports Next.js 13, thanks to our new [OpenNext](https://open-next.js.org) project.
+  With SST v2, we've upgraded support for all the modern frontends out there. Our `NextjsSite` construct supports Next.js 13, thanks to our new [OpenNext](https://open-next.js.org) project.
 
-  We also added a [`AstroSite`](site.docs_url/constructs/AstroSite) construct for [Astro](https://astro.build) and the [`SolidStartSite`](site.docs_url/constructs/SolidStartSite) construct for [Solid](https://www.solidjs.com).
+  We also added a `AstroSite` construct for [Astro](https://astro.build) and the `SolidStartSite` construct for [Solid](https://www.solidjs.com).
 
 - **pnpm support**
 
@@ -112,4 +110,4 @@ Here's a quick rundown of the major changes.
 
 ---
 
-[**Seed**](https://seed.run) also [supports SST v2](https://seed.run/blog/sst-v2-support). So go ahead and upgrade your apps and [**join us on Discord**](site.discord_invite_url) if you have any questions!
+[**Seed**](https://seed.run) also [supports SST v2](https://seed.run/blog/sst-v2-support). So go ahead and upgrade your apps and **join us on Discord** if you have any questions!

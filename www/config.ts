@@ -10,15 +10,15 @@ export default {
   },
   authors: {
     "frank": {
-      name: "Frank Wang",
+      name: "Frank",
       twitter: "https://x.com/fanjiewang",
     },
     "dax": {
-      name: "Dax Raad",
+      name: "Dax",
       twitter: "https://x.com/thdxr",
     },
     "jay": {
-      name: "Jay V",
+      name: "Jay",
       twitter: "https://x.com/jayair",
     },
   },

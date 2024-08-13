@@ -1,3 +1,9 @@
+@media (min-width: 72rem) {
+  .main-frame > div > .main-pane:only-child {
+    --sl-content-width: 52.5rem;
+  }
+}
+
 :root:not([data-has-hero]):not([data-has-toc]):not([data-has-sidebar]) .main-pane > main {
   padding: 0;
 }
@@ -15,6 +21,25 @@
   max-width: var(--sl-content-width);
   padding-inline: var(--sl-nav-pad-x);
   padding-bottom: 4rem;
+}
+
+:root:not([data-has-hero]):not([data-has-toc]):not([data-has-sidebar]) .main-pane > main > .content-panel:last-child .sl-container .sl-markdown-content .youtube-container {
+  margin-bottom: 15px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+:root:not([data-has-hero]):not([data-has-toc]):not([data-has-sidebar]) .main-pane > main > .content-panel:last-child .sl-container .sl-markdown-content .youtube-container:after {
+  padding-top: 56.25%;
+  display: block;
+  content: "";
+}
+:root:not([data-has-hero]):not([data-has-toc]):not([data-has-sidebar]) .main-pane > main > .content-panel:last-child .sl-container .sl-markdown-content .youtube-container > iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
 }
 
 :root:not([data-has-hero]):not([data-has-toc]):not([data-has-sidebar]) .main-pane > main > .content-panel:last-child footer.splash {
