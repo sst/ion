@@ -41,69 +41,69 @@ export default $config({
 
 { slug === "" &&
 <div class="lander">
-  <div class="columns">
-    <div class="left">
-      <div class="code-block-frame">
-        <Code lang="ts" class="code-block" title="sst.config.ts" frame="terminal" code={code} />
-        <div class="dot-mask"></div>
-      </div>
-    </div>
-    <div class="right">
-      <div class="row">
-        <h1>Think bigger.</h1>
-      </div>
-      <div class="row">
-        <button class="command" data-command={`${download.command} ${download.package}`}>
-          <code>{download.command}&nbsp;<span class="highlight">{download.package}</span></code>
-          <span class="copy"><Fragment set:html={copy} /><Fragment set:html={check} /></span>
-        </button>
-      </div>
-      <div class="row">
-        <div class="announcement">
-          <a target="_blank" href="https://sst.dev/blog/moving-away-from-cdk.html">Read the announcement<Icon name="right-caret" size="1.25rem" /></a>
+  <div class="lander-body">
+    <div class="columns">
+      <div class="left">
+        <div class="code-block-frame">
+          <Code lang="ts" class="code-block" title="sst.config.ts" frame="terminal" code={code} />
+          <div class="dot-mask"></div>
         </div>
-        <div class="actions">
-          <a href="/docs/">What is SST</a>
-          <a href="/docs/start/aws/nextjs">Get Started</a>
+      </div>
+      <div class="right">
+        <div class="row">
+          <h1>Think bigger.</h1>
         </div>
-        <div class="logos">
-          <p>Loved by thousands of teams</p>
-          <div class="icons">
-            <span><Fragment set:html={logoAmazon} /></span>
-            <span><Fragment set:html={logoAnalogDevices} /></span>
-            <span><Fragment set:html={logoShell} /></span>
-            <span><Fragment set:html={logoComcast} /></span>
-            <span><Fragment set:html={logoHbo} /></span>
+        <div class="row">
+          <button class="command" data-command={`${download.command} ${download.package}`}>
+            <code>{download.command}&nbsp;<span class="highlight">{download.package}</span></code>
+            <span class="copy"><Fragment set:html={copy} /><Fragment set:html={check} /></span>
+          </button>
+        </div>
+        <div class="row">
+          <div class="announcement">
+            <a target="_blank" href="https://sst.dev/blog/moving-away-from-cdk.html">Read the announcement<Icon name="right-caret" size="1.25rem" /></a>
+          </div>
+          <div class="actions">
+            <a href="/docs/">What is SST</a>
+            <a href="/docs/start/aws/nextjs">Get Started</a>
+          </div>
+          <div class="logos">
+            <p>Loved by thousands of teams</p>
+            <div class="icons">
+              <Fragment set:html={logoAmazon} />
+              <Fragment set:html={logoAnalogDevices} />
+              <Fragment set:html={logoShell} />
+              <Fragment set:html={logoComcast} />
+              <Fragment set:html={logoHbo} />
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-  <div class="footer">
-    <p>&copy; 2024 Anomaly Innovations</p>
-  </div>
 </div>
 
 <style>
 .lander {
-  padding: 0;
+  margin-top: var(--l-content-pad);
+  padding: 0 var(--l-content-pad);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  height: calc(100vh
-    - 2 * 1.5rem /* content-panel */
-    - var(--sl-nav-height)
-    - 3vh /* main */
-    - 1.5rem /* sl-markdown-content */
-  );
+  min-height: max(var(--l-content-height), 37rem);
+}
+.lander-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .columns {
   flex: 1;
   display: flex;
   gap: 3rem;
-  align-items: center;
-  /* justify-content: center; */
+  align-items: stretch;
 }
 .left {
   flex: 1;
@@ -124,9 +124,6 @@ export default $config({
 .right .bottom {
   flex: 0;
   padding-bottom: 0.125rem;
-}
-.footer {
-  flex: 0 0 auto;
 }
 
 .announcement {
@@ -265,35 +262,35 @@ h1 {
   animation: moveTriangle 30s linear infinite;
 }
 @keyframes moveTriangle {
-            0% {
-  top: 50%;
-  left: 80%;
-  transform: translate(-80%, -50%);
-            }
-            33% {
-                top: 100%;
-                left: 100%;
-                transform: translate(-100%, -100%);
-            }
-            66% {
-                top: 100%;
-                left: 0;
-                transform: translate(0, -100%);
-            }
-            100% {
-                top: 0;
-                left: 50%;
-                transform: translateX(-50%);
-            }
-        }
+  0% {
+    top: 50%;
+    left: 80%;
+    transform: translate(-80%, -50%);
+  }
+  33% {
+    top: 100%;
+    left: 100%;
+    transform: translate(-100%, -100%);
+  }
+  66% {
+    top: 100%;
+    left: 0;
+    transform: translate(0, -100%);
+  }
+  100% {
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+}
 .dot-mask {
   position: absolute;
   top: 0%;
   left: 0%;
-  transform: translate(-10rem, -10rem);
+  transform: translate(-8rem, -8rem);
   z-index: -1;
-  height: calc(100% + 20rem);
-  width: calc(100% + 20rem);
+  height: calc(100% + 16rem);
+  width: calc(100% + 16rem);
   background-image: radial-gradient(var(--divider-color) 1px, transparent 1px);
   background-size: 16px 16px;
   -webkit-mask-image: radial-gradient(
@@ -311,12 +308,12 @@ h1 {
   /* top: 3rem; */
   /* position: relative; */
 
-  box-shadow: var(--lander-code-shadow), inset 0 0 2px 1px var(--lander-code-inner-glow-color);
+  box-shadow: var(--l-code-shadow), inset 0 0 2px 1px var(--l-code-inner-glow-color);
 
   /* overflow: hidden; */
   background:
-    linear-gradient(to bottom, var(--lander-background-top-color) 0%, var(--lander-background-top-color) 40%, var(--lander-background-bottom-color) 70%, var(--lander-background-bottom-color) 100%),
-    linear-gradient(to bottom, var(--lander-border-top-color) 0%, var(--lander-border-top-color) 35%, var(--lander-border-bottom-color) 65%, var(--lander-border-bottom-color) 100%);
+    linear-gradient(to bottom, var(--l-background-top-color) 0%, var(--l-background-top-color) 40%, var(--l-background-bottom-color) 70%, var(--l-background-bottom-color) 100%),
+    linear-gradient(to bottom, var(--l-border-top-color) 0%, var(--l-border-top-color) 35%, var(--l-border-bottom-color) 65%, var(--l-border-bottom-color) 100%);
   /* border: 1px solid var(--divider-color); */
   /* border: 1px solid hsl(var(--hue), var(--sat), 96%); */
   border: 1px solid transparent;
@@ -398,14 +395,13 @@ h1 {
   align-items: center;
 }
 .logos .icons svg {
-  /* opacity: 0.9; */
   color: var(--color-text-dimmed);
 }
-.logos .icons span:nth-child(1) { width: 60px; }
-.logos .icons span:nth-child(2) { width: 66px; }
-.logos .icons span:nth-child(3) { width: 23px; }
-.logos .icons span:nth-child(4) { width: 60px; }
-.logos .icons span:nth-child(5) { width: 41px; }
+.logos .icons svg:nth-child(1) { width: 60px; }
+.logos .icons svg:nth-child(2) { width: 66px; }
+.logos .icons svg:nth-child(3) { width: 23px; }
+.logos .icons svg:nth-child(4) { width: 60px; }
+.logos .icons svg:nth-child(5) { width: 41px; }
 
 @media (max-width: 30rem) {
   .announcement {

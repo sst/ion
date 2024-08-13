@@ -8,14 +8,14 @@ const  slug = Astro.props.entry.slug;
 const { title } = Astro.props.entry.data;
 
 const encodedTitle = encodeURIComponent(
-    Base64.encode(
-      // Convert to ASCII
-      encodeURIComponent(
-        // Truncate to fit S3's max key size
-        slug === "" ? config.description : title.substring(0, 700)
-      )
+  Base64.encode(
+    // Convert to ASCII
+    encodeURIComponent(
+      // Truncate to fit S3's max key size
+      slug === "" ? config.description : title.substring(0, 700)
     )
-  );
+  )
+);
 
 // Get the URL of the generated image for the current page using its
 // ID and replace the file extension with `.png`.
