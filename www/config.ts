@@ -8,6 +8,20 @@ export default {
     command: "npm i",
     package: "sst@ion",
   },
+  authors: {
+    "frank": {
+      name: "Frank Wang",
+      twitter: "https://x.com/fanjiewang",
+    },
+    "dax": {
+      name: "Dax Raad",
+      twitter: "https://x.com/thdxr",
+    },
+    "jay": {
+      name: "Jay V",
+      twitter: "https://x.com/jayair",
+    },
+  },
   email: "hello@sst.dev",
   sst: "https://sst.dev",
   github: "https://github.com/sst/ion",

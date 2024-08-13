@@ -11,6 +11,7 @@ const editLink = userConfig.editLink.baseUrl;
 
 let editUrl = Astro.props.editUrl;
 
+
 // Change path for component source files
 if (slug.startsWith("docs/component/")) {
   editUrl = new URL(
@@ -156,13 +157,11 @@ else if (slug === "docs/examples") {
 
   footer.splash {
     margin: 0;
-    height: var(--l-footer-height);
     flex: 0 0 auto;
     display: flex;
     align-self: stretch;
     align-items: center;
     justify-content: space-between;
-    padding-inline: var(--sl-nav-pad-x);
   }
   .splash p {
     color: var(--color-text-dimmed);

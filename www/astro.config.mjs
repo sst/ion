@@ -202,6 +202,7 @@ export default defineConfig({
         "@fontsource/ibm-plex-mono/600.css",
         "@fontsource/ibm-plex-mono/700.css",
         "./src/custom.css",
+        "./src/styles/splash.css",
         "./src/styles/lander.css",
         "./src/styles/markdown.css",
         "./src/styles/tsdoc.css",

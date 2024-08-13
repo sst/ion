@@ -5,7 +5,7 @@ import Default from '@astrojs/starlight/components/Head.astro'
 import config from '../../config';
 
 const  slug = Astro.props.entry.slug;
-const { title } = Astro.props.entry.data;
+const { cover, title } = Astro.props.entry.data;
 
 const encodedTitle = encodeURIComponent(
   Base64.encode(
@@ -17,11 +17,15 @@ const encodedTitle = encodeURIComponent(
   )
 );
 
-// Get the URL of the generated image for the current page using its
-// ID and replace the file extension with `.png`.
-const ogImageUrl = slug === ""
-  ? `${config.socialCard}/ion-lander/${encodedTitle}.png`
-  : `${config.socialCard}/ion/${encodedTitle}.png`;
+console.log(Astro.props.entry.data.cover);
+
+const ogImageUrl = cover
+  ? `${import.meta.env.SITE}${cover}`
+  // Get the URL of the generated image for the current page using its
+  // ID and replace the file extension with `.png`.
+  : slug.startsWith("docs")
+    ? `${config.socialCard}/ion/${encodedTitle}.png`
+    : `${config.socialCard}/ion-lander/${encodedTitle}.png`;
 ---
 
 { slug === "" && (

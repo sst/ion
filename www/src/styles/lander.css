@@ -63,8 +63,14 @@
   margin: 0;
 }
 
+/* Footer */
+:root[data-has-hero] .main-pane > main > .content-panel footer.splash {
+  height: var(--l-footer-height);
+  padding-inline: var(--sl-nav-pad-x);
+}
+
 /* 404 page */
-:root[data-has-hero] .main-pane > main > .content-panel .hero {
+:root[data-has-hero] .main-pane > main > .content-panel div.hero {
   margin-top: var(--l-content-pad);
   padding: 0 var(--l-content-pad);
   min-height: var(--l-content-height);
