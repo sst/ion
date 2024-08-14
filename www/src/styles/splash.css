@@ -1,5 +1,5 @@
 @media (min-width: 72rem) {
-  .main-frame > div > .main-pane:only-child {
+  :root:not([data-has-hero]):not([data-has-toc]):not([data-has-sidebar]) .main-pane {
     --sl-content-width: 52.5rem;
   }
 }

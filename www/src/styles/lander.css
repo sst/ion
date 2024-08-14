@@ -74,6 +74,9 @@
   margin-top: var(--l-content-pad);
   padding: 0 var(--l-content-pad);
   min-height: var(--l-content-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .sl-container .hero .tagline {
   color: var(--color-text-secondary);
