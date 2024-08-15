@@ -1,13 +1,19 @@
 :root[data-has-hero] {
-  --l-content-pad: 1.5rem;
+  --l-content-pad-x: 1.5rem;
   --l-footer-height: 3rem;
 
-  --l-content-height: calc(
+  --l-min-content-height: calc(
     100vh
-    - var(--l-content-pad)
     - var(--sl-nav-height)
     - var(--l-footer-height)
   );
+}
+@media (max-width: 30rem) {
+  :root[data-has-hero] {
+    --l-content-pad-x: 1rem;
+    --l-footer-height: auto;
+    --l-min-content-height: 20rem;
+  }
 }
 :root[data-has-hero] {
   --l-border-top-color: hsl(var(--hue), var(--sat), 24%);
@@ -71,13 +77,16 @@
 
 /* 404 page */
 :root[data-has-hero] .main-pane > main > .content-panel div.hero {
-  margin-top: var(--l-content-pad);
-  padding: 0 var(--l-content-pad);
-  min-height: var(--l-content-height);
+  padding: 0 var(--l-content-pad-x);
+  min-height: var(--l-min-content-height);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.sl-container .hero .tagline {
+:root[data-has-hero] .main-pane > main > .content-panel div.hero .copy {
+  align-items: flex-start;
+}
+:root[data-has-hero] .main-pane > main > .content-panel div.hero .tagline {
   color: var(--color-text-secondary);
+  text-align: left;
 }

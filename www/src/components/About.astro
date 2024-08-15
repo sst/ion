@@ -74,16 +74,24 @@ import config from "../../config.ts";
 
 <style>
 .about {
+  --font-size: var(--sl-text-h3);
+}
+@media (max-width: 50rem) {
+  .about {
+    --font-size: var(--sl-text-h4);
+  }
+}
+.about {
   margin: auto;
   padding: 3rem var(--sl-content-pad-x);
   max-width: 52.5rem;
 }
 .background p {
-  font-size: var(--sl-text-h3);
+  font-size: var(--font-size);
 }
 
 .investors > p {
-  font-size: var(--sl-text-h3);
+  font-size: var(--font-size);
 }
 .investors > .highlight {
   margin-top: calc(2 * var(--paragraph-spacing));
@@ -114,6 +122,11 @@ import config from "../../config.ts";
   padding: 1rem 0;
   width: 15rem;
 }
+@media (max-width: 50rem) {
+  .investors > .grid > li {
+    width: 12.5rem;
+  }
+}
 .investors > .grid > li:before {
   content: none;
 }
@@ -134,6 +147,6 @@ import config from "../../config.ts";
   font-size: var(--sl-text-sm);
 }
 .info p {
-  font-size: var(--sl-text-h3);
+  font-size: var(--font-size);
 }
 </style>

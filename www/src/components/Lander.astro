@@ -37,7 +37,14 @@ export default $config({
     <div class="columns">
       <div class="left">
         <div class="code-block-frame">
-          <Code lang="ts" class="code-block" title="sst.config.ts" frame="terminal" code={code} />
+          <Code
+            wrap
+            lang="ts"
+            code={code}
+            frame="terminal"
+            class="code-block"
+            title="sst.config.ts"
+          />
           <div class="dot-mask"></div>
         </div>
       </div>
@@ -80,13 +87,36 @@ export default $config({
 
 <style>
 .lander {
-  margin-top: var(--l-content-pad);
-  padding: 0 var(--l-content-pad);
+  --min-content-pad-y: 4.5rem;
+  --column-gap: 3rem;
+  --h1-font-size: 3.5rem;
+}
+@media (max-width: 30rem) {
+  .lander {
+    --column-gap: 2rem;
+    --h1-font-size: 2.5rem;
+  }
+}
+.lander {
+  padding: var(--min-content-pad-y) var(--l-content-pad-x);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  min-height: max(var(--l-content-height), 37rem);
+  min-height: var(--l-min-content-height);
+}
+@media (max-width: 50rem) {
+  .lander {
+    padding-block: 0;
+    margin-block: calc(2 * var(--l-content-pad-x)) calc(3 * var(--l-content-pad-x));
+  }
+}
+@media (max-width: 30rem) {
+  .lander {
+    padding-block: 0;
+    padding-inline: var(--sl-nav-pad-x);
+    margin-block: var(--l-content-pad-x) calc(3 * var(--l-content-pad-x));
+  }
 }
 .lander-body {
   flex: 1;
@@ -97,18 +127,33 @@ export default $config({
 .columns {
   flex: 1;
   display: flex;
-  gap: 3rem;
+  gap: var(--column-gap);
   align-items: stretch;
+}
+@media (max-width: 50rem) {
+  .columns {
+    flex-direction: column;
+  }
 }
 .left {
   flex: 1;
-  /* padding-left: 1.5rem; */
 }
 .right {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+}
+@media (max-width: 50rem) {
+  .right {
+    gap: 1.5rem;
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 30rem) {
+  .right {
+    gap: 1rem;
+  }
 }
 .right .row {
   display: flex;
@@ -141,7 +186,7 @@ h1 {
   margin-bottom: 0.75rem;
   text-align: left;
   font-family: var(--sl-font-mono);
-  font-size: 3.5rem;
+  font-size: var(--h1-font-size);
   font-weight: 600;
   letter-spacing: -1px;
   line-height: normal;
@@ -280,12 +325,12 @@ h1 {
 }
 .dot-mask {
   position: absolute;
-  top: 0%;
-  left: 0%;
-  transform: translate(-8rem, -8rem);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   z-index: -1;
-  height: calc(100% + 16rem);
-  width: calc(100% + 16rem);
+  height: min(calc(100% + 16rem), calc(100% + 2 * var(--min-content-pad-y)));
+  width: calc(100% + 12rem);
   background-image: radial-gradient(var(--divider-color) 1px, transparent 1px);
   background-size: 16px 16px;
   -webkit-mask-image: radial-gradient(
@@ -298,6 +343,18 @@ h1 {
     #000 80%,
     transparent 100%
   );
+}
+@media (max-width: 50rem) {
+  .dot-mask {
+    width: min(calc(100% + 12rem), 100vw);
+  }
+}
+@media (max-width: 30rem) {
+  .dot-mask {
+    top: 0%;
+    transform: translate(-50%, 0%);
+    height: calc(100% + 10rem);
+  }
 }
 
 .logos {
@@ -325,19 +382,6 @@ h1 {
 .logos .icons :global(svg:nth-child(3)) { width: 23px; }
 .logos .icons :global(svg:nth-child(4)) { width: 60px; }
 .logos .icons :global(svg:nth-child(5)) { width: 41px; }
-
-@media (max-width: 30rem) {
-  .announcement {
-    margin-bottom: 1.5rem;
-  }
-  .command {
-    font-size: 0.625rem;
-    margin-bottom: 1.5rem;
-  }
-  .command button {
-    display: none;
-  }
-}
 </style>
 <style is:global>
 .code-block {

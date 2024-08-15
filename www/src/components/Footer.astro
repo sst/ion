@@ -157,10 +157,24 @@ else if (slug === "docs/examples") {
   footer.splash {
     margin: 0;
     flex: 0 0 auto;
+    padding-block: 0;
     display: flex;
-    align-self: stretch;
+    flex-direction: row;
     align-items: center;
+    align-self: stretch;
     justify-content: space-between;
+  }
+  @media (max-width: 50rem) {
+    footer.splash {
+      border-top: 1px solid var(--sl-color-hairline);
+    }
+  }
+  @media (max-width: 30rem) {
+    footer.splash {
+      flex-direction: column;
+      align-items: flex-start;
+      padding-block: var(--sl-nav-pad-y);
+    }
   }
   .splash p {
     color: var(--color-text-dimmed);
@@ -176,12 +190,25 @@ else if (slug === "docs/examples") {
   .splash .links {
     display: flex;
     align-items: center;
+    flex-direction: row;
     gap: 2.5rem;
+  }
+  @media (max-width: 30rem) {
+    .splash .links {
+      gap: 0;
+      align-items: flex-start;
+      flex-direction: column;
+    }
   }
   .splash .links .pages {
     display: flex;
     align-items: center;
     gap: 1.5rem;
+  }
+  @media (max-width: 30rem) {
+    .splash .links .pages {
+      gap: 1rem;
+    }
   }
   .splash .links .pages a {
     color: var(--color-text-dimmed);
