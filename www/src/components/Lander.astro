@@ -38,7 +38,6 @@ export default $config({
       <div class="left">
         <div class="code-block-frame">
           <Code
-            wrap
             lang="ts"
             code={code}
             frame="terminal"
@@ -329,24 +328,24 @@ h1 {
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: -1;
-  height: min(calc(100% + 16rem), calc(100% + 2 * var(--min-content-pad-y)));
-  width: calc(100% + 12rem);
+  height: calc(100% + 2 * var(--min-content-pad-y));
+  /* width: calc(100% + 12rem); */
+    width: min(calc(100% + 12rem), 100vw);
   background-image: radial-gradient(var(--divider-color) 1px, transparent 1px);
   background-size: 16px 16px;
   -webkit-mask-image: radial-gradient(
     ellipse 50% 50% at 50% 50%,
-    #000 80%,
+    #000 90%,
     transparent 100%
   );
   mask-image: radial-gradient(
     ellipse 50% 50% at 50% 50%,
-    #000 80%,
+    #000 90%,
     transparent 100%
   );
 }
 @media (max-width: 50rem) {
   .dot-mask {
-    width: min(calc(100% + 12rem), 100vw);
   }
 }
 @media (max-width: 30rem) {
