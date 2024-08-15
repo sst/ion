@@ -167,3 +167,16 @@ For VS Code, add the following Launch Configuration to `.vscode/launch.json`.
   ]
 }
 ```
+
+---
+
+## Dependencies
+
+Live uses the following dependencies:
+- **AWS Parameter Store**
+    - **/sst/bootstrap**: Contains important information about the application's resources, including details of the Amazon Elastic Container Registry (ECR) and the Amazon Simple Storage Service (S3). If either of them is deleted manually, the application will be unable to start (in an infinite deploying state). ***Fix infinite "Deploying" state, delete resources mentioned in `/sst/bootstrap` and delete `/sst/bootstrap` from Parameter Store.***
+- **AWS S3**
+    - **sst-asset-APP_ID**
+    - **sst-state-APP_ID**
+- **AWS ECR**
+    - **sst-asset**: private repository.
