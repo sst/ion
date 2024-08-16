@@ -7,7 +7,7 @@ import sst from "astro-sst";
 const sidebar = [
   {
     label: "Intro",
-    slug: "docs/index",
+    slug: "docs",
   },
   {
     label: "Workflow",
