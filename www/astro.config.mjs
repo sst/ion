@@ -184,7 +184,7 @@ export default defineConfig({
       filter: (page) => !page.includes("/dummy/"),
     }),
     starlight({
-      title: "Ion",
+      title: "SST",
       logo: {
         light: "./src/assets/logo-light.svg",
         dark: "./src/assets/logo-dark.svg",

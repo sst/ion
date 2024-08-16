@@ -14,22 +14,48 @@ import logoAnalogDevices from "../assets/lander/analog-devices.svg?raw";
 
 const download = config.npm;
 
+// const code = `
+// export default $config({
+//   app(input) {
+//     return {
+//       name: "my-sst-app",
+//       home: "aws"
+//     };
+//   },
+//   async run() {
+//     const bucket = new sst.aws.Bucket("MyBucket");
+//
+//     return {
+//       bucket: bucket.name
+//     };
+//   }
+// });
+// `;
+//
+// const api = new sst.cloudflare.Worker("Api", {
+//   link: [db, email],
+//   handler: "./src/api.ts",
+//   domain: "api.example.com"
+// })
 const code = `
-export default $config({
-  app(input) {
-    return {
-      name: "my-sst-app",
-      home: "aws"
-    };
-  },
-  async run() {
-    const bucket = new sst.aws.Bucket("MyBucket");
+const db = new planetscale.Database("Db")
 
-    return {
-      bucket: bucket.name
-    };
-  }
-});
+const email = new sst.aws.Email("Email", {
+  sender: "mail@example.com"
+})
+
+const api = new sst.aws.Service("Api", {
+  memory: "4 GB",
+  image: "./rails",
+  link: [db, email]
+})
+
+const web = new sst.aws.Nextjs("Web", {
+  link: [api],
+  path: "./nextjs",
+  domain: "example.com",
+  dns: sst.cloudflare.dns()
+})
 `;
 ---
 <div class="lander">
@@ -38,6 +64,7 @@ export default $config({
       <div class="left">
         <div class="code-block-frame">
           <Code
+            wrap
             lang="ts"
             code={code}
             frame="terminal"
@@ -49,7 +76,8 @@ export default $config({
       </div>
       <div class="right">
         <div class="row">
-          <h1>Think bigger.</h1>
+          <h1>{config.tagline}</h1>
+          <p class="description">Deploy everything your app needs with a single config.</p>
         </div>
         <div class="row">
           <button class="command" data-command={`${download.command} ${download.package}`}>
@@ -62,7 +90,9 @@ export default $config({
         </div>
         <div class="row">
           <div class="announcement">
-            <a target="_blank" href="https://sst.dev/blog/moving-away-from-cdk.html">Read the announcement<Icon name="right-caret" size="1.25rem" /></a>
+            <a href="/blog/moving-away-from-cdk">
+              Read the announcement<Icon name="right-caret" size="1.25rem" />
+            </a>
           </div>
           <div class="actions">
             <a href="/docs/">What is SST</a>
@@ -135,10 +165,11 @@ export default $config({
   }
 }
 .left {
-  flex: 1;
+  flex: 0 0 auto;
 }
 .right {
   flex: 1;
+  max-width: 25rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -182,13 +213,18 @@ export default $config({
 }
 
 h1 {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.25rem;
   text-align: left;
   font-family: var(--sl-font-mono);
-  font-size: var(--h1-font-size);
+  font-size: 3rem;
   font-weight: 600;
   letter-spacing: -1px;
   line-height: normal;
+}
+p.description {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
 }
 
 .command {
@@ -254,14 +290,9 @@ h1 {
   margin-bottom: 2rem;
 }
 .actions a {
-  color: var(--sl-color-text-accent);
-  color: var(--color-text-secondary);
+  color: var(--color-text);
   text-underline-offset: 0.375rem;
   text-decoration: none;
-  /* text-transform: uppercase; */
-  /* font-weight: 500; */
-  /* font-family: var(--sl-font-mono); */
-  /* font-size: var(--sl-text-sm); */
   letter-spacing: 0;
   line-height: normal;
   text-decoration: none;
@@ -272,10 +303,6 @@ h1 {
 
 .code-block-frame {
   position: relative;
-  /* padding: 0 3rem; */
-  /* border-radius: 1.5rem; */
-  /* background: #E27152; */
-  /* overflow: hidden; */
 }
 .blob {
   position: absolute;
@@ -290,13 +317,6 @@ h1 {
   border-radius: 19rem;
   background: #E27152;
   background-blend-mode: normal;
-  /* background: */
-  /*   radial-gradient(62.61% 62.61% at 95.23% 6.02%, #160E71 0%, rgba(19, 13, 92, 0.26) 54.71%, rgba(90, 35, 248, 0) 100%), */
-  /*   linear-gradient(72.48deg, #EF516D 2.61%, rgba(106, 103, 227, 0) 56.18%), */
-  /*   radial-gradient(45.23% 45.23% at 35.11% -11.02%, #7936AE 0%, rgba(121, 54, 174, 0) 100%), */
-  /*   radial-gradient(94.51% 124.88% at 94.32% 94.43%, rgba(65, 244, 255, 0.78) 0%, rgba(131, 218, 255, 0.6552) 32.29%, rgba(99, 175, 240, 0.3978) 64.06%, rgba(43, 90, 211, 0) 100%), */
-  /*   linear-gradient(313.04deg, #341D65 0.93%, #604AEA 125.68%); */
-  /* background-blend-mode: normal, normal, normal, normal, normal, normal; */
   filter: blur(100px);
   animation: moveTriangle 30s linear infinite;
 }
@@ -329,8 +349,7 @@ h1 {
   transform: translate(-50%, -50%);
   z-index: -1;
   height: calc(100% + 2 * var(--min-content-pad-y));
-  /* width: calc(100% + 12rem); */
-    width: min(calc(100% + 12rem), 100vw);
+  width: min(calc(100% + 12rem), 100vw);
   background-image: radial-gradient(var(--divider-color) 1px, transparent 1px);
   background-size: 16px 16px;
   -webkit-mask-image: radial-gradient(
@@ -357,6 +376,7 @@ h1 {
 }
 
 .logos {
+  padding-bottom: 0.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
@@ -384,41 +404,20 @@ h1 {
 </style>
 <style is:global>
 .code-block {
-  /* top: 3rem; */
-  /* position: relative; */
-
   box-shadow: var(--l-code-shadow), inset 0 0 2px 1px var(--l-code-inner-glow-color);
-
-  /* overflow: hidden; */
   background:
     linear-gradient(to bottom, var(--l-background-top-color) 0%, var(--l-background-top-color) 40%, var(--l-background-bottom-color) 70%, var(--l-background-bottom-color) 100%),
     linear-gradient(to bottom, var(--l-border-top-color) 0%, var(--l-border-top-color) 35%, var(--l-border-bottom-color) 65%, var(--l-border-bottom-color) 100%);
-  /* border: 1px solid var(--divider-color); */
-  /* border: 1px solid hsl(var(--hue), var(--sat), 96%); */
   border: 1px solid transparent;
   border-radius: calc(2 * var(--border-radius));
- background-origin: border-box;
+  background-origin: border-box;
   background-clip: content-box, border-box;
 }
 .code-block figure.frame pre {
   border-radius: calc(var(--border-radius)*2);
-  /* border-color: #E27152; */
   border-color: var(--divider-color);
-  /* border-color: var(--sl-color-gray-5); */
   border-width: 0px;
-
   background: transparent;
-  /* background: var(--code-background); */
-  /* background: var(--sl-color-bg); */
-  /* background: linear-gradient(to bottom, var(--sl-color-bg) 0%, var(--sl-color-bg) 15%, var(--code-background) 45%, var(--code-background) 100%); */
-  /* background-color: transparent; */
-  /* background: repeating-linear-gradient( */
-  /*   to right, */
-  /*   var(--code-background) 0, */
-  /*   var(--code-background) 16px, */
-  /*   var(--divider-color) 16px, */
-  /*   var(--divider-color) 17px */
-  /* ); */
 }
 .code-block figure.frame pre code {
   font-size: var(--sl-text-sm);
@@ -434,20 +433,12 @@ h1 {
   border-radius: calc(2*var(--border-radius)) calc(var(--border-radius)*2) 0 0;
 
   background: transparent;
-  /* background: var(--code-background); */
-  /* background: var(--sl-color-bg); */
-  /* background: var(--divider-color); */
-
-  /* border-color: var(--sl-color-border-code); */
-  /* border-color: #E27152; */
   border-color: var(--divider-color);
-  /* border-color: var(--sl-color-gray-5); */
   padding-block-start: 0.5rem;
   padding-block-end: 0;
   border-width: 0px;
 }
 .code-block figure.frame.is-terminal .header:after {
-  /* border-color: var(--sl-color-border-code); */
   border-width: 0px;
 }
 .code-block figure.frame.is-terminal .header .title {

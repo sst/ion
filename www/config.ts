@@ -30,5 +30,5 @@ export default {
   youtube: "https://www.youtube.com/c/sst-dev",
   linkedin: "https://www.linkedin.com/company/sst-dev",
   socialCard: "https://social-cards.sst.dev",
-  description: "Ion — A new engine for SST",
+  tagline: "For whatever you build.",
 };

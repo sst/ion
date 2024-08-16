@@ -189,9 +189,15 @@ body > .page > header {
 body > .page > header {
   padding-inline-end: var(--sl-nav-pad-y);
 }
-@media (min-width: 50rem) {
+body > .page > header a.site-title {
+  cursor: pointer;
+}
+body > .page > header a.site-title img {
+  height: 1.5rem;
+}
+@media (max-width: 30rem) {
   body > .page > header a.site-title img {
-    height: calc(var(--sl-nav-height) - 3 * var(--sl-nav-pad-y));
+    height: 1.625rem;
   }
 }
 /* Search button */

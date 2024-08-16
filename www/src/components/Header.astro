@@ -8,7 +8,6 @@ import SiteTitle from "@astrojs/starlight/components/SiteTitle.astro";
 import config from '../../config';
 
 import HeaderLinks from "./HeaderLinks.astro";
-import HeaderSSTLogo from "./HeaderSSTLogo.astro";
 
 function formatStars(num) {
   return num > 999
@@ -29,9 +28,6 @@ if (import.meta.env.MODE !== "development") {
 <div class="header sl-flex">
   <div class="sl-flex">
     <SiteTitle {...Astro.props} />
-    <a class="site-title-sst" href={config.sst} target="_blank">
-      <HeaderSSTLogo {...Astro.props} />
-    </a>
   </div>
   <div class="middle-group">
     <div class="sl-flex">
@@ -67,21 +63,6 @@ if (import.meta.env.MODE !== "development") {
   .header {
     gap: var(--sl-nav-gap);
     justify-content: space-between;
-  }
-}
-
-.site-title-sst {
-  margin-left: 13px;
-  display: flex;
-  align-items: center;
-  color: var(--color-text);
-}
-.site-title-sst :global(svg) {
-  height: calc((var(--sl-nav-height) - 2 * var(--sl-nav-pad-y)) * 0.93);
-}
-@media (min-width: 50rem) {
-  .site-title-sst :global(svg) {
-    height: calc((var(--sl-nav-height) - 3 * var(--sl-nav-pad-y)) * 0.93);
   }
 }
 
