@@ -1,12 +1,12 @@
 export default {
   download: {
     curl: "curl -fsSL",
-    url: "https://ion.sst.dev/install",
+    url: "https://sst.dev/install",
     bash: "| bash",
   },
   npm: {
     command: "npm i",
-    package: "sst@ion",
+    package: "sst",
   },
   authors: {
     "frank": {
