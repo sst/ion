@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -64,10 +66,7 @@ var ENV_BLACKLIST = map[string]bool{
 }
 
 func main() {
-	err := run()
-	if err != nil {
-		panic(err)
-	}
+	run()
 }
 
 func run() error {
@@ -156,20 +155,12 @@ func run() error {
 	slog.Info("prefix", "prefix", prefix)
 	slog.Info("get lambda runtime api", "url", LAMBDA_RUNTIME_API)
 
-	requestChan := make(chan msg, 0)
+	requestChan := make(chan iot_writer.ReadMsg, 1000)
+	reader := iot_writer.NewReader()
 	if token := mqttClient.Subscribe(prefix+"/request/#", 1, func(c MQTT.Client, m MQTT.Message) {
-		slog.Info("iot", "topic", m.Topic())
-		payload := m.Payload()
-		topic := m.Topic()
-		requestID := strings.Split(topic, "/")[5]
-		slog.Info("received message", "topic", topic, "requestID", requestID, "payload", string(payload))
-		go func() {
-			requestChan <- msg{
-				time:      time.Now(),
-				data:      payload,
-				requestID: requestID,
-			}
-		}()
+		for _, msg := range reader.Read(m) {
+			requestChan <- msg
+		}
 	}); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
@@ -207,6 +198,16 @@ func run() error {
 		return token.Error()
 	}
 
+	ack := make(chan struct{})
+	if token := mqttClient.Subscribe(prefix+"/ack", 1, func(c MQTT.Client, m MQTT.Message) {
+		slog.Info("received ack")
+		go func() {
+			ack <- struct{}{}
+		}()
+	}); token.Wait() && token.Error() != nil {
+		return token.Error()
+	}
+
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGKILL)
 
@@ -214,25 +215,50 @@ func run() error {
 		<-sigs
 		cancel()
 	}()
-
 	defer func() {
 		mqttClient.Publish(prefix+"/shutdown", 1, false, initPayload).Wait()
 	}()
 
 	for {
+		// aws will sleep lambda until next invocation
+		req, err := http.Get("http://" + LAMBDA_RUNTIME_API + "/2018-06-01/runtime/invocation/next")
+		if err != nil {
+			return err
+		}
+		requestID := req.Header.Get("lambda-runtime-aws-request-id")
+		requestContext, cancel := context.WithCancel(ctx)
 		slog.Info("dialing lambda runtime api")
-		conn, err := net.Dial("tcp", LAMBDA_RUNTIME_API)
-		if err != nil {
-			return err
-		}
-		requestID, err := forwardRequest(ctx, requestChan, conn)
-		if err != nil {
-			return err
-		}
-		writer := iot_writer.New(mqttClient, prefix+"/response/"+requestID)
-		err = forwardResponse(ctx, writer, conn)
-		if err != nil {
-			return err
+		go func() {
+			select {
+			case <-time.After(time.Second * 3):
+				slog.Info("sst dev is not running")
+				reportError(requestID, "it does not seem like sst dev is running")
+				cancel()
+				return
+			case <-ack:
+				return
+			}
+		}()
+		mqttClient.Publish(prefix+"/init", 1, false, initPayload).Wait()
+		for {
+			conn, err := net.Dial("tcp", LAMBDA_RUNTIME_API)
+			if err != nil {
+				return err
+			}
+			msgID, req, err := forwardRequest(requestContext, requestChan, conn)
+			if err != nil {
+				reportError(requestID, "it does not seem like sst dev is running")
+				break
+			}
+			writer := iot_writer.New(mqttClient, prefix+"/response/"+msgID)
+			err = forwardResponse(requestContext, writer, conn)
+			if err != nil {
+				reportError(requestID, err.Error())
+				break
+			}
+			if req.Method == "POST" {
+				break
+			}
 		}
 	}
 }
@@ -243,17 +269,29 @@ type msg struct {
 	requestID string
 }
 
-func forwardRequest(ctx context.Context, requestChan chan msg, conn net.Conn) (string, error) {
+func reportError(requestID string, err string) {
+	http.Post(
+		"http://"+LAMBDA_RUNTIME_API+"/2018-06-01/runtime/invocation/"+requestID+"/response",
+		"application/json",
+		strings.NewReader(`{"body":"`+err+`", "statusCode":500}`),
+	)
+}
+
+func forwardRequest(ctx context.Context, requestChan chan iot_writer.ReadMsg, conn net.Conn) (string, *http.Request, error) {
+	var buffer bytes.Buffer
+	multiWriter := io.MultiWriter(conn, &buffer)
 	for {
 		select {
 		case payload := <-requestChan:
-			slog.Info("forwarding request")
-			conn.Write(payload.data)
-			return payload.requestID, nil
+			if len(payload.Data) == 0 {
+				req, _ := http.ReadRequest(bufio.NewReader(&buffer))
+				slog.Info("request", "method", req.Method, "url", req.URL.String())
+				return payload.ID, req, nil
+			}
+			multiWriter.Write(payload.Data)
+			continue
 		case <-ctx.Done():
-			return "", fmt.Errorf("context cancelled")
-		case <-time.After(time.Second * 1):
-			return "", fmt.Errorf("timed out waiting for request from sst dev")
+			return "", nil, fmt.Errorf("context cancelled")
 		}
 	}
 }
@@ -265,7 +303,7 @@ func forwardResponse(ctx context.Context, writer *iot_writer.IoTWriter, conn net
 		conn.SetReadDeadline(time.Now().Add(time.Second * 1))
 		select {
 		case <-ctx.Done():
-			break
+			return fmt.Errorf("context cancelled")
 		default:
 			n, err := conn.Read(buf)
 			if err != nil {
@@ -274,7 +312,7 @@ func forwardResponse(ctx context.Context, writer *iot_writer.IoTWriter, conn net
 					return nil
 				}
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					break
+					continue
 				}
 				slog.Info("read error", "err", err)
 				return err

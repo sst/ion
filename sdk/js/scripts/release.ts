@@ -27,7 +27,7 @@ const cpus = {
 };
 
 const tmp = `tmp`;
-const binaryPackages = [];
+const binaryPackages = [] as string[];
 for (const artifact of artifacts) {
   if (artifact.type !== "Binary") continue;
   const os = artifact.goos;
@@ -59,7 +59,7 @@ for (const artifact of artifacts) {
   binaryPackages.push(dir);
 }
 
-const tag = snapshot ? "ion-snapshot" : "ion";
+const tag = snapshot ? "snapshot" : "latest";
 try {
   for (const dir of binaryPackages) {
     await $`cd ${dir} && npm publish --access public --tag ${tag}`;
@@ -67,6 +67,7 @@ try {
   console.log(nextPkg);
   await Bun.write("package.json", JSON.stringify(nextPkg, null, 2));
   await $`npm publish --access public --tag ${tag}`;
+  if (!snapshot) await $`npm dist-tag add ${pkg.name}@${pkg.version} ion`;
 } finally {
   await Bun.write("package.json", JSON.stringify(pkg, null, 2));
   await fs.rmdir(tmp, { recursive: true });

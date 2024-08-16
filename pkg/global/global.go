@@ -19,7 +19,7 @@ import (
 
 var PULUMI_VERSION = "v" + sdk.Version.String()
 
-const BUN_VERSION = "1.1.0"
+const BUN_VERSION = "1.1.24"
 
 var configDir = (func() string {
 	home, err := os.UserConfigDir()
@@ -126,6 +126,10 @@ func BinPath() string {
 	return filepath.Join(configDir, "bin")
 }
 
+func CertPath() string {
+	return filepath.Join(configDir, "cert")
+}
+
 func NeedsBun() bool {
 	path := BunPath()
 	slog.Info("checking for bun", "path", path)
@@ -190,13 +194,20 @@ func InstallBun() error {
 			}
 			defer f.Close()
 
-			outFile, err := os.Create(bunPath)
+			tmpFile := filepath.Join(BinPath(), "sst-bun-download")
+			outFile, err := os.Create(tmpFile)
 			if err != nil {
 				return err
 			}
 			defer outFile.Close()
 
 			_, err = io.Copy(outFile, f)
+			if err != nil {
+				return err
+			}
+			outFile.Close()
+
+			err = os.Rename(tmpFile, bunPath)
 			if err != nil {
 				return err
 			}

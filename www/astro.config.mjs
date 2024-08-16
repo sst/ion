@@ -154,6 +154,11 @@ const sidebar = [
     ],
   },
   { label: "Examples", slug: "docs/examples" },
+  {
+    label: "Deprecated",
+    collapsed: true,
+    items: [{ label: "Vpc.v1", slug: "docs/component/aws/vpc-v1" }],
+  },
 ];
 
 if (import.meta.env.DEV) {

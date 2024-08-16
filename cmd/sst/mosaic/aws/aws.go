@@ -22,9 +22,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iot"
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sst/ion/cmd/sst/mosaic/aws/iot_writer"
-	"github.com/sst/ion/cmd/sst/mosaic/bus"
 	"github.com/sst/ion/cmd/sst/mosaic/watcher"
 	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/bus"
 	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/project/provider"
 	"github.com/sst/ion/pkg/runtime"
@@ -157,26 +157,21 @@ func Start(
 
 	var pending sync.Map
 	initChan := make(chan MQTT.Message, 1000)
-	rebootChan := make(chan string, 1000)
 	shutdownChan := make(chan MQTT.Message, 1000)
 
 	prefix := fmt.Sprintf("ion/%s/%s", p.App().Name, p.App().Stage)
+	reader := iot_writer.NewReader()
 	if token := mqttClient.Subscribe(prefix+"/+/response/#", 1, func(c MQTT.Client, m MQTT.Message) {
 		slog.Info("iot", "topic", m.Topic())
-		splits := strings.Split(m.Topic(), "/")
-		requestID := splits[5]
-		payload := m.Payload()
-		go func() {
-			write, ok := pending.Load(requestID)
+		for _, msg := range reader.Read(m) {
+			write, ok := pending.Load(msg.ID)
 			if !ok {
-				workerID := splits[3]
-				rebootChan <- workerID
 				return
 			}
 			casted := write.(*io.PipeWriter)
-			casted.Write(payload)
+			casted.Write(msg.Data)
 			casted.Close()
-		}()
+		}
 	}); token.Wait() && token.Error() != nil {
 		return token.Error()
 	}
@@ -323,6 +318,9 @@ func Start(
 						RequestID:  info.CurrentRequestID,
 						Input:      responseBody,
 					})
+					topic := prefix + "/" + info.WorkerID + "/ack"
+					slog.Info("acking", "topic", topic)
+					mqttClient.Publish(topic, 1, false, []byte{1}).Wait()
 				}
 				if evt.path[len(evt.path)-1] == "response" {
 					bus.Publish(&FunctionResponseEvent{
@@ -393,18 +391,13 @@ func Start(
 					}
 					break
 				}
-			case workerID := <-rebootChan:
-				if _, ok := workers[workerID]; !ok {
-					slog.Info("asking for reboot", "workerID", workerID)
-					mqttClient.Publish(prefix+"/"+workerID+"/reboot", 1, false, []byte("reboot"))
-				}
-				break
 			case m := <-initChan:
 				slog.Info("got init")
 				bytes := m.Payload()
 				workerID := strings.Split(m.Topic(), "/")[3]
 				existingWorker, exists := workers[workerID]
 				if exists {
+					continue
 					existingWorker.Worker.Stop()
 				}
 				var payload struct {
@@ -454,10 +447,8 @@ func Start(
 		writer := iot_writer.New(mqttClient, prefix+"/"+workerID+"/request/"+requestID)
 		read, write := io.Pipe()
 		pending.Store(requestID, write)
-		slog.Info("forwarding request", "workerID", workerID, "requestID", requestID)
 		defer func() {
 			pending.Delete(requestID)
-			slog.Info("forwarding request done", "workerID", workerID, "requestID", requestID)
 		}()
 
 		writer.Write([]byte(r.Method + " /2018-06-01/" + strings.Join(path[3:], "/") + " HTTP/1.1\r\n"))
@@ -479,6 +470,7 @@ func Start(
 			io.Copy(write, r.Body)
 		}
 		writer.Flush()
+		writer.Close()
 
 		hijacker, ok := w.(http.Hijacker)
 		if !ok {

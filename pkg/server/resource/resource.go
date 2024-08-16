@@ -46,12 +46,14 @@ func (a *AwsResource) config() (aws.Config, error) {
 
 func Register(ctx context.Context, p *project.Project, r *rpc.Server) error {
 	awsResource := &AwsResource{ctx, p}
+	r.RegisterName("Resource.Run", NewRun())
 	r.RegisterName("Resource.Aws.BucketFiles", &BucketFiles{awsResource})
 	r.RegisterName("Resource.Aws.DistributionDeploymentWaiter", &DistributionDeploymentWaiter{awsResource})
 	r.RegisterName("Resource.Aws.DistributionInvalidation", &DistributionInvalidation{awsResource})
 	r.RegisterName("Resource.Aws.FunctionCodeUpdater", &FunctionCodeUpdater{awsResource})
 	r.RegisterName("Resource.Aws.HostedZoneLookup", &HostedZoneLookup{awsResource})
 	r.RegisterName("Resource.Aws.OriginAccessIdentity", &OriginAccessIdentity{awsResource})
+	r.RegisterName("Resource.Aws.OriginAccessControl", &OriginAccessControl{awsResource})
 	r.RegisterName("Resource.Aws.VectorTable", &VectorTable{awsResource})
 	return nil
 }

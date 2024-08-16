@@ -24,6 +24,8 @@ import {
 import { cloudfront, iam } from "@pulumi/aws";
 import { URL_UNAVAILABLE } from "./linkable.js";
 import { DevArgs } from "../dev.js";
+import { OriginAccessControl } from "./providers/origin-access-control.js";
+import { physicalName } from "../naming.js";
 
 export interface StaticSiteArgs extends BaseStaticSiteArgs {
   /**
@@ -404,7 +406,13 @@ export class StaticSite extends Component implements Link.Linkable {
       return;
     }
 
-    const outputPath = buildApp(name, args.build, sitePath, environment);
+    const outputPath = buildApp(
+      parent,
+      name,
+      args.build,
+      sitePath,
+      environment,
+    );
     const access = createCloudFrontOriginAccessControl();
     const bucket = createS3Bucket();
     const bucketFile = uploadAssets();
@@ -425,13 +433,9 @@ export class StaticSite extends Component implements Link.Linkable {
     });
 
     function createCloudFrontOriginAccessControl() {
-      return new cloudfront.OriginAccessControl(
-        `${name}OriginAccessControl`,
-        {
-          originAccessControlOriginType: "s3",
-          signingBehavior: "always",
-          signingProtocol: "sigv4",
-        },
+      return new OriginAccessControl(
+        `${name}S3AccessControl`,
+        { name: physicalName(64, name) },
         { parent },
       );
     }
@@ -453,9 +457,7 @@ export class StaticSite extends Component implements Link.Linkable {
         return request;
     }`,
         },
-        {
-          parent,
-        },
+        { parent },
       );
     }
 

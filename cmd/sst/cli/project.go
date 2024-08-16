@@ -14,7 +14,7 @@ import (
 )
 
 var logFile = (func() *os.File {
-	logFile, err := os.CreateTemp("", "sst-*.log")
+	logFile, err := os.CreateTemp("", "sst-"+time.Now().Format("2006-01-02-15-04-05-*")+".log")
 	if err != nil {
 		panic(err)
 	}
@@ -58,6 +58,11 @@ func (c *Cli) InitProject() (*project.Project, error) {
 	if err != nil {
 		return nil, util.NewReadableError(err, "Could not copy log file")
 	}
+	logFile.Close()
+	err = os.RemoveAll(filepath.Join(os.TempDir(), logFile.Name()))
+	if err != nil {
+		return nil, err
+	}
 	logFile = nextLogFile
 	c.configureLog()
 
@@ -94,9 +99,6 @@ func (c *Cli) InitProject() (*project.Project, error) {
 
 func (c *Cli) configureLog() {
 	writers := []io.Writer{logFile}
-	if c.Bool("verbose") {
-		writers = append(writers, os.Stderr)
-	}
 	writer := io.MultiWriter(writers...)
 	slog.SetDefault(
 		slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{
