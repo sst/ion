@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/nrednav/cuid2"
-	"github.com/pulumi/pulumi/sdk/v3"
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
@@ -34,7 +33,8 @@ var version = "dev"
 func main() {
 	// check if node_modules/.bin/sst exists
 	nodeModulesBinPath := filepath.Join("node_modules", ".bin", "sst")
-	if _, err := os.Stat(nodeModulesBinPath); err == nil && os.Getenv("npm_config_user_agent") == "" && os.Getenv("SST_SKIP_LOCAL") != "true" && version != "dev" {
+	binary, _ := os.Executable()
+	if _, err := os.Stat(nodeModulesBinPath); err == nil && !strings.Contains(binary, "node_modules") && os.Getenv("SST_SKIP_LOCAL") != "true" && version != "dev" {
 		// forward command to node_modules/.bin/sst
 		fmt.Println(ui.TEXT_WARNING_BOLD.Render("Warning: ") + "You are using a global installation of SST but you also have a local installation specified in your package.json. The local installation will be used but you should typically run it through your package manager.")
 		cmd := exec.Command(nodeModulesBinPath, os.Args[1:]...)
@@ -71,7 +71,7 @@ func main() {
 			}
 		} else {
 			slog.Error("exited with error", "err", err)
-			ui.Error("Unexpected error occurred. Please check the logs or run with --verbose for more details.")
+			ui.Error("Unexpected error occurred. Please check the logs in .sst/log/sst.log")
 		}
 		os.Exit(1)
 		return
@@ -227,7 +227,7 @@ var root = &cli.Command{
 				Short: "Enable verbose logging",
 				Long: strings.Join([]string{
 					"",
-					"Enables verbose logging for the CLI output.",
+					"Enables verbose logging that includes extra information in logs.",
 					"",
 					"```bash",
 					"sst [command] --verbose",
@@ -1069,19 +1069,7 @@ var root = &cli.Command{
 				return nil
 			},
 		},
-		{
-			Name: "version",
-			Description: cli.Description{
-				Short: "Print the version of the CLI",
-				Long:  `Prints the current version of the CLI.`,
-			},
-			Run: func(cli *cli.Cli) error {
-				fmt.Println("sst", version)
-				fmt.Println("pulumi", sdk.Version)
-				fmt.Println("config", global.ConfigDir())
-				return nil
-			},
-		},
+		CmdVersion,
 		{
 			Name: "upgrade",
 			Description: cli.Description{
@@ -1250,5 +1238,6 @@ var root = &cli.Command{
 				},
 			},
 		},
+		CmdCert,
 	},
 }

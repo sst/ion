@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -137,8 +138,6 @@ func (m *footer) Render(width int, next string) {
 	m.previous = next
 }
 
-type lineMsg string
-
 func (m *footer) Reset() {
 	m.started = false
 	m.skipped = 0
@@ -177,7 +176,7 @@ func (m *footer) Update(msg any) {
 		m.Reset()
 		break
 	case *apitype.ResourcePreEvent:
-		if msg.Metadata.Type == "pulumi:pulumi:Stack" || msg.Metadata.Type == "sst:sst:LinkRef" {
+		if slices.Contains(IGNORED_RESOURCES, msg.Metadata.Type) {
 			break
 		}
 		if msg.Metadata.Old != nil && msg.Metadata.Old.Parent != "" {
@@ -320,3 +319,5 @@ func (u *footer) formatURN(urn string) string {
 	}
 	return result
 }
+
+type lineMsg = string

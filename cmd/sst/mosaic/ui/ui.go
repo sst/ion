@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -17,12 +18,15 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/sst/ion/cmd/sst/mosaic/aws"
 	"github.com/sst/ion/cmd/sst/mosaic/cloudflare"
+	"github.com/sst/ion/cmd/sst/mosaic/ui/common"
 	"github.com/sst/ion/pkg/project"
 
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 type ProgressMode string
+
+var IGNORED_RESOURCES = []string{"sst:sst:Version", "sst:sst:LinkRef", "pulumi:pulumi:Stack"}
 
 const (
 	ProgressModeDeploy  ProgressMode = "deploy"
@@ -129,6 +133,9 @@ func (u *UI) Event(unknown interface{}) {
 	}
 	switch evt := unknown.(type) {
 
+	case *common.StdoutEvent:
+		u.println(evt.Line)
+
 	case *aws.FunctionInvokedEvent:
 		u.workerTime[evt.WorkerID] = time.Now()
 		u.printEvent(u.getColor(evt.WorkerID), TEXT_NORMAL_BOLD.Render(fmt.Sprintf("%-11s", "Invoke")), u.functionName(evt.FunctionID))
@@ -202,11 +209,12 @@ func (u *UI) Event(unknown interface{}) {
 		u.blank()
 
 	case *project.BuildFailedEvent:
+		u.reset()
 		u.printEvent(TEXT_DANGER, "Error", evt.Error)
 
 	case *apitype.ResourcePreEvent:
 		u.timing[evt.Metadata.URN] = time.Now()
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" || evt.Metadata.Type == "sst:sst:LinkRef" {
+		if slices.Contains(IGNORED_RESOURCES, evt.Metadata.Type) {
 			return
 		}
 
@@ -226,7 +234,7 @@ func (u *UI) Event(unknown interface{}) {
 		break
 
 	case *apitype.ResOutputsEvent:
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" || evt.Metadata.Type == "sst:sst:LinkRef" {
+		if slices.Contains(IGNORED_RESOURCES, evt.Metadata.Type) {
 			return
 		}
 
@@ -300,21 +308,12 @@ func (u *UI) Event(unknown interface{}) {
 
 		if evt.Severity == "info" {
 			for _, line := range strings.Split(strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace), "\n") {
-				slog.Info("line", "line", line)
-				u.printEvent(
-					TEXT_DIM,
-					"Log",
-					line,
-				)
+				u.println(line)
 			}
 		}
 
 		if evt.Severity == "info#err" {
-			u.printEvent(
-				TEXT_DIM,
-				"Log",
-				strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace),
-			)
+			u.println(strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace))
 		}
 
 	case *project.ProviderDownloadEvent:
@@ -570,7 +569,7 @@ func (u *UI) FormatURN(urn string) string {
 		if parent == "" {
 			break
 		}
-		if parent.Type().DisplayName() == "pulumi:pulumi:Stack" || parent.Type().DisplayName() == "sst:sst:LinkRef" {
+		if slices.Contains(IGNORED_RESOURCES, parent.Type().DisplayName()) {
 			break
 		}
 		child = parent
