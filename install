@@ -48,6 +48,9 @@ if [ -z "$requested_version" ]; then
     fi
 else
     url="https://github.com/sst/ion/releases/download/v${requested_version}/$filename"
+    if [ "${requested_version:0:1}" -ge 3 ]; then
+        url="https://github.com/sst/ion/releases/download/${requested_version}/$filename"
+    fi
     specific_version=$requested_version
 fi
 
