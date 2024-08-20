@@ -341,7 +341,7 @@ export interface ApiGatewayV2AuthorizerArgs {
    * const userPoolClient = new aws.cognito.UserPoolClient();
    * ```
    */
-  jwt: Input<{
+  jwt?: Input<{
     /**
      * Base domain of the identity provider that issues JSON Web Tokens.
      * @example
@@ -361,6 +361,50 @@ export interface ApiGatewayV2AuthorizerArgs {
      * @default `"$request.header.Authorization"`
      */
     identitySource?: Input<string>;
+  }>;
+  /**
+    * Create a Lambda authorizer that can be used by the routes.
+
+    * @example
+    * Configure a custom authorizer.
+    *
+    * ```js
+    * {
+    *   custom: {
+    *     function: "src/authorizer.index"
+    *   }
+    * }
+    * ```
+    *
+  */
+  custom?: Input<{
+    /**
+     * The Lambda request authorizer function. Takes the handler path or the function args.
+     * @example
+     * ```js
+     * {
+     *   function: "src/authorizer.index"
+     * }
+     * ```
+     */
+    function: Input<string | FunctionArgs>;
+
+    /**
+     * Specifies where to extract the information that is required to identify the client.
+     * @default []
+     */
+    identitySources?: Input<Input<string>[]>;
+    /**
+     * Time to live for cached authorizer results in seconds.
+     * @default `300`
+     * @example
+     * ```js
+     * {
+     *   ttl: 30
+     * }
+     * ```
+     */
+    ttl?: Input<number>;
   }>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -425,6 +469,27 @@ export interface ApiGatewayV2RouteArgs {
        */
       scopes?: Input<Input<string>[]>;
     }>;
+    /**
+     * Enable custom Lambda authorization for a given API route. Pass in the authorizer ID.
+     * @example
+     * ```js
+     * {
+     *   auth: {
+     *     custom: myAuthorizer.id
+     *   }
+     * }
+     * ```
+     *
+     * Where `myAuthorizer` is:
+     *
+     * ```js
+     * api.addAuthorizer({
+     *  name: "myAuthorizer",
+     *  function: "src/authorizer.index"
+     * });
+     * ```
+     */
+    custom?: Input<string>;
   }>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -1126,6 +1191,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
       api: {
         id: self.api.id,
         name: selfName,
+        executionArn: self.api.executionArn,
       },
       ...args,
     });

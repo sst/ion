@@ -41,6 +41,12 @@ export function createApiRoute(
         authorizationScopes: auth.jwt.scopes,
         authorizerId: auth.jwt.authorizer,
       };
+    if (auth?.custom) {
+      return {
+        authorizationType: "CUSTOM",
+        authorizerId: auth.custom,
+      };
+    }
     return { authorizationType: "NONE" };
   });
 
