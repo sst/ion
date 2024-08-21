@@ -1,4 +1,4 @@
-import { IoTCustomAuthorizerHandler } from "aws-lambda";
+import { IoTCustomAuthorizerHandler, PolicyDocument } from "aws-lambda";
 
 /**
  * The `realtime` client SDK is available through the following.
@@ -61,6 +61,28 @@ export module realtime {
      * ```
      */
     publish?: string[];
+
+    /**
+     * Any additional policy documents to attach to the client.
+     * @example
+     * ```js
+     * {
+     *   policyDocuments: [
+     *     {
+     *       Version: "2012-10-17",
+     *       Statement: [
+     *         {
+     *           Action: "iot:GetThingShadow",
+     *           Effect: "Allow",
+     *           Resource: "*",
+     *         },
+     *       ],
+     *     },
+     *   ],
+     * };
+     * ```
+     */
+    policyDocuments?: PolicyDocument[];
   }
 
   /**
@@ -96,6 +118,7 @@ export module realtime {
         refreshAfterInSeconds = 300,
         subscribe,
         publish,
+        policyDocuments,
       } = await input(token);
       return {
         isAuthenticated: true,
@@ -147,6 +170,7 @@ export module realtime {
                 : []),
             ],
           },
+          ...(policyDocuments ?? []),
         ],
       };
     };
