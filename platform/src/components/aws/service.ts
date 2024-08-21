@@ -141,23 +141,12 @@ export class Service extends Component implements Link.Linkable {
     function normalizeVpc() {
       // "vpc" is a Vpc component
       if (args.vpc instanceof Vpc) {
-        const result = {
-          id: args.vpc.id,
-          publicSubnets: args.vpc.publicSubnets,
-          privateSubnets: args.vpc.privateSubnets,
-          securityGroups: args.vpc.securityGroups,
-        };
-        return args.vpc.nodes.natGateways.apply((natGateways) => {
-          if (natGateways.length === 0)
-            throw new VisibleError(
-              `The VPC configured for the service does not have NAT enabled. Enable NAT by configuring "nat" on the "sst.aws.Vpc" component.`,
-            );
-          return result;
-        });
+        return output(args.vpc)
       }
 
-      // "vpc" is object
-      return output(args.vpc);
+      return output(args.vpc).apply((v) => {
+        return Vpc.get(`${name}Vpc`, v.id)
+      })
     }
 
     function normalizeRegion() {
@@ -647,8 +636,8 @@ export class Service extends Component implements Link.Linkable {
             desiredCount: scaling.min,
             launchType: "FARGATE",
             networkConfiguration: {
-              assignPublicIp: false,
-              subnets: vpc.privateSubnets,
+              assignPublicIp: vpc.nodes.natGateways.apply(n => n.length === 0),
+              subnets: vpc.nodes.natGateways.apply(n => n.length === 0 ? vpc.publicSubnets : vpc.privateSubnets),
               securityGroups: vpc.securityGroups,
             },
             deploymentCircuitBreaker: {
