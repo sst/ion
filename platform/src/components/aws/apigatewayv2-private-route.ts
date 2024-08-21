@@ -73,7 +73,7 @@ export class ApiGatewayV2PrivateRoute extends Component {
             integrationUri: args.arn,
             integrationMethod: "ANY",
           },
-          { parent: self },
+          { parent: self, provider: opts?.provider },
         ),
       );
     }
