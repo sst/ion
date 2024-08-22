@@ -66,7 +66,7 @@ export class ApiGatewayV2Authorizer extends Component {
               issuer: jwt.issuer,
             })),
           },
-          { parent: self, provider: opts?.provider },
+          { parent: self },
         ),
       );
     }

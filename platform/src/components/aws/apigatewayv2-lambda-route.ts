@@ -65,7 +65,7 @@ export class ApiGatewayV2LambdaRoute extends Component {
           description: interpolate`${api.name} route ${route}`,
         },
         args.handlerTransform,
-        { parent: self, provider: opts?.provider },
+        { parent: self },
       );
     }
 
@@ -78,7 +78,7 @@ export class ApiGatewayV2LambdaRoute extends Component {
           principal: "apigateway.amazonaws.com",
           sourceArn: interpolate`${api.executionArn}/*`,
         },
-        { parent: self, provider: opts?.provider },
+        { parent: self },
       );
     }
 
@@ -93,7 +93,7 @@ export class ApiGatewayV2LambdaRoute extends Component {
             integrationUri: fn.arn,
             payloadFormatVersion: "2.0",
           },
-          { parent: self, dependsOn: [permission], provider: opts?.provider },
+          { parent: self, dependsOn: [permission] },
         ),
       );
     }

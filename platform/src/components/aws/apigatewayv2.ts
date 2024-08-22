@@ -1124,13 +1124,17 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     const selfName = this.constructorName;
     const nameSuffix = logicalName(args.name);
 
-    return new ApiGatewayV2Authorizer(`${selfName}Authorizer${nameSuffix}`, {
-      api: {
-        id: self.api.id,
-        name: selfName,
+    return new ApiGatewayV2Authorizer(
+      `${selfName}Authorizer${nameSuffix}`,
+      {
+        api: {
+          id: self.api.id,
+          name: selfName,
+        },
+        ...args,
       },
-      ...args,
-    });
+      { provider: this.constructorOpts.provider },
+    );
   }
 
   /** @internal */
