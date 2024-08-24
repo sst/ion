@@ -56,17 +56,17 @@ export class DnsValidatedCertificate extends Component {
     function createDnsRecords() {
       return all([dns, certificate.domainValidationOptions]).apply(
         ([dns, options]) =>
-          options.map((option) =>
-            dns.createRecord(
-              name,
+          options.map((option, i) => {
+            return dns.createRecord(
+              name + (i > 0 ? ''+i : ''),
               {
                 type: option.resourceRecordType,
                 name: option.resourceRecordName,
                 value: option.resourceRecordValue,
               },
               { parent },
-            ),
-          ),
+            );
+          }),
       );
     }
 
