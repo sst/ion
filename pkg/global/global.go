@@ -1,6 +1,7 @@
 package global
 
 import (
+	"archive/tar"
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
@@ -20,6 +21,8 @@ import (
 var PULUMI_VERSION = "v" + sdk.Version.String()
 
 const BUN_VERSION = "1.1.24"
+
+const UV_VERSION = "0.3.2"
 
 var configDir = (func() string {
 	home, err := os.UserConfigDir()
@@ -122,12 +125,131 @@ func BunPath() string {
 	return filepath.Join(BinPath(), "bun")
 }
 
+func UvPath() string {
+	return filepath.Join(BinPath(), "uv")
+}
+
 func BinPath() string {
 	return filepath.Join(configDir, "bin")
 }
 
 func CertPath() string {
 	return filepath.Join(configDir, "cert")
+}
+
+func NeedsUv() bool {
+	path := UvPath()
+	slog.Info("checking for uv", "path", path)
+	if _, err := os.Stat(path); err != nil {
+		return true
+	}
+	cmd := exec.Command(path, "--version")
+	output, err := cmd.Output()
+	if err != nil {
+		return true
+	}
+	version := strings.TrimSpace(string(output))
+	return version != UV_VERSION
+}
+
+func InstallUv() error {
+	slog.Info("uv install")
+	goos := runtime.GOOS
+	arch := runtime.GOARCH
+	uvPath := UvPath()
+
+	var filename string
+	switch {
+	case goos == "darwin" && arch == "arm64":
+		filename = "uv-aarch64-apple-darwin.tar.gz"
+	case goos == "darwin" && arch == "amd64":
+		filename = "uv-x86_64-apple-darwin.tar.gz"
+	case goos == "linux" && arch == "arm64":
+		filename = "uv-aarch64-unknown-linux-gnu.tar.gz"
+	case goos == "linux" && arch == "amd64":
+		filename = "uv-x86_64-unknown-linux-gnu.tar.gz"
+	default:
+	}
+	if filename == "" {
+		return fmt.Errorf("unsupported platform: %s %s", goos, arch)
+	}
+
+	url := "https://github.com/astral-sh/uv/releases/download/v" + UV_VERSION + "/" + filename
+	slog.Info("uv downloading", "url", url)
+	response, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", response.Status)
+	}
+
+	// Create a temp directory to extract the tar.gz file
+	tempDir, err := os.MkdirTemp("", "uv-download")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Extract the tar.gz
+	err = extractTarGz(response.Body, tempDir)
+	if err != nil {
+		return err
+	}
+
+	// Move the binary to the final location
+	tmpFile := filepath.Join(tempDir, "uv")
+	if _, err := os.Stat(tmpFile); os.IsNotExist(err) {
+		return fmt.Errorf("failed to find the uv binary in the archive")
+	}
+
+	err = os.Rename(tmpFile, uvPath)
+	if err != nil {
+		return err
+	}
+
+	err = os.Chmod(uvPath, 0755)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Helper function to extract tar.gz files
+func extractTarGz(gzipStream io.Reader, destination string) error {
+	uncompressedStream, err := gzip.NewReader(gzipStream)
+	if err != nil {
+		return fmt.Errorf("extractTarGz: NewReader failed: %v", err)
+	}
+	tarReader := tar.NewReader(uncompressedStream)
+
+	for {
+		header, err := tarReader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("extractTarGz: Next() failed: %v", err)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeReg:
+			outFile, err := os.Create(filepath.Join(destination, header.Name))
+			if err != nil {
+				return fmt.Errorf("extractTarGz: Create() failed: %v", err)
+			}
+			if _, err := io.Copy(outFile, tarReader); err != nil {
+				return fmt.Errorf("extractTarGz: Copy() failed: %v", err)
+			}
+			outFile.Close()
+		default:
+			// Skip directories and other types
+		}
+	}
+
+	return nil
 }
 
 func NeedsBun() bool {

@@ -12,7 +12,7 @@ import {
   interpolate,
   unsecret,
 } from "@pulumi/pulumi";
-import { build } from "../../runtime/node.js";
+import { buildNode } from "../../runtime/node.js";
 import { FunctionCodeUpdater } from "./providers/function-code-updater.js";
 import { bootstrap } from "./helpers/bootstrap.js";
 import { Duration, DurationMinutes, toSeconds } from "../duration.js";
@@ -34,6 +34,7 @@ import {
 } from "@pulumi/aws";
 import { Permission, permission } from "./permission.js";
 import { Vpc } from "./vpc.js";
+import { buildPython } from "../../runtime/python.js";
 
 export type FunctionPermissionArgs = {
   /**
@@ -237,7 +238,7 @@ export interface FunctionArgs {
    * }
    * ```
    */
-  runtime?: Input<"nodejs18.x" | "nodejs20.x" | "provided.al2023">;
+  runtime?: Input<"nodejs18.x" | "nodejs20.x" | "provided.al2023" | "python3.11">;
   /**
    * Path to the source code directory for the function. By default, the handler is
    * bundled with [esbuild](https://esbuild.github.io/). Use `bundle` to skip bundling.
@@ -979,10 +980,13 @@ export class Function extends Component implements Link.Linkable {
     const { handler, wrapper } = buildHandlerWrapper();
     const role = createRole();
     const zipPath = zipBundleFolder();
+
+
     const bundleHash = calculateHash();
     const file = createBucketObject();
     const logGroup = createLogGroup();
     const fn = createFunction();
+
     const codeUpdater = updateFunctionCode();
 
     const fnUrl = createUrl();
@@ -1187,7 +1191,37 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function buildHandler() {
-      return dev.apply((dev) => {
+      return all([runtime, dev]).apply(([runtime, dev]) => {
+        if (runtime === "python3.11") {
+          if (dev) {
+            return {
+              handler: "bootstrap",
+              bundle: path.join($cli.paths.platform, "dist", "bridge"),
+            }
+          }
+
+          const buildResult = all([args, linkData]).apply(
+            async ([args, linkData]) => {
+              const result = await buildPython(name, {
+                ...args,
+                links: linkData,
+              });
+              if (result.type === "error") {
+                throw new Error(
+                  `Failed to build function "${args.handler}": ` +
+                  result.errors.join("\n").trim(),
+                );
+              }
+              return result;
+            },
+          );
+
+          return {
+            handler: buildResult.handler,
+            bundle: buildResult.out,
+          }
+        }
+
         if (dev) {
           return {
             handler: "bootstrap",
@@ -1204,7 +1238,7 @@ export class Function extends Component implements Link.Linkable {
 
         const buildResult = all([args, linkData]).apply(
           async ([args, linkData]) => {
-            const result = await build(name, {
+            const result = await buildNode(name, {
               ...args,
               links: linkData,
             });
@@ -1221,7 +1255,8 @@ export class Function extends Component implements Link.Linkable {
           handler: buildResult.handler,
           bundle: buildResult.out,
         };
-      });
+      
+    })
     }
 
     function buildHandlerWrapper() {
@@ -1232,9 +1267,13 @@ export class Function extends Component implements Link.Linkable {
         linkData,
         streaming,
         injections,
+        runtime,
       ]).apply(
-        async ([dev, bundle, handler, linkData, streaming, injections]) => {
+        async ([dev, bundle, handler, linkData, streaming, injections, runtime]) => {
           if (dev) return { handler };
+          if (runtime === "python3.11") {
+            return { handler };
+          }
 
           const hasUserInjections = injections.length > 0;
           // already injected via esbuild when bundle is undefined

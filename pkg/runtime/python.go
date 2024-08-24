@@ -1,0 +1,261 @@
+package runtime
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	"github.com/BurntSushi/toml"
+	"github.com/sst/ion/internal/util"
+)
+
+type PythonWorker struct {
+	stdout io.ReadCloser
+	stderr io.ReadCloser
+	cmd    *exec.Cmd
+}
+
+func (w *PythonWorker) Stop() {
+	// Terminate the whole process group
+	util.TerminateProcess(w.cmd.Process.Pid)
+}
+
+// TODO: walln - figure out why logs are not being captured locally
+// the exist in cloudwatch so stdout does work but something is wrong here
+func (w *PythonWorker) Logs() io.ReadCloser {
+	reader, writer := io.Pipe()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if _, err := io.Copy(writer, w.stdout); err != nil {
+			slog.Error("error copying stdout", "err", err)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		if _, err := io.Copy(writer, w.stderr); err != nil {
+			slog.Error("error copying stderr", "err", err)
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		defer writer.Close() // ensure the writer is closed after copying
+	}()
+
+	return reader
+}
+
+type PythonRuntime struct {
+	lastBuiltHandler map[string]string
+}
+
+func newPythonRuntime() *PythonRuntime {
+	return &PythonRuntime{
+		lastBuiltHandler: map[string]string{},
+	}
+}
+
+func (r *PythonRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOutput, error) {
+	slog.Info("building python function", "handler", input.Warp.Handler)
+
+	file, ok := r.getFile(input)
+	if !ok {
+		return nil, fmt.Errorf("handler not found: %v", input.Warp.Handler)
+	}
+	filepath.Rel(input.Project.PathRoot(), file)
+
+	targetDir := filepath.Join(input.Out(), filepath.Dir(input.Warp.Handler))
+	if err := os.MkdirAll(targetDir, os.ModePerm); err != nil {
+		return nil, fmt.Errorf("failed to create target directory: %v", err)
+	}
+
+	target := filepath.Join(targetDir, filepath.Base(file))
+
+	slog.Info("Copying python function", "file", file, "target", target)
+
+	// Copy the handler file to the output directory
+	if err := copyFile(file, target); err != nil {
+		return nil, err
+	}
+
+	// Find the closest pyproject.toml
+	startingPath := filepath.Dir(file)
+	pyProjectFile, err := FindClosestPyProjectToml(startingPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy pyproject.toml to the output directory
+	if err := copyFile(pyProjectFile, path.Join(targetDir, path.Base(pyProjectFile))); err != nil {
+		return nil, err
+	}
+
+	r.lastBuiltHandler[input.Warp.FunctionID] = file
+
+	errors := []string{}
+
+	return &BuildOutput{
+		Handler: input.Warp.Handler,
+		Errors:  errors,
+	}, nil
+}
+
+func (r *PythonRuntime) Match(runtime string) bool {
+	return strings.HasPrefix(runtime, "python")
+}
+
+type PyProject struct {
+	Project struct {
+		Dependencies []string `toml:"dependencies"`
+	} `toml:"project"`
+}
+
+func (r *PythonRuntime) Run(ctx context.Context, input *RunInput) (Worker, error) {
+	// Get the directory of the Handler
+	handlerDir := filepath.Dir(filepath.Join(input.Build.Out, input.Build.Handler))
+
+	// We have to manually construct the dependencies to install because uv curerntly does not support importing a 
+	// foreign pyproject.toml as a configuration file and we have to run the python-runtime file rather than
+	// the handler file
+
+	// Get the absolute path of the pyproject.toml file
+	pyprojectFile, err := FindClosestPyProjectToml(handlerDir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decode the TOML file
+	var pyProject PyProject
+	if _, err := toml.DecodeFile(pyprojectFile, &pyProject); err != nil {
+		slog.Error("Error decoding TOML file: %v", err)
+	}
+
+	// Extract the dependencies
+	dependencies := pyProject.Project.Dependencies
+	
+	args := []string{
+		"run",
+		"--with",
+		"requests",
+	}
+
+	for _, dep := range dependencies {
+		args = append(args, "--with", dep)
+	}
+
+	args = append(args,
+		filepath.Join(input.Project.PathPlatformDir(), "/dist/python-runtime/index.py"),
+		filepath.Join(input.Build.Out, input.Build.Handler),
+		input.WorkerID,
+	)
+	
+
+	cmd := exec.CommandContext(
+		ctx, 
+		"uv",
+		args...	)
+
+	util.SetProcessGroupID(cmd)
+	cmd.Cancel = func() error {
+		return util.TerminateProcess(cmd.Process.Pid)
+	}
+
+	cmd.Env = append(input.Env, "AWS_LAMBDA_RUNTIME_API="+input.Server)
+	slog.Info("starting worker", "env", cmd.Env, "args", cmd.Args)
+	cmd.Dir = input.Build.Out
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stdout pipe: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stderr pipe: %v", err)
+	}
+	cmd.Start()
+	return &PythonWorker{
+		stdout,
+		stderr,
+		cmd,
+	}, nil
+}
+
+func (r *PythonRuntime) ShouldRebuild(functionID string, file string) bool {
+	return true
+}
+
+var PYTHON_EXTENSIONS = []string{".py"}
+
+func (r *PythonRuntime) getFile(input *BuildInput) (string, bool) {
+	slog.Info("getting python file", "handler", input.Warp.Handler)
+	dir := filepath.Dir(input.Warp.Handler)
+	base := strings.TrimSuffix(filepath.Base(input.Warp.Handler), filepath.Ext(input.Warp.Handler))
+	for _, ext := range PYTHON_EXTENSIONS {
+		file := filepath.Join(input.Project.PathRoot(), dir, base+ext)
+		if _, err := os.Stat(file); err == nil {
+			return file, true
+		}
+	}
+	return "", false
+}
+
+func copyFile(src, dst string) error {
+	// Open the source file
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	// Create the destination file
+	destinationFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destinationFile.Close()
+
+	// Copy the content from source to destination
+	_, err = io.Copy(destinationFile, sourceFile)
+	if err != nil {
+		return err
+	}
+
+	// Flush the writes to stable storage
+	err = destinationFile.Sync()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+
+// FindClosestPyProjectToml traverses up the directory tree to find the closest pyproject.toml file.
+func FindClosestPyProjectToml(startingPath string) (string, error) {
+	dir := startingPath
+	for {
+		pyProjectFile := filepath.Join(dir, "pyproject.toml")
+		if _, err := os.Stat(pyProjectFile); err == nil {
+			return pyProjectFile, nil
+		}
+
+		// Move up one directory
+		parentDir := filepath.Dir(dir)
+		if parentDir == dir {
+			// Reached the root directory
+			break
+		}
+		dir = parentDir
+	}
+	return "", fmt.Errorf("pyproject.toml not found")
+}
