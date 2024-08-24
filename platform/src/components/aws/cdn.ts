@@ -503,9 +503,10 @@ export class Cdn extends Component {
       domain.apply((domain) => {
         if (!domain.dns) return;
 
+        let i = 0;
         for (const recordName of [domain.name, ...domain.aliases]) {
           domain.dns.createAlias(
-            name,
+            name + (i > 0 ? ''+i : ''),
             {
               name: recordName,
               aliasName: distribution.domainName,
@@ -513,6 +514,7 @@ export class Cdn extends Component {
             },
             { parent },
           );
+          i++;
         }
       });
     }
