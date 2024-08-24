@@ -54,9 +54,14 @@ export class DnsValidatedCertificate extends Component {
     }
 
     function createDnsRecords() {
+      const usedNames: string[] = []
       return all([dns, certificate.domainValidationOptions]).apply(
         ([dns, options]) =>
           options.map((option, i) => {
+            if(usedNames.indexOf(option.resourceRecordName) >= 0) {
+              return undefined;
+            }
+            usedNames.push(option.resourceRecordName);
             return dns.createRecord(
               name + (i > 0 ? ''+i : ''),
               {
