@@ -1,5 +1,4 @@
 import importlib
-import io
 import json
 import os
 import sys
@@ -26,6 +25,12 @@ def report_error(ex, context=None):
         headers={"Content-Type": "application/json"},
         data=json.dumps(error_response),
     )
+
+
+def log(message):
+    print(message, flush=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
 
 
 # Parse the handler from command-line arguments
@@ -56,12 +61,6 @@ except Exception as ex:
     report_error(ex)
     sys.exit(1)
 
-# Capture stdout and stderr
-stdout_buffer = io.StringIO()
-stderr_buffer = io.StringIO()
-sys.stdout = stdout_buffer
-sys.stderr = stderr_buffer
-
 # Simulating Lambda's event loop
 while True:
     try:
@@ -89,25 +88,17 @@ while True:
         event = response.json()
 
     except Exception as ex:
+        log(f"Error getting next invocation: {ex}")
         report_error(ex)
         continue
 
     # Run the handler function
     try:
-        print(f"invoking handler {handler_function}")
         result = handler_function(event, context)
-        print(f"handler returned {result}")
     except Exception as ex:
+        log(f"Error running handler: {ex}")
         report_error(ex, context)
         continue
-
-    # Capture stdout and stderr output
-    stdout = stdout_buffer.getvalue()
-    stderr = stderr_buffer.getvalue()
-
-    # Log stdout and stderr output
-    print(stdout)
-    print(stderr)
 
     # Send the response back to Lambda
     while True:
@@ -122,8 +113,5 @@ while True:
             time.sleep(0.5)
             continue
 
-    # Clear the buffers for the next event
-    stdout_buffer.truncate(0)
-    stdout_buffer.seek(0)
-    stderr_buffer.truncate(0)
-    stderr_buffer.seek(0)
+    sys.stdout.flush()
+    sys.stderr.flush()

@@ -32,25 +32,37 @@ func (w *PythonWorker) Stop() {
 func (w *PythonWorker) Logs() io.ReadCloser {
 	reader, writer := io.Pipe()
 
-	var wg sync.WaitGroup
-	wg.Add(2)
+	go func() {
+		defer writer.Close()
 
-	go func() {
-		defer wg.Done()
-		if _, err := io.Copy(writer, w.stdout); err != nil {
-			slog.Error("error copying stdout", "err", err)
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		if _, err := io.Copy(writer, w.stderr); err != nil {
-			slog.Error("error copying stderr", "err", err)
-		}
-	}()
+		var wg sync.WaitGroup
+		wg.Add(2)
 
-	go func() {
+		copyStream := func(dst io.Writer, src io.Reader, name string) {
+			defer wg.Done()
+			buf := make([]byte, 1024)
+			for {
+				n, err := src.Read(buf)
+				if n > 0 {
+					_, werr := dst.Write(buf[:n])
+					if werr != nil {
+						slog.Error("error writing to pipe", "stream", name, "err", werr)
+						return
+					}
+				}
+				if err != nil {
+					if err != io.EOF {
+						slog.Error("error reading from stream", "stream", name, "err", err)
+					}
+					return
+				}
+			}
+		}
+
+		go copyStream(writer, w.stdout, "stdout")
+		go copyStream(writer, w.stderr, "stderr")
+
 		wg.Wait()
-		defer writer.Close() // ensure the writer is closed after copying
 	}()
 
 	return reader
