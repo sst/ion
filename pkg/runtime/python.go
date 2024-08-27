@@ -27,8 +27,6 @@ func (w *PythonWorker) Stop() {
 	util.TerminateProcess(w.cmd.Process.Pid)
 }
 
-// TODO: walln - figure out why logs are not being captured locally
-// the exist in cloudwatch so stdout does work but something is wrong here
 func (w *PythonWorker) Logs() io.ReadCloser {
 	reader, writer := io.Pipe()
 
