@@ -104,9 +104,14 @@ const function = new sst.aws.Function("MyFunction", {
 There are two guidelines to follow when naming your components:
 
 1. The names of SST's built-in components and components extended with [`Linkable.wrap`](/docs/component/linkable/#static-wrap) need to be global across your entire app.
-2. Optionally, use PascalCase for the component name. For example, `MyFunction` instead of `myFunction` or `my_function`.
 
-These make it possible to [link resources](/docs/linking/) together in your SST app.
+   This allows [Resource Linking](linking) to look these resources up at runtime.
+
+2. Optionally, use PascalCase for the component name.
+
+   For example, you might name your bucket, `MyBucket` and use Resource Linking to look it up with `Resource.MyBucket`.
+
+   However this is purely cosmetic. You can use kebab case. So `my-bucket`, and look it up using `Resource['my-bucket']`.
 
 ---
 
@@ -184,7 +189,7 @@ This takes either:
 Similar to the component transform, we have the global `$transform`. This allows you to transform how a component of a given type is created.
 
 :::tip
-Set global defaults for your components with `$transform`.
+Set common props across all your components with `$transform`.
 :::
 
 For example, to set the runtime for all function components.
@@ -195,7 +200,7 @@ $transform(sst.aws.Function, (args, opts) => {
 })
 ```
 
-This sets the runtime for any `Function` component that'll be created after this call. And it cannot be overridden by the component.
+This sets the runtime for any `Function` component that'll be created after this call. But it cannot be overridden by the component.
 
 :::note
 The `$transform` props cannot be overridden by the component when it's created.
@@ -258,7 +263,7 @@ These are values that are not available yet and will be resolved as the deploy p
 
 This makes it so that parts of your app are not blocked and all your resources are deployed as concurrently as possible.
 
-For example, let's create a function with a url.
+For example, let's create a function with an url.
 
 ```ts title="sst.config.ts"
 const myFunction = new sst.aws.Function("MyFunction", {
@@ -404,40 +409,44 @@ Read more about [`$resolve`](/docs/reference/global/#resolve).
 
 ## Versioning
 
-SST components evolve over time, sometimes introducing breaking changes. To maintain backward compatibility, we implement component versioning.
+SST components evolve over time, sometimes introducing breaking changes. To maintain backwards compatibility, we implement a component versioning scheme.
 
-By default, the deployment process will raise an error if a component's version has been updated. This ensures you're aware of potential breaking changes before they affect your application.
+For example, we released a new version the [`Vpc`](component/aws/vpc) that does not create a NAT Gateway by default. To roll this out the previous version of the `Vpc` component was renamed to [`Vpc.v1`](component/aws/vpc-v1).
+
+Now if you were using the original `Vpc` component, update SST, and deploy; you'll get an error during the deploy saying that there's a new version of this component.
+
+This allows you to decide what you want to do with this component.
 
 ---
 
-#### Use a previous version
+#### Continue with the old version
 
-If you prefer to continue using a previous version of a component, you can pin it explicitly:
+If you prefer to continue using the older version of a component, you can rename it. 
 
-```ts
-const vpc = new sst.aws.Vpc.v1("MyVpc");
-
-new sst.aws.Function("MyFunction", {
-  handler: "src/lambda.handler",
-  vpc
-})
+```diff title="sst.config.ts" lang="ts"
+- const vpc = new sst.aws.Vpc("MyVpc");
++ const vpc = new sst.aws.Vpc.v1("MyVpc");
 ```
+
+Now if you deploy again, SST knows that you want to stick with the old version and it won't error.
 
 ---
 
 #### Update to the latest version
 
-To update to the latest version of a component, you need to rename the component. This process removes the previously created component and recreates it with the new name and the latest version.
+Instead, if you wanted to update to the latest version, you'll have to rename the component.
 
-```ts
-const vpc = new sst.aws.Vpc("NewVpc");
-
-new sst.aws.Function("MyFunction", {
-  handler: "src/lambda.handler",
-  vpc
-})
+```diff title="sst.config.ts" lang="ts"
+- const vpc = new sst.aws.Vpc("MyVpc");
++ const vpc = new sst.aws.Vpc("MyNewVpc");
 ```
 
+Now if you redeploy, it'll remove the previously created component and recreate it with the new name and the latest version.
+
+This is because from SST's perspective it looks like the `MyVpc` component was removed and a new component called `MyNewVpc` was added.
+
 :::caution
-Replacing components may cause temporary downtime in your application.
+Removing and recreating components may cause temporary downtime in your app.
 :::
+
+Since these are being recreated you've to be aware that there might be a period of time when that resource is not around. This might cause some downtime, depending on the resource.

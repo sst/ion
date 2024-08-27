@@ -252,6 +252,7 @@ export class Bus extends Component implements Link.Linkable {
     args: BusSubscriberArgs = {},
   ) {
     return Bus._subscribeFunction(
+      this.constructorName,
       this.nodes.bus.name,
       this.nodes.bus.arn,
       subscriber,
@@ -305,21 +306,27 @@ export class Bus extends Component implements Link.Linkable {
     subscriber: string | FunctionArgs,
     args?: BusSubscriberArgs,
   ) {
-    const busName = output(busArn).apply(
-      (busArn) => parseEventBusArn(busArn).busName,
-    );
-    return this._subscribeFunction(busName, busArn, subscriber, args);
+    return output(busArn).apply((busArn) => {
+      const busName = parseEventBusArn(busArn).busName;
+      return this._subscribeFunction(
+        logicalName(busName),
+        busName,
+        busArn,
+        subscriber,
+        args,
+      );
+    });
   }
 
   private static _subscribeFunction(
-    name: Input<string>,
+    name: string,
+    busName: Input<string>,
     busArn: Input<string>,
     subscriber: string | FunctionArgs,
     args: BusSubscriberArgs = {},
     opts: ComponentResourceOptions = {},
   ) {
-    return all([name, subscriber, args]).apply(([name, subscriber, args]) => {
-      const prefix = logicalName(name);
+    return all([subscriber, args]).apply(([subscriber, args]) => {
       const suffix = logicalName(
         hashStringToPrettyString(
           [
@@ -332,9 +339,9 @@ export class Bus extends Component implements Link.Linkable {
       );
 
       return new BusLambdaSubscriber(
-        `${prefix}Subscriber${suffix}`,
+        `${name}Subscriber${suffix}`,
         {
-          bus: { name, arn: busArn },
+          bus: { name: busName, arn: busArn },
           subscriber,
           ...args,
         },

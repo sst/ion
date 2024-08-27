@@ -52,7 +52,7 @@ app.listen(PORT, () => {
 Now let's initialize SST in our app.
 
 ```bash
-npx sst init
+npx sst@latest init
 npm install
 ```
 
@@ -115,6 +115,8 @@ const bucket = new sst.aws.Bucket("MyBucket", {
   public: true
 });
 ```
+
+Add this above the `Vpc` component.
 
 #### Link the bucket
 

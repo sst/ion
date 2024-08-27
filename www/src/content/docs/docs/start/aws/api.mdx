@@ -27,7 +27,7 @@ npm init -y
 Now let's initialize SST in our app.
 
 ```bash
-npx sst init
+npx sst@latest init
 npm install
 ```
 
@@ -81,6 +81,8 @@ const bucket = new sst.aws.Bucket("MyBucket", {
   public: true
 });
 ```
+
+Add this above the `Api` component.
 
 #### Link the bucket
 
