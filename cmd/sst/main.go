@@ -19,6 +19,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/sst/ion/cmd/sst/cli"
 	"github.com/sst/ion/cmd/sst/mosaic/dev"
+	"github.com/sst/ion/cmd/sst/mosaic/errors"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
@@ -55,7 +56,7 @@ func main() {
 	})
 	err := run()
 	if err != nil {
-		err := TransformError(err)
+		err := errors.Transform(err)
 		errorMessage := err.Error()
 		if len(errorMessage) > 255 {
 			errorMessage = errorMessage[:255]
@@ -73,6 +74,7 @@ func main() {
 			slog.Error("exited with error", "err", err)
 			ui.Error("Unexpected error occurred. Please check the logs in .sst/log/sst.log")
 		}
+		telemetry.Close()
 		os.Exit(1)
 		return
 	}
@@ -224,11 +226,13 @@ var root = &cli.Command{
 				Short: "Enable verbose logging",
 				Long: strings.Join([]string{
 					"",
-					"Enables verbose logging that includes extra information in logs.",
+					"Prints extra information to the log files in the `.sst/` directory.",
 					"",
 					"```bash",
 					"sst [command] --verbose",
 					"```",
+					"",
+					"To also view this on the screen, use the `--print-logs` flag.",
 					"",
 				}, "\n"),
 			},
@@ -240,11 +244,17 @@ var root = &cli.Command{
 				Short: "Print logs to stderr",
 				Long: strings.Join([]string{
 					"",
-					"Print logs to stderr - useful if running in CI.",
+					"Print the logs to the screen. These are logs that are written to the `.sst/` directory.",
 					"",
 					"```bash",
 					"sst [command] --print-logs",
 					"```",
+					"It can also be set using the `SST_PRINT_LOGS` environment variable.",
+					"",
+					"```bash",
+					"SST_PRINT_LOGS=1 sst [command]",
+					"```",
+					"This is useful when running in a CI environment.",
 					"",
 				}, "\n"),
 			},
@@ -427,6 +437,22 @@ var root = &cli.Command{
 				Short: "Deploy your application",
 				Long: strings.Join([]string{
 					"Deploy your application. By default, it deploys to your personal stage.",
+					"",
+					"All the resources are deployed as concurrently as possible, based on their dependencies.",
+					"For resources like your sites and functions; it first builds them and then deploys the generated assets.",
+					"",
+					"Since the build processes for some of these resources, like Next.js, take a lot of memory, the concurrency is limited by default of 4.",
+					"You can change this by setting the `SST_BUILD_CONCURRENCY` environment variable.",
+					"",
+					"```bash frame=\"none\"",
+					"SST_BUILD_CONCURRENCY=8 sst deploy",
+					"```",
+					"",
+					"You can change this based on how much memory your CI environment has.",
+					"",
+					":::tip",
+					"You can turn down the build concurrency if you are running out of memory in CI.",
+					":::",
 					"",
 					"Optionally, deploy your app to a specific stage.",
 					"",
@@ -1252,5 +1278,6 @@ var root = &cli.Command{
 			},
 		},
 		CmdCert,
+		CmdDiagnostic,
 	},
 }

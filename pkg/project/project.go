@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -62,11 +61,15 @@ func Discover() (string, error) {
 }
 
 func ResolveWorkingDir(cfgPath string) string {
-	return path.Join(filepath.Dir(cfgPath), ".sst")
+	return filepath.Join(filepath.Dir(cfgPath), ".sst")
 }
 
 func ResolvePlatformDir(cfgPath string) string {
-	return path.Join(ResolveWorkingDir(cfgPath), "platform")
+	return filepath.Join(ResolveWorkingDir(cfgPath), "platform")
+}
+
+func ResolveLogDir(cfgPath string) string {
+	return filepath.Join(ResolveWorkingDir(cfgPath), "log")
 }
 
 type ProjectConfig struct {
@@ -329,5 +332,8 @@ func (p *Project) Cleanup() error {
 }
 
 func (p *Project) PathLog(name string) string {
+	if name == "" {
+		return filepath.Join(p.PathWorkingDir(), "log")
+	}
 	return filepath.Join(p.PathWorkingDir(), "log", name+".log")
 }

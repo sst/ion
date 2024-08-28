@@ -152,6 +152,7 @@ export interface SnsTopicSubscriberArgs {
  */
 export class SnsTopic extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorOpts: ComponentResourceOptions;
   private topic: sns.Topic;
 
   constructor(
@@ -167,6 +168,7 @@ export class SnsTopic extends Component implements Link.Linkable {
     const topic = createTopic();
 
     this.constructorName = name;
+    this.constructorOpts = opts;
     this.topic = topic;
 
     function normalizeFifo() {
@@ -253,6 +255,7 @@ export class SnsTopic extends Component implements Link.Linkable {
       this.arn,
       subscriber,
       args,
+      { provider: this.constructorOpts.provider },
     );
   }
 
@@ -301,20 +304,24 @@ export class SnsTopic extends Component implements Link.Linkable {
     subscriber: string | FunctionArgs,
     args?: SnsTopicSubscriberArgs,
   ) {
-    const topicName = output(topicArn).apply(
-      (topicArn) => parseTopicArn(topicArn).topicName,
+    return output(topicArn).apply((topicArn) =>
+      this._subscribeFunction(
+        logicalName(parseTopicArn(topicArn).topicName),
+        topicArn,
+        subscriber,
+        args,
+      ),
     );
-    return this._subscribeFunction(topicName, topicArn, subscriber, args);
   }
 
   private static _subscribeFunction(
-    name: Input<string>,
+    name: string,
     topicArn: Input<string>,
     subscriber: string | FunctionArgs,
     args: SnsTopicSubscriberArgs = {},
+    opts: $util.ComponentResourceOptions = {},
   ) {
-    return all([name, subscriber, args]).apply(([name, subscriber, args]) => {
-      const prefix = logicalName(name);
+    return all([subscriber, args]).apply(([subscriber, args]) => {
       const suffix = logicalName(
         hashStringToPrettyString(
           [
@@ -326,11 +333,15 @@ export class SnsTopic extends Component implements Link.Linkable {
         ),
       );
 
-      return new SnsTopicLambdaSubscriber(`${prefix}Subscriber${suffix}`, {
-        topic: { arn: topicArn },
-        subscriber,
-        ...args,
-      });
+      return new SnsTopicLambdaSubscriber(
+        `${name}Subscriber${suffix}`,
+        {
+          topic: { arn: topicArn },
+          subscriber,
+          ...args,
+        },
+        opts,
+      );
     });
   }
 
@@ -413,20 +424,23 @@ export class SnsTopic extends Component implements Link.Linkable {
     queueArn: Input<string>,
     args?: SnsTopicSubscriberArgs,
   ) {
-    const topicName = output(topicArn).apply(
-      (topicArn) => parseTopicArn(topicArn).topicName,
+    return output(topicArn).apply((topicArn) =>
+      this._subscribeQueue(
+        logicalName(parseTopicArn(topicArn).topicName),
+        topicArn,
+        queueArn,
+        args,
+      ),
     );
-    return this._subscribeQueue(topicName, topicArn, queueArn, args);
   }
 
   private static _subscribeQueue(
-    name: Input<string>,
+    name: string,
     topicArn: Input<string>,
     queueArn: Input<string>,
     args: SnsTopicSubscriberArgs = {},
   ) {
-    return all([name, queueArn, args]).apply(([name, queueArn, args]) => {
-      const prefix = logicalName(name);
+    return all([queueArn, args]).apply(([queueArn, args]) => {
       const suffix = logicalName(
         hashStringToPrettyString(
           [topicArn, JSON.stringify(args.filter ?? {}), queueArn].join(""),
@@ -434,7 +448,7 @@ export class SnsTopic extends Component implements Link.Linkable {
         ),
       );
 
-      return new SnsTopicQueueSubscriber(`${prefix}Subscriber${suffix}`, {
+      return new SnsTopicQueueSubscriber(`${name}Subscriber${suffix}`, {
         topic: { arn: topicArn },
         queue: queueArn,
         ...args,

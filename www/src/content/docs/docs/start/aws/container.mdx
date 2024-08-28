@@ -9,7 +9,7 @@ We are going to build Express app in a container, add an S3 Bucket for file uplo
 You can [view the source](https://github.com/sst/ion/tree/dev/examples/aws-cluster) of this example in our repo.
 :::
 
-Before you get started, make sure to [configure your AWS credentials](https://docs.sst.dev/advanced/iam-credentials#loading-from-a-file).
+Before you get started, make sure to [configure your AWS credentials](/docs/iam-credentials#credentials).
 
 ---
 
@@ -52,7 +52,7 @@ app.listen(PORT, () => {
 Now let's initialize SST in our app.
 
 ```bash
-npx sst init
+npx sst@latest init
 npm install
 ```
 
@@ -72,12 +72,10 @@ async run() {
 
   cluster.addService("MyService", {
     public: {
-      ports: [
-        { listen: "80/http" },
-      ],
-      dev: {
-        command: "node --watch index.mjs",
-      },
+      ports: [{ listen: "80/http" }],
+    },
+    dev: {
+      command: "node --watch index.mjs",
     },
   });
 }
@@ -117,6 +115,8 @@ const bucket = new sst.aws.Bucket("MyBucket", {
   public: true
 });
 ```
+
+Add this above the `Vpc` component.
 
 #### Link the bucket
 

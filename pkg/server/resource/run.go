@@ -5,11 +5,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
+	"strconv"
 
 	"github.com/sst/ion/cmd/sst/mosaic/ui/common"
 	"github.com/sst/ion/pkg/bus"
+	"github.com/sst/ion/pkg/flag"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -29,8 +32,12 @@ type RunOutputs struct {
 }
 
 func NewRun() *Run {
+	weight := int64(4)
+	if flag.SST_BUILD_CONCURRENCY != "" {
+		weight, _ = strconv.ParseInt(flag.SST_BUILD_CONCURRENCY, 10, 64)
+	}
 	return &Run{
-		lock: semaphore.NewWeighted(4),
+		lock: semaphore.NewWeighted(weight),
 	}
 }
 
@@ -87,6 +94,7 @@ func (r *Run) executeCommand(input *RunInputs) error {
 	for scanner.Scan() {
 		bus.Publish(&common.StdoutEvent{Line: scanner.Text()})
 	}
+	slog.Info("waiting for command to finish", "cmd", cmd.String())
 	cmd.Wait()
 	if cmd.ProcessState.ExitCode() > 0 {
 		return fmt.Errorf("command exited with code %d", cmd.ProcessState.ExitCode())

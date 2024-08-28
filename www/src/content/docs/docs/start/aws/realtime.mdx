@@ -9,7 +9,7 @@ We are going to use SST to build and deploy a realtime chat app on AWS.
 You can [view the source](https://github.com/sst/ion/tree/dev/examples/aws-realtime-nextjs) of this example in our repo.
 :::
 
-Before you get started, make sure to [configure your AWS credentials](https://docs.sst.dev/advanced/iam-credentials#loading-from-a-file).
+Before you get started, make sure to [configure your AWS credentials](/docs/iam-credentials#credentials).
 
 ---
 
@@ -29,7 +29,7 @@ cd my-realtime-app
 Now let's initialize SST in our app.
 
 ```bash
-npx sst init
+npx sst@latest init
 npm install
 ```
 
@@ -74,9 +74,10 @@ This component allows us to set up _topics_ that can be subscribed to. The `auth
 Add the following to a new `authorizer.ts` file in your project root.
 
 ```ts title="authorizer.ts"
-import { Resource, RealtimeAuthHandler } from "sst";
+import { Resource } from "sst";
+import { realtime } from "sst/aws/realtime";
 
-export const handler = RealtimeAuthHandler(async (token) => {
+export const handler = realtime.authorizer(async (token) => {
   const prefix = `${Resource.App.name}/${Resource.App.stage}`;
 
   // Validate token

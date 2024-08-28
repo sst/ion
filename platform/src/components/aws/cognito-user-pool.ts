@@ -175,15 +175,30 @@ export interface CognitoUserPoolArgs {
 
 export interface CognitoIdentityProviderArgs {
   /**
-   * Type of the identity provider.
+   * The type of identity provider.
    */
   type: Input<"oidc" | "saml" | "google" | "facebook" | "apple" | "amazon">;
   /**
    * Configure the identity provider details, including the scopes, URLs, and identifiers.
+   *
+   * ```ts
+   * {
+   *   authorize_scopes: "email profile",
+   *   client_id: "your-client-id",
+   *   client_secret: "your-client-secret"
+   * }
+   * ```
    */
   details: Input<Record<string, Input<string>>>;
   /**
-   * Defines mappings between identity provider attributes and user pool attributes.
+   * Define a mapping between identity provider attributes and user pool attributes.
+   *
+   * ```ts
+   * {
+   *   email: "email",
+   *   username: "sub"
+   * }
+   * ```
    */
   attributes?: Input<Record<string, Input<string>>>;
   /**
@@ -200,7 +215,7 @@ export interface CognitoIdentityProviderArgs {
 
 export interface CognitoUserPoolClientArgs {
   /**
-   * A list of provider names for the identity providers that are supported on this client.
+   * A list of identity providers that are supported for this client.
    * @default `["COGNITO"]`
    */
   providers?: Input<Input<string>[]>;
@@ -272,12 +287,13 @@ export interface CognitoUserPoolClientArgs {
  * ```
  */
 export class CognitoUserPool extends Component implements Link.Linkable {
+  private constructorOpts: ComponentResourceOptions;
   private userPool: cognito.UserPool;
 
   constructor(
     name: string,
     args: CognitoUserPoolArgs = {},
-    opts?: ComponentResourceOptions,
+    opts: ComponentResourceOptions = {},
   ) {
     super(__pulumiType, name, args, opts);
 
@@ -288,6 +304,7 @@ export class CognitoUserPool extends Component implements Link.Linkable {
     const userPool = createUserPool();
     createPermissions();
 
+    this.constructorOpts = opts;
     this.userPool = userPool;
 
     function normalizeAliasesAndUsernames() {
@@ -468,7 +485,7 @@ export class CognitoUserPool extends Component implements Link.Linkable {
   }
 
   /**
-   * Add a client to the user pool.
+   * Add a client to the User Pool.
    *
    * @param name Name of the client.
    * @param args Configure the client.
@@ -480,23 +497,27 @@ export class CognitoUserPool extends Component implements Link.Linkable {
    * ```
    */
   public addClient(name: string, args?: CognitoUserPoolClientArgs) {
-    return new CognitoUserPoolClient(name, {
-      userPool: this.id,
-      ...args,
-    });
+    return new CognitoUserPoolClient(
+      name,
+      {
+        userPool: this.id,
+        ...args,
+      },
+      { provider: this.constructorOpts.provider },
+    );
   }
 
   /**
-   * Add a federated identity provider to the user pool.
+   * Add a federated identity provider to the User Pool.
    *
    * @param name Name of the identity provider.
    * @param args Configure the identity provider.
    *
    * @example
    *
-   * Add a GitHub (OIDC) identity provider.
+   * For example, add a GitHub (OIDC) identity provider.
    *
-   * ```ts
+   * ```ts title="sst.config.ts"
    * const GithubClientId = new sst.Secret("GITHUB_CLIENT_ID");
    * const GithubClientSecret = new sst.Secret("GITHUB_CLIENT_SECRET");
    *
@@ -515,9 +536,9 @@ export class CognitoUserPool extends Component implements Link.Linkable {
    * });
    * ```
    *
-   * Add a Google identity provider.
+   * Or add a Google identity provider.
    *
-   * ```ts
+   * ```ts title="sst.config.ts"
    * const GoogleClientId = new sst.Secret("GOOGLE_CLIENT_ID");
    * const GoogleClientSecret = new sst.Secret("GOOGLE_CLIENT_SECRET");
    *
@@ -537,10 +558,14 @@ export class CognitoUserPool extends Component implements Link.Linkable {
    * ```
    */
   public addIdentityProvider(name: string, args: CognitoIdentityProviderArgs) {
-    return new CognitoIdentityProvider(name, {
-      userPool: this.id,
-      ...args,
-    });
+    return new CognitoIdentityProvider(
+      name,
+      {
+        userPool: this.id,
+        ...args,
+      },
+      { provider: this.constructorOpts.provider },
+    );
   }
 
   /** @internal */

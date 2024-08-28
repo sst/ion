@@ -350,6 +350,7 @@ export interface DynamoSubscriberArgs {
  */
 export class Dynamo extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorOpts: ComponentResourceOptions;
   private table: Output<dynamodb.Table>;
   private isStreamEnabled: boolean = false;
 
@@ -365,6 +366,7 @@ export class Dynamo extends Component implements Link.Linkable {
     const table = createTable();
 
     this.constructorName = name;
+    this.constructorOpts = opts;
     this.table = table;
     this.isStreamEnabled = Boolean(args.stream);
 
@@ -512,6 +514,7 @@ export class Dynamo extends Component implements Link.Linkable {
       this.nodes.table.streamArn,
       subscriber,
       args,
+      { provider: this.constructorOpts.provider },
     );
   }
 
@@ -568,20 +571,24 @@ export class Dynamo extends Component implements Link.Linkable {
     subscriber: string | FunctionArgs,
     args?: DynamoSubscriberArgs,
   ) {
-    const tableName = output(streamArn).apply(
-      (streamArn) => parseDynamoStreamArn(streamArn).tableName,
+    return output(streamArn).apply((streamArn) =>
+      this._subscribe(
+        logicalName(parseDynamoStreamArn(streamArn).tableName),
+        streamArn,
+        subscriber,
+        args,
+      ),
     );
-    return this._subscribe(tableName, streamArn, subscriber, args);
   }
 
   private static _subscribe(
-    name: Input<string>,
+    name: string,
     streamArn: Input<string>,
     subscriber: string | FunctionArgs,
     args: DynamoSubscriberArgs = {},
+    opts: ComponentResourceOptions = {},
   ) {
     return all([name, subscriber, args]).apply(([name, subscriber, args]) => {
-      const prefix = logicalName(name);
       const suffix = logicalName(
         hashStringToPrettyString(
           [
@@ -593,11 +600,15 @@ export class Dynamo extends Component implements Link.Linkable {
         ),
       );
 
-      return new DynamoLambdaSubscriber(`${prefix}Subscriber${suffix}`, {
-        dynamo: { streamArn },
-        subscriber,
-        ...args,
-      });
+      return new DynamoLambdaSubscriber(
+        `${name}Subscriber${suffix}`,
+        {
+          dynamo: { streamArn },
+          subscriber,
+          ...args,
+        },
+        opts,
+      );
     });
   }
 

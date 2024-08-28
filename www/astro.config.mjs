@@ -52,6 +52,7 @@ const sidebar = [
   {
     label: "How to",
     items: [
+      { label: "AWS Accounts", slug: "docs/aws-accounts" },
       { label: "IAM Credentials", slug: "docs/iam-credentials" },
       { label: "Migrate From v2", slug: "docs/migrate-from-v2" },
       { label: "Custom Domains", slug: "docs/custom-domains" },
@@ -73,8 +74,8 @@ const sidebar = [
       "docs/component/aws/nextjs",
       "docs/component/aws/queue",
       "docs/component/aws/vector",
-      "docs/component/aws/bucket",
       "docs/component/aws/router",
+      "docs/component/aws/bucket",
       "docs/component/aws/cluster",
       "docs/component/aws/dynamo",
       "docs/component/aws/realtime",
@@ -173,7 +174,7 @@ if (import.meta.env.DEV) {
 
 // https://astro.build/config
 export default defineConfig({
-  site: "https://ion.sst.dev",
+  site: "https://sst.dev",
   adapter: sst(),
   server: {
     host: "0.0.0.0",

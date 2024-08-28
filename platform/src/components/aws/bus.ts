@@ -164,6 +164,7 @@ export interface BusSubscriberArgs {
  */
 export class Bus extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorOpts: ComponentResourceOptions;
   private bus: cloudwatch.EventBus;
 
   constructor(
@@ -178,6 +179,7 @@ export class Bus extends Component implements Link.Linkable {
     const bus = createBus();
 
     this.constructorName = name;
+    this.constructorOpts = opts;
     this.bus = bus;
 
     function createBus() {
@@ -250,10 +252,12 @@ export class Bus extends Component implements Link.Linkable {
     args: BusSubscriberArgs = {},
   ) {
     return Bus._subscribeFunction(
+      this.constructorName,
       this.nodes.bus.name,
       this.nodes.bus.arn,
       subscriber,
       args,
+      { provider: this.constructorOpts.provider },
     );
   }
 
@@ -302,20 +306,27 @@ export class Bus extends Component implements Link.Linkable {
     subscriber: string | FunctionArgs,
     args?: BusSubscriberArgs,
   ) {
-    const busName = output(busArn).apply(
-      (busArn) => parseEventBusArn(busArn).busName,
-    );
-    return this._subscribeFunction(busName, busArn, subscriber, args);
+    return output(busArn).apply((busArn) => {
+      const busName = parseEventBusArn(busArn).busName;
+      return this._subscribeFunction(
+        logicalName(busName),
+        busName,
+        busArn,
+        subscriber,
+        args,
+      );
+    });
   }
 
   private static _subscribeFunction(
-    name: Input<string>,
+    name: string,
+    busName: Input<string>,
     busArn: Input<string>,
     subscriber: string | FunctionArgs,
     args: BusSubscriberArgs = {},
+    opts: ComponentResourceOptions = {},
   ) {
-    return all([name, subscriber, args]).apply(([name, subscriber, args]) => {
-      const prefix = logicalName(name);
+    return all([subscriber, args]).apply(([subscriber, args]) => {
       const suffix = logicalName(
         hashStringToPrettyString(
           [
@@ -327,11 +338,15 @@ export class Bus extends Component implements Link.Linkable {
         ),
       );
 
-      return new BusLambdaSubscriber(`${prefix}Subscriber${suffix}`, {
-        bus: { name, arn: busArn },
-        subscriber,
-        ...args,
-      });
+      return new BusLambdaSubscriber(
+        `${name}Subscriber${suffix}`,
+        {
+          bus: { name: busName, arn: busArn },
+          subscriber,
+          ...args,
+        },
+        opts,
+      );
     });
   }
 

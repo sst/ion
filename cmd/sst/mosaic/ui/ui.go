@@ -18,6 +18,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/sst/ion/cmd/sst/mosaic/aws"
 	"github.com/sst/ion/cmd/sst/mosaic/cloudflare"
+	"github.com/sst/ion/cmd/sst/mosaic/deployer"
 	"github.com/sst/ion/cmd/sst/mosaic/ui/common"
 	"github.com/sst/ion/pkg/project"
 
@@ -174,6 +175,10 @@ func (u *UI) Event(unknown interface{}) {
 		u.reset()
 		u.printEvent(TEXT_DANGER, "Locked", "A concurrent update was detected on the app. Run `sst unlock` to remove the lock and try again.")
 
+	case *deployer.DeployFailedEvent:
+		u.reset()
+		u.printEvent(TEXT_DANGER, "Error", evt.Error)
+
 	case *project.StackCommandEvent:
 		u.reset()
 		u.header(evt.Version, evt.App, evt.Stage)
@@ -308,7 +313,7 @@ func (u *UI) Event(unknown interface{}) {
 
 		if evt.Severity == "info" {
 			for _, line := range strings.Split(strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace), "\n") {
-				u.println(line)
+				u.println(TEXT_DIM.Render(line))
 			}
 		}
 

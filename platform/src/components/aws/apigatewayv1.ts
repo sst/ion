@@ -386,9 +386,9 @@ export interface ApiGatewayV1RouteArgs {
  * });
  * ```
  *
- * #### Set defaults for all routes
+ * #### Common props for all routes
  *
- * You can use the `transform` to set some defaults for all your routes. For example,
+ * You can use the `transform` to set some common props for all your routes. For example,
  * instead of setting the `memory` for each route.
  *
  * ```ts title="sst.config.ts"
@@ -412,10 +412,13 @@ export interface ApiGatewayV1RouteArgs {
  * api.route("GET /", "src/get.handler");
  * api.route("POST /", "src/post.handler");
  * ```
+ *
+ * With this however you cannot override the `memory` in the route.
  */
 export class ApiGatewayV1 extends Component implements Link.Linkable {
   private constructorName: string;
   private constructorArgs: ApiGatewayV1Args;
+  private constructorOpts: ComponentResourceOptions;
   private api: apigateway.RestApi;
   private region: Output<string>;
   private triggers: Record<string, Output<string>> = {};
@@ -441,6 +444,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
     this.resources["/"] = api.rootResourceId;
     this.constructorName = name;
     this.constructorArgs = args;
+    this.constructorOpts = opts;
     this.api = api;
     this.region = region;
 
@@ -465,9 +469,9 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
           ? { types: "REGIONAL" }
           : endpoint.type === "private"
             ? {
-                types: "PRIVATE",
-                vpcEndpointIds: endpoint.vpcEndpointIds,
-              }
+              types: "PRIVATE",
+              vpcEndpointIds: endpoint.vpcEndpointIds,
+            }
             : { types: "EDGE" };
       });
     }
@@ -631,7 +635,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
       this.constructorArgs.transform?.route?.args,
       `${prefix}Route${suffix}`,
       args,
-      {},
+      { provider: this.constructorOpts.provider },
     );
 
     const apigRoute = new ApiGatewayV1LambdaRoute(
@@ -736,14 +740,18 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
     const selfName = this.constructorName;
     const nameSuffix = logicalName(args.name);
 
-    return new ApiGatewayV1Authorizer(`${selfName}Authorizer${nameSuffix}`, {
-      api: {
-        id: self.api.id,
-        name: selfName,
-        executionArn: self.api.executionArn,
+    return new ApiGatewayV1Authorizer(
+      `${selfName}Authorizer${nameSuffix}`,
+      {
+        api: {
+          id: self.api.id,
+          name: selfName,
+          executionArn: self.api.executionArn,
+        },
+        ...args,
       },
-      ...args,
-    });
+      { provider: this.constructorOpts.provider },
+    );
   }
 
   /**

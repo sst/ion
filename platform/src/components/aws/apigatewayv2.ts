@@ -489,9 +489,9 @@ export interface ApiGatewayV2RouteArgs {
  * });
  * ```
  *
- * #### Set defaults for all routes
+ * #### Common props for all routes
  *
- * You can use the `transform` to set some defaults for all your routes. For example,
+ * You can use the `transform` to set some common props for all your routes. For example,
  * instead of setting the `memory` for each route.
  *
  * ```ts title="sst.config.ts"
@@ -515,10 +515,13 @@ export interface ApiGatewayV2RouteArgs {
  * api.route("GET /", "src/get.handler");
  * api.route("POST /", "src/post.handler");
  * ```
+ *
+ * With this however you cannot override the `memory` in the route.
  */
 export class ApiGatewayV2 extends Component implements Link.Linkable {
   private constructorName: string;
   private constructorArgs: ApiGatewayV2Args;
+  private constructorOpts: ComponentResourceOptions;
   private api: apigatewayv2.Api;
   private apigDomain?: apigatewayv2.DomainName;
   private apiMapping?: Output<apigatewayv2.ApiMapping>;
@@ -550,6 +553,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
 
     this.constructorName = name;
     this.constructorArgs = args;
+    this.constructorOpts = opts;
     this.api = api;
     this.apigDomain = apigDomain;
     this.apiMapping = apiMapping;
@@ -604,10 +608,10 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
         return cors === true || cors === undefined
           ? defaultCors
           : {
-              ...defaultCors,
-              ...cors,
-              maxAge: cors.maxAge && toSeconds(cors.maxAge),
-            };
+            ...defaultCors,
+            ...cors,
+            maxAge: cors.maxAge && toSeconds(cors.maxAge),
+          };
       });
     }
 
@@ -781,9 +785,9 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     //       trailing slash, the API fails with the error {"message":"Not Found"}
     return this.apigDomain && this.apiMapping
       ? all([this.apigDomain.domainName, this.apiMapping.apiMappingKey]).apply(
-          ([domain, key]) =>
-            key ? `https://${domain}/${key}/` : `https://${domain}`,
-        )
+        ([domain, key]) =>
+          key ? `https://${domain}/${key}/` : `https://${domain}`,
+      )
       : this.api.apiEndpoint;
   }
 
@@ -912,7 +916,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
       this.constructorArgs.transform?.route?.args,
       this.buildRouteId(route),
       args,
-      {},
+      { provider: this.constructorOpts.provider },
     );
     return new ApiGatewayV2LambdaRoute(
       transformed[0],
@@ -965,7 +969,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
       this.constructorArgs.transform?.route?.args,
       this.buildRouteId(route),
       args,
-      {},
+      { provider: this.constructorOpts.provider },
     );
     return new ApiGatewayV2UrlRoute(
       transformed[0],
@@ -1037,7 +1041,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
       this.constructorArgs.transform?.route?.args,
       this.buildRouteId(route),
       args,
-      {},
+      { provider: this.constructorOpts.provider },
     );
     return new ApiGatewayV2PrivateRoute(
       transformed[0],
@@ -1092,11 +1096,10 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
   }
 
   private buildRouteId(route: string) {
-    const prefix = this.constructorName;
     const suffix = logicalName(
       hashStringToPrettyString([this.api.id, route].join(""), 6),
     );
-    return `${prefix}Route${suffix}`;
+    return `${this.constructorName}Route${suffix}`;
   }
 
   /**
@@ -1122,13 +1125,17 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     const selfName = this.constructorName;
     const nameSuffix = logicalName(args.name);
 
-    return new ApiGatewayV2Authorizer(`${selfName}Authorizer${nameSuffix}`, {
-      api: {
-        id: self.api.id,
-        name: selfName,
+    return new ApiGatewayV2Authorizer(
+      `${selfName}Authorizer${nameSuffix}`,
+      {
+        api: {
+          id: self.api.id,
+          name: selfName,
+        },
+        ...args,
       },
-      ...args,
-    });
+      { provider: this.constructorOpts.provider },
+    );
   }
 
   /** @internal */
