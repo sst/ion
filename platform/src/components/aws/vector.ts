@@ -214,18 +214,19 @@ export class Vector extends Component implements Link.Linkable {
 
   /**
    * Reference an existing Vector database with the given name. This is useful when you
-   * create a VectorDB in one stage and want to share it in another. It avoids having to
-   * create a new VectorDB in the other stage.
+   * create a Vector database in one stage and want to share it in another. It avoids having to
+   * create a new Vector database in the other stage.
    *
    * :::tip
-   * You can use the `static get` method to share VectorDBs across stages.
+   * You can use the `static get` method to share Vector databases across stages.
    * :::
+   *
    * @param name The name of the component.
-   * @param clusterID The id of the existing VectorDB created by this component.
+   * @param clusterID The RDS cluster id of the existing Vector database.
    *
    * @example
-   * Imagine you create a VectorDB in the `dev` stage. And in your personal stage `frank`,
-   * instead of creating a new one, you want to share the same VectorDB from `dev`.
+   * Imagine you create a vector databse  in the `dev` stage. And in your personal stage `frank`,
+   * instead of creating a new database, you want to share the same database from `dev`.
    *
    * ```ts title="sst.config.ts"
    * const vector = $app.stage === "frank"
@@ -240,7 +241,7 @@ export class Vector extends Component implements Link.Linkable {
    *
    * ```ts title="sst.config.ts"
    * return {
-   *   cluster: vector.nodes.postgres.clusterID
+   *   cluster: vector.clusterID
    * };
    * ```
    *
@@ -256,6 +257,13 @@ export class Vector extends Component implements Link.Linkable {
       ref: true,
       postgres,
     } as unknown as VectorArgs);
+  }
+
+  /**
+   * The ID of the RDS Postgres Cluster.
+   */
+  public get clusterID() {
+    return this.postgres.nodes.cluster.id;
   }
 
   /**
