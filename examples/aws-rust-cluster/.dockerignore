@@ -1,0 +1,21 @@
+*.env
+/target
+
+.git
+.gitignore
+.dockerignore
+.build
+.sst
+
+Dockerfile
+docker-compose.yml
+README.md
+
+node_modules
+package.json
+package-lock.json
+sst.config.ts
+tsconfig.json
+
+# sst
+.sst
