@@ -2,4 +2,6 @@
 # sst
 .sst
 
+# rust
+Cargo.lock
 target/
