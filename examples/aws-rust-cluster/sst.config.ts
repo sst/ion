@@ -12,13 +12,22 @@ export default $config({
     };
   },
   async run() {
-    const api = new sst.aws.Function("api", {
+    const api = new sst.aws.Function("rust-api", {
       handler: "bootstrap",
-      architecture: "x86_64",
+      architecture: "arm64", // or x86_64
       bundle: "target/lambda/api",
       runtime: 'provided.al2023',
       url: true,
     });
-    return { function: api.url }
+    const router = new sst.aws.Router("MyRouter", {
+      routes: {
+        "/*": api.url,
+      },
+      domain: "rust.dev.sst.dev",
+    });
+    return {
+      function: api.url,
+      domain: router.url
+    }
   }
 });
