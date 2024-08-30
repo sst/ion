@@ -1,5 +1,5 @@
 [package]
-name = "aws-rust-cluster"
+name = "aws_rust_cluster"
 version = "0.1.0"
 edition = "2021"
 

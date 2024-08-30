@@ -8,9 +8,10 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "sst": "3.0.75"
+    "sst": "3.0.68",
+    "sst-linux-x64": "^3.0.66"
   },
   "devDependencies": {
-    "@types/aws-lambda": "8.10.145"
+    "@types/aws-lambda": "8.10.143"
   }
 }

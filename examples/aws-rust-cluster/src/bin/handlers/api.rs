@@ -1,4 +1,4 @@
-use axum::{response::IntoResponse, routing::get, Json};
+use axum::{http::StatusCode, response::IntoResponse, routing::get, Json};
 use lambda_http::Error;
 use serde::Serialize;
 
@@ -8,9 +8,12 @@ pub struct Ping {
 }
 
 pub async fn ping() -> impl IntoResponse {
-    Json(Ping {
-        message: "hello from rust :)",
-    })
+    (
+        StatusCode::IM_A_TEAPOT,
+        Json(Ping {
+            message: "hello from rust :)",
+        }),
+    )
 }
 
 #[tokio::main]
