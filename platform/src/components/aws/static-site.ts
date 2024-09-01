@@ -65,6 +65,24 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
    */
   path?: BaseStaticSiteArgs["path"];
   /**
+   * Custom CloudFront Function code to handle Viewer Request.
+   * 
+   * @example
+   * ```js
+   * {
+   *   viewerRequestFunction: `
+   *     function handler(event) {
+   *         var request = event.request;
+   *         if (!request.uri.includes('.')) {
+   *            request.uri = 'index.html';
+   *         }
+   *         return request;
+   *     }`
+   * }
+   * ```
+   */
+  viewerRequestFunction?: string;
+  /**
    * Configure if your static site needs to be built. This is useful if you are using a static site generator.
    *
    * The `build.output` directory will be uploaded to S3 instead.
@@ -416,7 +434,7 @@ export class StaticSite extends Component implements Link.Linkable {
     const access = createCloudFrontOriginAccessControl();
     const bucket = createS3Bucket();
     const bucketFile = uploadAssets();
-    const cloudfrontFunction = createCloudfrontFunction();
+    const cloudfrontFunction = createCloudfrontFunction(args.viewerRequestFunction);
     const invalidation = buildInvalidation();
     const distribution = createDistribution();
     this.assets = bucket;
@@ -440,12 +458,12 @@ export class StaticSite extends Component implements Link.Linkable {
       );
     }
 
-    function createCloudfrontFunction() {
+    function createCloudfrontFunction(customCode?: string) {
       return new cloudfront.Function(
         `${name}Function`,
         {
           runtime: "cloudfront-js-1.0",
-          code: `
+          code: customCode ?? `
     function handler(event) {
         var request = event.request;
         var uri = request.uri;
