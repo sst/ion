@@ -35,7 +35,7 @@ To use this template.
    npm install
    ```
 
-Now just run `npx sst dev` from the project root.
+Now just run `npx sst dev` from the project root, or `NO_BUN=true npx sst dev` if the former command gives an error.
 
 ---
 
