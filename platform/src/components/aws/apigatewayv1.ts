@@ -765,10 +765,27 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
   ) {
     const { method, path } = parseRoute();
     const prefix = this.constructorName;
-    this.triggers[`${method}${path}`] = jsonStringify({
-      handler,
-      args,
-    });
+    if (typeof handler === "string") {
+      this.triggers[`${method}${path}`] = jsonStringify({
+        handler,
+        args,
+      });
+    } else {
+      this.triggers[`${method}${path}`] = jsonStringify({
+        handler: {
+          ...handler,
+          // If any of the linked SST components have Pulumi resources as instance variables, this code can throw
+          // `TypeError: Converting circular structure to JSON` (see https://github.com/sst/ion/issues/918), as
+          // the Pulumi resource's __parentResource property references the SST component.
+          // This protects against that, whilst still ensuring that a deployment will be triggered if anything
+          // about any of the links changes.
+          link: $output((handler as FunctionArgs).link).apply((links) =>
+            links ? Link.build(links) : undefined,
+          ),
+        },
+        args,
+      });
+    }
 
     // Create resource
     const pathParts = path.replace(/^\//, "").split("/");
