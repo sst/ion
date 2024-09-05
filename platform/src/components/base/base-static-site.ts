@@ -1,12 +1,88 @@
 import fs from "fs";
 import path from "path";
-import { all, output, Output, Resource } from "@pulumi/pulumi";
+import { all, output, Resource } from "@pulumi/pulumi";
 import { VisibleError } from "../error.js";
 import { Input } from "../input.js";
 import { Prettify } from "../component.js";
 import { BaseSiteFileOptions } from "./base-site.js";
-import { DevArgs } from "../dev.js";
 import { Run } from "../providers/run.js";
+
+export type BaseStaticSiteAssets = {
+  /**
+   * Character encoding for text based assets uploaded, like HTML, CSS, JS. This is
+   * used to set the `Content-Type` header when these files are served out.
+   *
+   * If set to `"none"`, then no charset will be returned in header.
+   * @default `"utf-8"`
+   * @example
+   * ```js
+   * {
+   *   assets: {
+   *     textEncoding: "iso-8859-1"
+   *   }
+   * }
+   * ```
+   */
+  textEncoding?: Input<
+    "utf-8" | "iso-8859-1" | "windows-1252" | "ascii" | "none"
+  >;
+  /**
+   * Specify the `Content-Type` and `Cache-Control` headers for specific files. This allows
+   * you to override the default behavior for specific files using glob patterns.
+   *
+   * By default, this is set to cache CSS/JS files for 1 year and not cache HTML files.
+   *
+   * ```js
+   * {
+   *   assets: {
+   *     fileOptions: [
+   *       {
+   *         files: ["**\/*.css", "**\/*.js"],
+   *         cacheControl: "max-age=31536000,public,immutable"
+   *       },
+   *       {
+   *         files: "**\/*.html",
+   *         cacheControl: "max-age=0,no-cache,no-store,must-revalidate"
+   *       }
+   *     ]
+   *   }
+   * }
+   * ```
+   *
+   * @default `Object[]`
+   * @example
+   * You can change the default options. For example, apply `Cache-Control` and `Content-Type` to all zip files.
+   * ```js
+   * {
+   *   assets: {
+   *     fileOptions: [
+   *       {
+   *         files: "**\/*.zip",
+   *         contentType: "application/zip",
+   *         cacheControl: "private,no-cache,no-store,must-revalidate"
+   *       },
+   *     ],
+   *   }
+   * }
+   * ```
+   * Apply `Cache-Control` to all CSS and JS files except for CSS files with `index-`
+   * prefix in the `main/` directory.
+   * ```js
+   * {
+   *   assets: {
+   *     fileOptions: [
+   *       {
+   *         files: ["**\/*.css", "**\/*.js"],
+   *         ignore: "main\/index-*.css",
+   *         cacheControl: "private,no-cache,no-store,must-revalidate"
+   *       },
+   *     ],
+   *   }
+   * }
+   * ```
+   */
+  fileOptions?: Input<Prettify<BaseSiteFileOptions>[]>;
+};
 
 export interface BaseStaticSiteArgs {
   path?: Input<string>;
@@ -121,82 +197,6 @@ export interface BaseStaticSiteArgs {
      */
     types?: string;
   }>;
-  assets?: Input<{
-    /**
-     * Character encoding for text based assets uploaded, like HTML, CSS, JS. This is
-     * used to set the `Content-Type` header when these files are served out.
-     *
-     * If set to `"none"`, then no charset will be returned in header.
-     * @default `"utf-8"`
-     * @example
-     * ```js
-     * {
-     *   assets: {
-     *     textEncoding: "iso-8859-1"
-     *   }
-     * }
-     * ```
-     */
-    textEncoding?: Input<
-      "utf-8" | "iso-8859-1" | "windows-1252" | "ascii" | "none"
-    >;
-    /**
-     * Specify the `Content-Type` and `Cache-Control` headers for specific files. This allows
-     * you to override the default behavior for specific files using glob patterns.
-     *
-     * By default, this is set to cache CSS/JS files for 1 year and not cache HTML files.
-     *
-     * ```js
-     * {
-     *   assets: {
-     *     fileOptions: [
-     *       {
-     *         files: ["**\/*.css", "**\/*.js"],
-     *         cacheControl: "max-age=31536000,public,immutable"
-     *       },
-     *       {
-     *         files: "**\/*.html",
-     *         cacheControl: "max-age=0,no-cache,no-store,must-revalidate"
-     *       }
-     *     ]
-     *   }
-     * }
-     * ```
-     *
-     * @default `Object[]`
-     * @example
-     * You can change the default options. For example, apply `Cache-Control` and `Content-Type` to all zip files.
-     * ```js
-     * {
-     *   assets: {
-     *     fileOptions: [
-     *       {
-     *         files: "**\/*.zip",
-     *         contentType: "application/zip",
-     *         cacheControl: "private,no-cache,no-store,must-revalidate"
-     *       },
-     *     ],
-     *   }
-     * }
-     * ```
-     * Apply `Cache-Control` to all CSS and JS files except for CSS files with `index-`
-     * prefix in the `main/` directory.
-     * ```js
-     * {
-     *   assets: {
-     *     fileOptions: [
-     *       {
-     *         files: ["**\/*.css", "**\/*.js"],
-     *         ignore: "main\/index-*.css",
-     *         cacheControl: "private,no-cache,no-store,must-revalidate"
-     *       },
-     *     ],
-     *   }
-     * }
-     * ```
-     */
-    fileOptions?: Input<Prettify<BaseSiteFileOptions>[]>;
-  }>;
 }
 
 export function prepare(args: BaseStaticSiteArgs) {
@@ -276,7 +276,6 @@ export function buildApp(
   sitePath: ReturnType<typeof prepare>["sitePath"],
   environment: ReturnType<typeof prepare>["environment"],
 ) {
-  if ($dev) return path.join($cli.paths.platform, "functions", "empty-site");
   if (!build) return sitePath;
 
   const result = new Run(
@@ -304,28 +303,4 @@ export function buildApp(
 
     return outputPath;
   });
-}
-
-export function cleanup(
-  sitePath: ReturnType<typeof prepare>["sitePath"],
-  environment: ReturnType<typeof prepare>["environment"],
-  url?: Output<string>,
-  dev?: DevArgs["dev"],
-) {
-  return {
-    _hint: url,
-    _dev: {
-      environment: environment,
-      command: output(dev?.command).apply((val) => val || "npm run dev"),
-      directory: output(dev?.directory).apply((dir) => dir || sitePath),
-      autostart: output(dev?.autostart).apply((val) => val ?? true),
-    },
-    _receiver: all([sitePath, environment]).apply(
-      ([sitePath, environment]) => ({
-        directory: sitePath,
-        links: [],
-        environment,
-      }),
-    ),
-  };
 }

@@ -181,6 +181,7 @@ interface FunctionUrlCorsArgs {
 export interface FunctionArgs {
   /**
    * Disable running this function [Live](/docs/live/) in `sst dev`.
+   * @deprecated Use `dev` instead.
    * @default `true`
    * @example
    * ```js
@@ -190,6 +191,17 @@ export interface FunctionArgs {
    * ```
    */
   live?: Input<false>;
+  /**
+   * Disable running this function [Live](/docs/live/) in `sst dev`.
+   * @default Live mode enabled in `sst dev`
+   * @example
+   * ```js
+   * {
+   *   dev: false
+   * }
+   * ```
+   */
+  dev?: Input<false>;
   /**
    * The name for the function.
    *
@@ -456,6 +468,9 @@ export interface FunctionArgs {
     | {
         /**
          * The duration the function logs are kept in CloudWatch.
+         *
+         * Not application when an existing log group is provided.
+         *
          * @default `forever`
          * @example
          * ```js
@@ -467,6 +482,22 @@ export interface FunctionArgs {
          * ```
          */
         retention?: Input<keyof typeof RETENTION>;
+        /**
+         * Assigns the given CloudWatch log group name to the function. This allows you to pass in a previously created log group.
+         *
+         * By default, the function creates a new log group when it's created.
+         *
+         * @default Creates a log group
+         * @example
+         * ```js
+         * {
+         *   logging: {
+         *     logGroup: "/existing/log-group"
+         *   }
+         * }
+         * ```
+         */
+        logGroup?: Input<string>;
         /**
          * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
          * of the Lambda function.
@@ -788,6 +819,14 @@ export interface FunctionArgs {
   /**
    * A list of Lambda layer ARNs to add to the function.
    *
+   * :::note
+   * Layers are only added when the function is deployed.
+   * :::
+   *
+   * These are only added when the function is deployed. In `sst dev`, your functions are run
+   * locally, so the layers are not used. Instead you should use a local version of what's
+   * in the layer.
+   *
    * @example
    * ```js
    * {
@@ -972,7 +1011,7 @@ export class Function extends Component implements Link.Linkable {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
-    const dev = output(args.live).apply((v) => $dev && v !== false);
+    const dev = normalizeDev();
     const region = normalizeRegion();
     const injections = normalizeInjections();
     const runtime = normalizeRuntime();
@@ -1009,7 +1048,7 @@ export class Function extends Component implements Link.Linkable {
 
     this.registerOutputs({
       _live: unsecret(
-        all([dev]).apply(([dev]) => {
+        output(dev).apply((dev) => {
           if (!dev) return undefined;
           return all([
             name,
@@ -1040,8 +1079,14 @@ export class Function extends Component implements Link.Linkable {
       },
     });
 
+    function normalizeDev() {
+      return all([args.dev, args.live]).apply(
+        ([d, l]) => $dev && d !== false && l !== false,
+      );
+    }
+
     function normalizeRegion() {
-      return getRegionOutput(undefined, { provider: opts?.provider }).name;
+      return getRegionOutput(undefined, { parent }).name;
     }
 
     function normalizeInjections() {
@@ -1075,6 +1120,7 @@ export class Function extends Component implements Link.Linkable {
             stage: $app.stage,
           });
           if (dev) {
+            result.SST_REGION = process.env.SST_AWS_REGION!;
             result.SST_FUNCTION_ID = name;
             result.SST_APP = $app.name;
             result.SST_STAGE = $app.stage;
@@ -1094,8 +1140,13 @@ export class Function extends Component implements Link.Linkable {
       return output(args.logging).apply((logging) => {
         if (logging === false) return undefined;
 
+        if (logging?.retention && logging?.logGroup)
+          throw new VisibleError(
+            `Cannot set both "logging.retention" and "logging.logGroup"`,
+          );
+
         return {
-          ...logging,
+          logGroup: logging?.logGroup,
           retention: logging?.retention ?? "forever",
           format: logging?.format ?? "text",
         };
@@ -1491,6 +1542,7 @@ export class Function extends Component implements Link.Linkable {
     function createLogGroup() {
       return logging.apply((logging) => {
         if (!logging) return;
+        if (logging.logGroup) return;
 
         return new cloudwatch.LogGroup(
           ...transform(
@@ -1537,7 +1589,7 @@ export class Function extends Component implements Link.Linkable {
             architectures,
             loggingConfig: logging && {
               logFormat: logging.format === "json" ? "JSON" : "Text",
-              logGroup: logGroup!.name,
+              logGroup: logging.logGroup ?? logGroup!.name,
             },
             vpcConfig: args.vpc && {
               securityGroupIds: output(args.vpc).securityGroups,

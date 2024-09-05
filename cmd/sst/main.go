@@ -567,7 +567,7 @@ var root = &cli.Command{
 					"```ts title=\"sst.config.ts\"",
 					"{",
 					"  providers: {",
-					"    aws: true",
+					"    aws: \"6.27.0\"",
 					"  }",
 					"}",
 					"```",
@@ -578,21 +578,19 @@ var root = &cli.Command{
 					"Running `sst add aws` above is the same as manually adding the provider to your config and running `sst install`.",
 					":::",
 					"",
-					"By default, the latest version of the provider is installed. If you want to use a specific version, you can set it in your config.",
+					"By default, the latest version of the provider is installed. If you want to use a specific version, you can change it in your config.",
 					"",
 					"```ts title=\"sst.config.ts\"",
 					"{",
 					"  providers: {",
 					"    aws: {",
-					"      version: \"6.27.0\"",
+					"      version: \"6.26.0\"",
 					"    }",
 					"  }",
 					"}",
 					"```",
 					"",
-					":::tip",
-					"You'll need to run `sst install` after you update the `providers` in your config.",
-					":::",
+					"You'll need to run `sst install` if you update the `providers` in your config.",
 				}, "\n"),
 			},
 			Args: []cli.Argument{
@@ -633,8 +631,11 @@ var root = &cli.Command{
 						return err
 					}
 				}
-
-				err = p.Add(pkg)
+				entry, err := project.FindProvider(pkg, "latest")
+				if err != nil {
+					return util.NewReadableError(err, "Could not find provider "+pkg)
+				}
+				err = p.Add(entry.Name, entry.Version)
 				if err != nil {
 					return err
 				}
@@ -652,7 +653,7 @@ var root = &cli.Command{
 					return err
 				}
 				spin.Stop()
-				ui.Success(fmt.Sprintf("Added provider \"%s\"", pkg))
+				ui.Success(fmt.Sprintf("Added provider \"%s\". You can create resources with `new %s.SomeResource()`", entry.Alias, entry.Alias))
 				return nil
 			},
 		},

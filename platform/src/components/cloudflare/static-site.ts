@@ -11,8 +11,8 @@ import { KvData } from "./providers/kv-data.js";
 import { Worker } from "./worker.js";
 import {
   BaseStaticSiteArgs,
+  BaseStaticSiteAssets,
   buildApp,
-  cleanup,
   prepare,
 } from "../base/base-static-site.js";
 import { DEFAULT_ACCOUNT_ID } from "./account-id.js";
@@ -83,7 +83,7 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
    * ```
    * @default `Object`
    */
-  assets?: BaseStaticSiteArgs["assets"];
+  assets?: Input<BaseStaticSiteAssets & {}>;
   /**
    * Set a custom domain for your static site. Supports domains hosted on Cloudflare.
    *
@@ -254,13 +254,9 @@ export class StaticSite extends Component implements Link.Linkable {
 
     const parent = this;
     const { sitePath, environment, indexPage } = prepare(args);
-    const outputPath = buildApp(
-      parent,
-      name,
-      args.build,
-      sitePath,
-      environment,
-    );
+    const outputPath = $dev
+      ? path.join($cli.paths.platform, "functions", "empty-site")
+      : buildApp(parent, name, args.build, sitePath, environment);
     const storage = createKvStorage();
     const assetManifest = generateAssetManifest();
     const kvData = uploadAssets();
@@ -269,7 +265,20 @@ export class StaticSite extends Component implements Link.Linkable {
     this.router = worker;
 
     this.registerOutputs({
-      ...cleanup(sitePath, environment, this.url as Output<string>),
+      _hint: this.url,
+      _dev: {
+        environment,
+        command: "npm run dev",
+        directory: sitePath,
+        autostart: true,
+      },
+      _receiver: all([sitePath, environment]).apply(
+        ([sitePath, environment]) => ({
+          directory: sitePath,
+          links: [],
+          environment,
+        }),
+      ),
       _metadata: {
         path: sitePath,
         environment,

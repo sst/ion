@@ -212,13 +212,15 @@ func (r *NodeRuntime) Run(ctx context.Context, input *RunInput) (Worker, error) 
 		filepath.Join(input.Build.Out, input.Build.Handler),
 		input.WorkerID,
 	)
-
 	util.SetProcessGroupID(cmd)
 	cmd.Cancel = func() error {
 		return util.TerminateProcess(cmd.Process.Pid)
 	}
 
-	cmd.Env = append(input.Env, "AWS_LAMBDA_RUNTIME_API="+input.Server)
+	cmd.Env = input.Env
+	cmd.Env = append(cmd.Env, "NODE_OPTIONS="+os.Getenv("NODE_OPTIONS"))
+	cmd.Env = append(cmd.Env, "VSCODE_INSPECTOR_OPTIONS="+os.Getenv("VSCODE_INSPECTOR_OPTIONS"))
+	cmd.Env = append(cmd.Env, "AWS_LAMBDA_RUNTIME_API="+input.Server)
 	slog.Info("starting worker", "env", cmd.Env, "args", cmd.Args)
 	cmd.Dir = input.Build.Out
 	stdout, _ := cmd.StdoutPipe()

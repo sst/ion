@@ -416,6 +416,9 @@ async function generateDnsDoc(module: TypeDoc.DeclarationReflection) {
       vercel: "Vercel",
     }[dnsProvider] || dnsProvider;
 
+  const dir = path.dirname(outputFilePath);
+  fs.mkdirSync(dir, { recursive: true });
+
   fs.writeFileSync(
     outputFilePath,
     [
@@ -455,6 +458,9 @@ async function generateLinkableDoc(module: TypeDoc.DeclarationReflection) {
       namespace: "sst.cloudflare.binding",
     },
   }[module.name]!;
+
+  const dir = path.dirname(outputFilePath);
+  fs.mkdirSync(dir, { recursive: true });
 
   fs.writeFileSync(
     outputFilePath,
@@ -496,6 +502,9 @@ async function generateComponentDoc(
     "src/content/docs/docs/component",
     `${component.name.split("/").slice(1).join("/")}.mdx`
   );
+
+  const dir = path.dirname(outputFilePath);
+  fs.mkdirSync(dir, { recursive: true });
 
   fs.writeFileSync(
     outputFilePath,
@@ -766,6 +775,8 @@ function renderType(
     // types in different doc
     const externalModule = {
       ApiGatewayV1Authorizer: "apigatewayv1-authorizer",
+      ApiGatewayV1IntegrationArgs: "apigatewayv1",
+      ApiGatewayV1IntegrationRoute: "apigatewayv1-integration-route",
       ApiGatewayV1LambdaRoute: "apigatewayv1-lambda-route",
       ApiGatewayV2Authorizer: "apigatewayv2-authorizer",
       ApiGatewayV2LambdaRoute: "apigatewayv2-lambda-route",
@@ -1929,6 +1940,7 @@ async function buildComponents() {
       "../platform/src/components/aws/apigateway-websocket-route.ts",
       "../platform/src/components/aws/apigatewayv1.ts",
       "../platform/src/components/aws/apigatewayv1-authorizer.ts",
+      "../platform/src/components/aws/apigatewayv1-integration-route.ts",
       "../platform/src/components/aws/apigatewayv1-lambda-route.ts",
       "../platform/src/components/aws/apigatewayv2.ts",
       "../platform/src/components/aws/apigatewayv2-authorizer.ts",

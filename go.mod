@@ -76,7 +76,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.18.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.21.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.26.7
-	github.com/aws/smithy-go v1.20.3 // indirect
+	github.com/aws/smithy-go v1.20.3
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/charmbracelet/bubbles v0.18.0
@@ -148,7 +148,7 @@ require (
 	golang.org/x/net v0.27.0 // indirect
 	golang.org/x/sync v0.7.0
 	golang.org/x/sys v0.22.0 // indirect
-	golang.org/x/term v0.22.0 // indirect
+	golang.org/x/term v0.22.0
 	golang.org/x/text v0.16.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.23.0 // indirect

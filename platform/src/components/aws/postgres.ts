@@ -376,7 +376,7 @@ export class Postgres extends Component implements Link.Linkable {
   /** The password of the master user. */
   public get password() {
     return this.cluster.masterPassword.apply((val) => {
-      if (val) return output(undefined);
+      if (val) return output(val);
       const parsed = jsonParse(
         this.secret.apply((secret) =>
           secret ? secret.secretString : output("{}"),
@@ -429,7 +429,11 @@ export class Postgres extends Component implements Link.Linkable {
       include: [
         permission({
           actions: ["secretsmanager:GetSecretValue"],
-          resources: [this.cluster.masterUserSecrets[0].secretArn],
+          resources: [
+            this.cluster.masterUserSecrets[0].secretArn.apply(
+              (v) => v ?? "arn:aws:iam::rdsdoesnotusesecretmanager",
+            ),
+          ],
         }),
         permission({
           actions: [
