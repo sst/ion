@@ -13,3 +13,6 @@ node ./scripts/build.mjs
 
 mkdir -p ./dist/python-runtime/
 cp ./functions/python-runtime/index.py ./dist/python-runtime/index.py
+
+mkdir -p ./dist/dockerfiles/
+cp ./functions/docker/python.Dockerfile ./dist/dockerfiles/python.Dockerfile
