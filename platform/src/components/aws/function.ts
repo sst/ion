@@ -1659,7 +1659,8 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function createFunction() {
-      return all([logging, logGroup, runtime, pythonContainerMode, image, dev]).apply(([logging, logGroup, runtime, pythonContainerMode, image, dev]) => {
+      return all([logging, logGroup, runtime, pythonContainerMode, image, dev, containerDeployment])
+      .apply(([logging, logGroup, runtime, pythonContainerMode, image, dev, containerDeployment]) => {
         const transformed = transform(
           args.transform?.function,
           `${name}Function`,

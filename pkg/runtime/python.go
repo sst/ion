@@ -14,6 +14,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/global"
 )
 
 type PythonWorker struct {
@@ -186,11 +187,13 @@ func (r *PythonRuntime) Run(ctx context.Context, input *RunInput) (Worker, error
 		filepath.Join(input.Build.Out, input.Build.Handler),
 		input.WorkerID,
 	)
+
+	uvPath := global.UvPath()
 	
 
 	cmd := exec.CommandContext(
 		ctx, 
-		"uv",
+		uvPath,
 		args...	)
 
 	util.SetProcessGroupID(cmd)
