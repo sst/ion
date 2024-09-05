@@ -2,7 +2,7 @@ from transformers import pipeline
 import json
 
 # Initialize the pipeline once (outside the handler) to avoid reloading the model on each request
-pipe = pipeline("text-generation", model="roneneldan/TinyStories-33M")
+pipe = pipeline("text-generation", model="roneneldan/TinyStories-1M")
 
 
 def handler(event, context):
