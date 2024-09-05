@@ -129,6 +129,13 @@ type PyProject struct {
 	Project struct {
 		Dependencies []string `toml:"dependencies"`
 	} `toml:"project"`
+	Tool struct {
+		Uv struct {
+			Sources map[string]struct {
+				URL string `toml:"url"`
+			} `toml:"sources"`
+		} `toml:"uv"`
+	} `toml:"tool"`
 }
 
 func (r *PythonRuntime) Run(ctx context.Context, input *RunInput) (Worker, error) {
@@ -153,6 +160,9 @@ func (r *PythonRuntime) Run(ctx context.Context, input *RunInput) (Worker, error
 
 	// Extract the dependencies
 	dependencies := pyProject.Project.Dependencies
+
+	// Extract the sources
+	sources := pyProject.Tool.Uv.Sources
 	
 	args := []string{
 		"run",
@@ -162,6 +172,13 @@ func (r *PythonRuntime) Run(ctx context.Context, input *RunInput) (Worker, error
 
 	for _, dep := range dependencies {
 		args = append(args, "--with", dep)
+	}
+
+	// If sources are specified, use them
+	if len(sources) > 0 {
+		for _, source := range sources {
+			args = append(args, "--find-links", source.URL)
+		}
 	}
 
 	args = append(args,
