@@ -1,2 +1,2 @@
-import tscPlugin from "esbuild-plugin-tsc";
-export default [tscPlugin()];
+// import tscPlugin from "esbuild-plugin-tsc";
+export default [];

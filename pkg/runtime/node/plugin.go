@@ -12,12 +12,8 @@ import (
 )
 
 type NodeLoadResult struct {
-	Contents   string   `json:"contents"`
-	Loader     string   `json:"loader"`
-	PluginData any      `json:"pluginData"`
-	PluginName string   `json:"pluginName"`
-	Errors     []string `json:"errors"`
-	Warnings   []string `json:"warnings"`
+	api.OnLoadResult
+	Loader string `json:"loader"`
 }
 
 func plugin(path string) api.Plugin {
@@ -53,6 +49,7 @@ func plugin(path string) api.Plugin {
 				if err := json.NewDecoder(stdout).Decode(&result); err != nil {
 					return api.OnResolveResult{}, fmt.Errorf("error reading resolve response: %w", err)
 				}
+				slog.Info("result", "result", result)
 				return result, nil
 			})
 			build.OnLoad(api.OnLoadOptions{Filter: ".*"}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
@@ -68,23 +65,8 @@ func plugin(path string) api.Plugin {
 				if err := json.NewDecoder(stdout).Decode(&nodeResult); err != nil {
 					return api.OnLoadResult{}, fmt.Errorf("error reading load response: %w", err)
 				}
-				result := api.OnLoadResult{
-					Contents:   &nodeResult.Contents,
-					PluginData: nodeResult.PluginData,
-					PluginName: nodeResult.PluginName,
-				}
-				if loader, ok := loaderMap[nodeResult.Loader]; ok {
-					result.Loader = loader
-				} else {
-					result.Loader = api.LoaderDefault
-				}
-				for _, errStr := range nodeResult.Errors {
-					result.Errors = append(result.Errors, api.Message{Text: errStr})
-				}
-				for _, warnStr := range nodeResult.Warnings {
-					result.Warnings = append(result.Warnings, api.Message{Text: warnStr})
-				}
-				return result, nil
+				nodeResult.OnLoadResult.Loader = loaderMap[nodeResult.Loader]
+				return nodeResult.OnLoadResult, nil
 			})
 			build.OnDispose(func() {
 				stdin.Close()
