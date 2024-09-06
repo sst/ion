@@ -2,6 +2,7 @@ import path from "path";
 import fs from "fs";
 import { globSync } from "glob";
 import crypto from "crypto";
+import { CloudFrontCustomOrigin } from "aws-lambda";
 import {
   Output,
   Unwrap,
@@ -593,6 +594,10 @@ function handler(event) {
       Object.entries(plan.origins ?? {}).forEach(([name, props]) => {
         if (props.s3) {
           origins[name] = buildS3Origin(name, props.s3);
+        } else if (props.customS3) {
+          origins[name] = buildCustomS3Origin(name, props.customS3);
+        } else if (props.custom) {
+          origins[name] = buildCustomOrigin(name, props.custom);
         } else if (props.server) {
           origins[name] = buildServerOrigin(name, props.server);
         } else if (props.imageOptimization) {
@@ -636,6 +641,30 @@ function handler(event) {
         domainName: bucket.nodes.bucket.bucketRegionalDomainName,
         originPath: props.originPath ? `/${props.originPath}` : "",
         originAccessControlId: access.id,
+      };
+    }
+
+    function buildCustomS3Origin(
+      name: string,
+      {
+        domainName,
+        originAccessControlId,
+      }: { domainName: string; originAccessControlId?: string },
+    ): types.input.cloudfront.DistributionOrigin {
+      return {
+        originId: name,
+        domainName,
+        originAccessControlId,
+      };
+    }
+
+    function buildCustomOrigin(
+      fnName: string,
+      props: Omit<types.input.cloudfront.DistributionOrigin, "originId">,
+    ): types.input.cloudfront.DistributionOrigin {
+      return {
+        ...props,
+        originId: fnName,
       };
     }
 
@@ -1061,6 +1090,11 @@ export function validatePlan<
   Origins extends Record<
     string,
     {
+      custom?: Prettify<Input<CloudFrontCustomOrigin>>;
+      customS3?: Prettify<{
+        domainName: Input<string>;
+        originAccessControlId?: Input<string>;
+      }>;
       server?: Prettify<ServerOriginConfig>;
       imageOptimization?: Prettify<ImageOptimizationOriginConfig>;
       s3?: Prettify<S3OriginConfig>;
@@ -1100,13 +1134,15 @@ export function validatePlan<
 }) {
   Object.entries(input.origins).forEach(([originName, origin]) => {
     if (
+      !origin.custom &&
+      !origin.customS3 &&
       !origin.s3 &&
       !origin.server &&
       !origin.imageOptimization &&
       !origin.group
     ) {
       throw new VisibleError(
-        `Invalid origin "${originName}" definition. Each origin must be an S3, server, image optimization, or group origin.`,
+        `Invalid origin "${originName}" definition. Each origin must be an S3, server, image optimization, custom, or group origin.`,
       );
     }
   });
