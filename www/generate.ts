@@ -1936,6 +1936,7 @@ async function buildComponents() {
       "../platform/src/global-config.d.ts",
       "../platform/src/components/linkable.ts",
       "../platform/src/components/secret.ts",
+      "../platform/src/components/aws/analogjs.ts",
       "../platform/src/components/aws/apigateway-websocket.ts",
       "../platform/src/components/aws/apigateway-websocket-route.ts",
       "../platform/src/components/aws/apigatewayv1.ts",
