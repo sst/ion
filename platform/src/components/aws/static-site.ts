@@ -67,23 +67,46 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
    */
   path?: BaseStaticSiteArgs["path"];
   /**
-   * Custom CloudFront Function code to handle Viewer Request.
-   * 
-   * @example
-   * ```js
-   * {
-   *   viewerRequestFunction: `
-   *     function handler(event) {
-   *         var request = event.request;
-   *         if (!request.uri.includes('.')) {
-   *            request.uri = 'index.html';
-   *         }
-   *         return request;
-   *     }`
-   * }
-   * ```
+   * Configure CloudFront Functions to customize the behavior of HTTP requests and responses at the edge locations.
    */
-  viewerRequestFunction?: string;
+  edge?: Input<{
+    /**
+     * The ARN of the CloudFront function to use for the viewer request.
+     *
+     * The viewer request function can be used to modify incoming requests before they reach your origin server. For example, you can redirect users, rewrite URLs, or add headers.
+     *
+     * By default, a built-in `viewerRequest` function is set to redirect all requests to:
+     * - append `/index.html` to the URL if the URL ends with a `/`.
+     * - append `.html` to the URL if the URL does not contain a file extension.
+     *
+     * @default Uses the built-in viewer request function.
+     * @example
+     * ```js
+     * {
+     *   edge: {
+     *     viewerRequest: "arn:aws:cloudfront::1234567890:function/MyViewRequestFunction"
+     *   }
+     * }
+     * ```
+     */
+    viewerRequest?: Input<string>;
+    /**
+     * The ARN of the CloudFront function to use for the viewer response.
+     *
+     * The viewer response function can be used to modify outgoing responses before they are sent to the client. For example, you can add security headers or change the response status code.
+     *
+     * @default No viewer response function is set.
+     * @example
+     * ```js
+     * {
+     *   edge: {
+     *     viewerResponse: "arn:aws:cloudfront::1234567890:function/MyViewResponseFunction"
+     *   }
+     * }
+     * ```
+     */
+    viewerResponse?: Input<string>;
+  }>;
   /**
    * Configure if your static site needs to be built. This is useful if you are using a static site generator.
    *
@@ -486,7 +509,6 @@ export class StaticSite extends Component implements Link.Linkable {
     const bucket = createBucket();
     const { bucketName, bucketDomain } = getBucketDetails();
     const bucketFile = uploadAssets();
-    const cloudfrontFunction = createCloudfrontFunction(args.viewerRequestFunction);
     const invalidation = buildInvalidation();
     const distribution = createDistribution();
     this.assets = bucket;
@@ -537,27 +559,6 @@ export class StaticSite extends Component implements Link.Linkable {
       return new OriginAccessControl(
         `${name}S3AccessControl`,
         { name: physicalName(64, name) },
-        { parent },
-      );
-    }
-
-    function createCloudfrontFunction(customCode?: string) {
-      return new cloudfront.Function(
-        `${name}Function`,
-        {
-          runtime: "cloudfront-js-1.0",
-          code: customCode ?? `
-    function handler(event) {
-        var request = event.request;
-        var uri = request.uri;
-        if (uri.endsWith('/')) {
-          request.uri += 'index.html';
-        } else if (!uri.includes('.')) {
-          request.uri += '.html';
-        }
-        return request;
-    }`,
-        },
         { parent },
       );
     }
@@ -774,12 +775,21 @@ export class StaticSite extends Component implements Link.Linkable {
               compress: true,
               // CloudFront's managed CachingOptimized policy
               cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
-              functionAssociations: [
+              functionAssociations: output(args.edge).apply((edge) => [
                 {
                   eventType: "viewer-request",
-                  functionArn: cloudfrontFunction.arn,
+                  functionArn:
+                    edge?.viewerRequest ?? useCloudfrontFunction().arn,
                 },
-              ],
+                ...(edge?.viewerResponse
+                  ? [
+                      {
+                        eventType: "viewer-response",
+                        functionArn: edge.viewerResponse,
+                      },
+                    ]
+                  : []),
+              ]),
             },
             domain: args.domain,
             invalidation,
@@ -787,6 +797,27 @@ export class StaticSite extends Component implements Link.Linkable {
           // create distribution after s3 upload finishes
           { dependsOn: bucketFile, parent },
         ),
+      );
+    }
+
+    function useCloudfrontFunction() {
+      return new cloudfront.Function(
+        `${name}Function`,
+        {
+          runtime: "cloudfront-js-1.0",
+          code: `
+    function handler(event) {
+        var request = event.request;
+        var uri = request.uri;
+        if (uri.endsWith('/')) {
+          request.uri += 'index.html';
+        } else if (!uri.includes('.')) {
+          request.uri += '.html';
+        }
+        return request;
+    }`,
+        },
+        { parent },
       );
     }
 
