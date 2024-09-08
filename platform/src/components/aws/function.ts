@@ -37,7 +37,6 @@ import {
 import { Permission, permission } from "./permission.js";
 import { Vpc } from "./vpc.js";
 import { buildPython, buildPythonContainer } from "../../runtime/python.js";
-// import * as docker from "@pulumi/docker";
 import * as docker_build from "@pulumi/docker-build";
 
 export type FunctionPermissionArgs = {
@@ -186,6 +185,7 @@ interface FunctionUrlCorsArgs {
 export interface FunctionArgs {
   /**
    * Disable running this function [Live](/docs/live/) in `sst dev`.
+   * @deprecated Use `dev` instead.
    * @default `true`
    * @example
    * ```js
@@ -195,6 +195,17 @@ export interface FunctionArgs {
    * ```
    */
   live?: Input<false>;
+  /**
+   * Disable running this function [Live](/docs/live/) in `sst dev`.
+   * @default Live mode enabled in `sst dev`
+   * @example
+   * ```js
+   * {
+   *   dev: false
+   * }
+   * ```
+   */
+  dev?: Input<false>;
   /**
    * The name for the function.
    *
@@ -242,7 +253,9 @@ export interface FunctionArgs {
    * }
    * ```
    */
-  runtime?: Input<"nodejs18.x" | "nodejs20.x" | "provided.al2023" | "python3.11">;
+  runtime?: Input<
+    "nodejs18.x" | "nodejs20.x" | "provided.al2023" | "python3.11"
+  >;
   /**
    * Path to the source code directory for the function. By default, the handler is
    * bundled with [esbuild](https://esbuild.github.io/). Use `bundle` to skip bundling.
@@ -459,34 +472,53 @@ export interface FunctionArgs {
   logging?: Input<
     | false
     | {
-      /**
-       * The duration the function logs are kept in CloudWatch.
-       * @default `forever`
-       * @example
-       * ```js
-       * {
-       *   logging: {
-       *     retention: "1 week"
-       *   }
-       * }
-       * ```
-       */
-      retention?: Input<keyof typeof RETENTION>;
-      /**
-       * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
-       * of the Lambda function.
-       * @default `"text"`
-       * @example
-       * ```js
-       * {
-       *   logging: {
-       *     format: "json"
-       *   }
-       * }
-       * ```
-       */
-      format?: Input<"text" | "json">;
-    }
+        /**
+         * The duration the function logs are kept in CloudWatch.
+         *
+         * Not application when an existing log group is provided.
+         *
+         * @default `forever`
+         * @example
+         * ```js
+         * {
+         *   logging: {
+         *     retention: "1 week"
+         *   }
+         * }
+         * ```
+         */
+        retention?: Input<keyof typeof RETENTION>;
+        /**
+         * Assigns the given CloudWatch log group name to the function. This allows you to pass in a previously created log group.
+         *
+         * By default, the function creates a new log group when it's created.
+         *
+         * @default Creates a log group
+         * @example
+         * ```js
+         * {
+         *   logging: {
+         *     logGroup: "/existing/log-group"
+         *   }
+         * }
+         * ```
+         */
+        logGroup?: Input<string>;
+        /**
+         * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
+         * of the Lambda function.
+         * @default `"text"`
+         * @example
+         * ```js
+         * {
+         *   logging: {
+         *     format: "json"
+         *   }
+         * }
+         * ```
+         */
+        format?: Input<"text" | "json">;
+      }
   >;
   /**
    * The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
@@ -548,45 +580,45 @@ export interface FunctionArgs {
   url?: Input<
     | boolean
     | {
-      /**
-       * The authorization used for the function URL. Supports [IAM authorization](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
-       * @default `"none"`
-       * @example
-       * ```js
-       * {
-       *   url: {
-       *     authorization: "iam"
-       *   }
-       * }
-       * ```
-       */
-      authorization?: Input<"none" | "iam">;
-      /**
-       * Customize the CORS (Cross-origin resource sharing) settings for the function URL.
-       * @default `true`
-       * @example
-       * Disable CORS.
-       * ```js
-       * {
-       *   url: {
-       *     cors: false
-       *   }
-       * }
-       * ```
-       * Only enable the `GET` and `POST` methods for `https://example.com`.
-       * ```js
-       * {
-       *   url: {
-       *     cors: {
-       *       allowMethods: ["GET", "POST"],
-       *       allowOrigins: ["https://example.com"]
-       *     }
-       *   }
-       * }
-       * ```
-       */
-      cors?: Input<boolean | Prettify<FunctionUrlCorsArgs>>;
-    }
+        /**
+         * The authorization used for the function URL. Supports [IAM authorization](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
+         * @default `"none"`
+         * @example
+         * ```js
+         * {
+         *   url: {
+         *     authorization: "iam"
+         *   }
+         * }
+         * ```
+         */
+        authorization?: Input<"none" | "iam">;
+        /**
+         * Customize the CORS (Cross-origin resource sharing) settings for the function URL.
+         * @default `true`
+         * @example
+         * Disable CORS.
+         * ```js
+         * {
+         *   url: {
+         *     cors: false
+         *   }
+         * }
+         * ```
+         * Only enable the `GET` and `POST` methods for `https://example.com`.
+         * ```js
+         * {
+         *   url: {
+         *     cors: {
+         *       allowMethods: ["GET", "POST"],
+         *       allowOrigins: ["https://example.com"]
+         *     }
+         *   }
+         * }
+         * ```
+         */
+        cors?: Input<boolean | Prettify<FunctionUrlCorsArgs>>;
+      }
   >;
   /**
    * Configure how your function is bundled.
@@ -739,16 +771,16 @@ export interface FunctionArgs {
      */
     splitting?: Input<boolean>;
   }>;
-    /**
+  /**
    * Configure your python function.
    *
-   * 
+   *
    * By default, SST will package all files in the same directory as the `handler` file.
    * This means that you need to your handler file be the root of all files that need to be
    * included in the function package. The only exception to this is a parent `pyproject.toml`
    * file. SST will look for this file by finding the closest parent directory that contains
    * a `pyproject.toml` file.
-   * 
+   *
    * @example
    * ```markdown
    * project-root/
@@ -774,8 +806,7 @@ export interface FunctionArgs {
      * }
      * ```
      */
-    container?: Input<boolean>; 
-
+    container?: Input<boolean>;
   }>;
   /**
    * Add additional files to copy into the function package. Takes a list of objects
@@ -831,6 +862,14 @@ export interface FunctionArgs {
   /**
    * A list of Lambda layer ARNs to add to the function.
    *
+   * :::note
+   * Layers are only added when the function is deployed.
+   * :::
+   *
+   * These are only added when the function is deployed. In `sst dev`, your functions are run
+   * locally, so the layers are not used. Instead you should use a local version of what's
+   * in the layer.
+   *
    * @example
    * ```js
    * {
@@ -839,6 +878,19 @@ export interface FunctionArgs {
    * ```
    */
   layers?: Input<Input<string>[]>;
+  /**
+   * A list of tags to add to the function.
+   *
+   * @example
+   * ```js
+   * {
+   *   tags: {
+   *     "my-tag": "my-value"
+   *   }
+   * }
+   * ```
+   */
+  tags?: Input<Record<string, Input<string>>>;
   /**
    * Configure the function to connect to private subnets in a virtual private cloud or VPC. This allows your function to access private resources.
    *
@@ -1002,10 +1054,12 @@ export class Function extends Component implements Link.Linkable {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
-    const dev = output(args.live).apply((v) => $dev && v !== false);
-    const pythonContainerMode = output(args.python).apply((python => python?.container ?? false));
+    const pythonContainerMode = output(args.python).apply(
+      (python) => python?.container ?? false,
+    );
     // Useful for future runtimes
     const containerDeployment = pythonContainerMode;
+    const dev = normalizeDev();
     const region = normalizeRegion();
     const injections = normalizeInjections();
     const runtime = normalizeRuntime();
@@ -1024,18 +1078,15 @@ export class Function extends Component implements Link.Linkable {
     const { bundle, handler: handler0 } = buildHandler();
     const { handler, wrapper } = buildHandlerWrapper();
     const role = createRole();
-    const {zipPath, image} = createBuildAsset();
-
+    const { zipPath, image } = createBuildAsset();
 
     const bundleHash = calculateHash();
     const file = createBucketObject();
-    
 
     const logGroup = createLogGroup();
     const fn = createFunction();
 
     const codeUpdater = updateFunctionCode();
-    
 
     const fnUrl = createUrl();
 
@@ -1048,7 +1099,7 @@ export class Function extends Component implements Link.Linkable {
 
     this.registerOutputs({
       _live: unsecret(
-        all([dev]).apply(([dev]) => {
+        output(dev).apply((dev) => {
           if (!dev) return undefined;
           return all([
             name,
@@ -1079,8 +1130,14 @@ export class Function extends Component implements Link.Linkable {
       },
     });
 
+    function normalizeDev() {
+      return all([args.dev, args.live]).apply(
+        ([d, l]) => $dev && d !== false && l !== false,
+      );
+    }
+
     function normalizeRegion() {
-      return getRegionOutput(undefined, { provider: opts?.provider }).name;
+      return getRegionOutput(undefined, { parent }).name;
     }
 
     function normalizeInjections() {
@@ -1114,6 +1171,7 @@ export class Function extends Component implements Link.Linkable {
             stage: $app.stage,
           });
           if (dev) {
+            result.SST_REGION = process.env.SST_AWS_REGION!;
             result.SST_FUNCTION_ID = name;
             result.SST_APP = $app.name;
             result.SST_STAGE = $app.stage;
@@ -1133,8 +1191,13 @@ export class Function extends Component implements Link.Linkable {
       return output(args.logging).apply((logging) => {
         if (logging === false) return undefined;
 
+        if (logging?.retention && logging?.logGroup)
+          throw new VisibleError(
+            `Cannot set both "logging.retention" and "logging.logGroup"`,
+          );
+
         return {
-          ...logging,
+          logGroup: logging?.logGroup,
           retention: logging?.retention ?? "forever",
           format: logging?.format ?? "text",
         };
@@ -1164,10 +1227,10 @@ export class Function extends Component implements Link.Linkable {
             : url.cors === true || url.cors === undefined
               ? defaultCors
               : {
-                ...defaultCors,
-                ...url.cors,
-                maxAge: url.cors.maxAge && toSeconds(url.cors.maxAge),
-              };
+                  ...defaultCors,
+                  ...url.cors,
+                  maxAge: url.cors.maxAge && toSeconds(url.cors.maxAge),
+                };
 
         return { authorization, cors };
       });
@@ -1240,16 +1303,16 @@ export class Function extends Component implements Link.Linkable {
 
     function buildHandler() {
       return all([runtime, dev]).apply(([runtime, dev]) => {
-        if (runtime === "python3.11") {
-          if (dev) {
-            return {
-              handler: "bootstrap",
-              bundle: path.join($cli.paths.platform, "dist", "bridge"),
-            }
-          }
+        if (dev) {
+          return {
+            handler: "bootstrap",
+            bundle: path.join($cli.paths.platform, "dist", "bridge"),
+          };
+        }
 
-          const buildResult = all([args, linkData]).apply(
-            async ([args, linkData]) => {
+        if (runtime === "python3.11") {
+          const buildResult = all([args, pythonContainerMode, linkData]).apply(
+            async ([args, pythonContainerMode, linkData]) => {
               if (pythonContainerMode) {
                 const result = await buildPythonContainer(name, {
                   ...args,
@@ -1258,7 +1321,7 @@ export class Function extends Component implements Link.Linkable {
                 if (result.type === "error") {
                   throw new Error(
                     `Failed to build function "${args.handler}": ` +
-                    result.errors.join("\n").trim(),
+                      result.errors.join("\n").trim(),
                   );
                 }
                 return result;
@@ -1270,7 +1333,7 @@ export class Function extends Component implements Link.Linkable {
               if (result.type === "error") {
                 throw new Error(
                   `Failed to build function "${args.handler}": ` +
-                  result.errors.join("\n").trim(),
+                    result.errors.join("\n").trim(),
                 );
               }
               return result;
@@ -1280,13 +1343,6 @@ export class Function extends Component implements Link.Linkable {
           return {
             handler: buildResult.handler,
             bundle: buildResult.out,
-          }
-        }
-
-        if (dev) {
-          return {
-            handler: "bootstrap",
-            bundle: path.join($cli.paths.platform, "dist", "bridge"),
           };
         }
 
@@ -1306,7 +1362,7 @@ export class Function extends Component implements Link.Linkable {
             if (result.type === "error") {
               throw new Error(
                 `Failed to build function "${args.handler}": ` +
-                result.errors.join("\n").trim(),
+                  result.errors.join("\n").trim(),
               );
             }
             return result;
@@ -1316,8 +1372,7 @@ export class Function extends Component implements Link.Linkable {
           handler: buildResult.handler,
           bundle: buildResult.out,
         };
-      
-    })
+      });
     }
 
     function buildHandlerWrapper() {
@@ -1330,7 +1385,15 @@ export class Function extends Component implements Link.Linkable {
         injections,
         runtime,
       ]).apply(
-        async ([dev, bundle, handler, linkData, streaming, injections, runtime]) => {
+        async ([
+          dev,
+          bundle,
+          handler,
+          linkData,
+          streaming,
+          injections,
+          runtime,
+        ]) => {
           if (dev) return { handler };
           if (runtime === "python3.11") {
             return { handler };
@@ -1344,12 +1407,12 @@ export class Function extends Component implements Link.Linkable {
 
           const linkInjection = hasLinkInjections
             ? linkData
-              .map((item) => [
-                `process.env.SST_RESOURCE_${item.name} = ${JSON.stringify(
-                  JSON.stringify(item.properties),
-                )};\n`,
-              ])
-              .join("")
+                .map((item) => [
+                  `process.env.SST_RESOURCE_${item.name} = ${JSON.stringify(
+                    JSON.stringify(item.properties),
+                  )};\n`,
+                ])
+                .join("")
             : "";
 
           const parsed = path.posix.parse(handler);
@@ -1379,21 +1442,21 @@ export class Function extends Component implements Link.Linkable {
               name: path.posix.join(handlerDir, `${newHandlerFileName}.mjs`),
               content: streaming
                 ? [
-                  linkInjection,
-                  `export const ${newHandlerFunction} = awslambda.streamifyResponse(async (event, responseStream, context) => {`,
-                  ...injections,
-                  `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
-                  `  return rawHandler(event, responseStream, context);`,
-                  `});`,
-                ].join("\n")
+                    linkInjection,
+                    `export const ${newHandlerFunction} = awslambda.streamifyResponse(async (event, responseStream, context) => {`,
+                    ...injections,
+                    `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
+                    `  return rawHandler(event, responseStream, context);`,
+                    `});`,
+                  ].join("\n")
                 : [
-                  linkInjection,
-                  `export const ${newHandlerFunction} = async (event, context) => {`,
-                  ...injections,
-                  `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
-                  `  return rawHandler(event, context);`,
-                  `};`,
-                ].join("\n"),
+                    linkInjection,
+                    `export const ${newHandlerFunction} = async (event, context) => {`,
+                    ...injections,
+                    `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
+                    `  return rawHandler(event, context);`,
+                    `};`,
+                  ].join("\n"),
             },
           };
         },
@@ -1418,11 +1481,11 @@ export class Function extends Component implements Link.Linkable {
               })),
               ...(dev
                 ? [
-                  {
-                    actions: ["iot:*"],
-                    resources: ["*"],
-                  },
-                ]
+                    {
+                      actions: ["iot:*"],
+                      resources: ["*"],
+                    },
+                  ]
                 : []),
             ],
           }),
@@ -1435,28 +1498,29 @@ export class Function extends Component implements Link.Linkable {
           {
             assumeRolePolicy: !$dev
               ? iam.assumeRolePolicyForPrincipal({
-                Service: "lambda.amazonaws.com",
-              })
+                  Service: "lambda.amazonaws.com",
+                })
               : iam.getPolicyDocumentOutput({
-                statements: [
-                  {
-                    actions: ["sts:AssumeRole"],
-                    principals: [
-                      {
-                        type: "Service",
-                        identifiers: ["lambda.amazonaws.com"],
-                      },
-                      {
-                        type: "AWS",
-                        identifiers: [
-                          interpolate`arn:aws:iam::${getCallerIdentityOutput().accountId
+                  statements: [
+                    {
+                      actions: ["sts:AssumeRole"],
+                      principals: [
+                        {
+                          type: "Service",
+                          identifiers: ["lambda.amazonaws.com"],
+                        },
+                        {
+                          type: "AWS",
+                          identifiers: [
+                            interpolate`arn:aws:iam::${
+                              getCallerIdentityOutput().accountId
                             }:root`,
-                        ],
-                      },
-                    ],
-                  },
-                ],
-              }).json,
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                }).json,
             // if there are no statements, do not add an inline policy.
             // adding an inline policy with no statements will cause an error.
             inlinePolicies: policy.apply(({ statements }) =>
@@ -1465,13 +1529,13 @@ export class Function extends Component implements Link.Linkable {
             managedPolicyArns: logging.apply((logging) => [
               ...(logging
                 ? [
-                  "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-                ]
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                  ]
                 : []),
               ...(args.vpc
                 ? [
-                  "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
-                ]
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+                  ]
                 : []),
             ]),
           },
@@ -1487,7 +1551,7 @@ export class Function extends Component implements Link.Linkable {
       //       We will zip the folder ourselves.
 
       // If deploying to a container we need to first build the image. The zip
-      // is always needed so the FunctionCodeUpdater can track the contents of the 
+      // is always needed so the FunctionCodeUpdater can track the contents of the
       // image. This is convoluted, but I did not want to change too much of the function
       // internals.
       return all([bundle, wrapper, copyFiles, containerDeployment, dev]).apply(
@@ -1501,7 +1565,7 @@ export class Function extends Component implements Link.Linkable {
 
             // TODO: walln - check service implementation for .dockerignore stuff
 
-             // Get ECR repository
+            // Get ECR repository
             const bootstrapData = region.apply((region) =>
               bootstrap.forRegion(region),
             );
@@ -1511,42 +1575,54 @@ export class Function extends Component implements Link.Linkable {
 
             // build image
             //aws-python-container::sst:aws:Function::MyPythonFunction
-            return new docker_build.Image(`${name}Image`, {
-              // tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
-              tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
-              // Cannot use latest tag it breaks lambda because for whatever reason
-              // .ref is actually digest + tags and is not properly qualified???
-              context: {
-                location: path.join($cli.paths.work, "artifacts", `${name}-src`),
-              },
-              // Use the pushed image as a cache source.
-              cacheFrom: [{
-                  registry: {
+            return new docker_build.Image(
+              `${name}Image`,
+              {
+                // tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
+                tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
+                // Cannot use latest tag it breaks lambda because for whatever reason
+                // .ref is actually digest + tags and is not properly qualified???
+                context: {
+                  location: path.join(
+                    $cli.paths.work,
+                    "artifacts",
+                    `${name}-src`,
+                  ),
+                },
+                // Use the pushed image as a cache source.
+                cacheFrom: [
+                  {
+                    registry: {
                       ref: $interpolate`${bootstrapData.assetEcrUrl}:cache`,
+                    },
                   },
-              }],
-              // TODO: walln - investigate buildx ecr caching best practices
-              // Include an inline cache with our pushed image.
-              // cacheTo: [{
-              //     registry: {
-              //       imageManifest: true,
-              //       ociMediaTypes: true,
-              //       ref: $interpolate`${bootstrapData.assetEcrUrl}:cache`,
-              //     }
-              // }],
-              cacheTo: [{
-                inline: {},
-              }],
-              /// TODO: walln - enable arm64 builds by using architecture args
-              push: true,
-              registries: [
-                authToken.apply((authToken) => ({
-                  address: authToken.proxyEndpoint,
-                  username: authToken.userName,
-                  password: secret(authToken.password),
-                })),
-              ],
-            }, { parent: parent });
+                ],
+                // TODO: walln - investigate buildx ecr caching best practices
+                // Include an inline cache with our pushed image.
+                // cacheTo: [{
+                //     registry: {
+                //       imageManifest: true,
+                //       ociMediaTypes: true,
+                //       ref: $interpolate`${bootstrapData.assetEcrUrl}:cache`,
+                //     }
+                // }],
+                cacheTo: [
+                  {
+                    inline: {},
+                  },
+                ],
+                /// TODO: walln - enable arm64 builds by using architecture args
+                push: true,
+                registries: [
+                  authToken.apply((authToken) => ({
+                    address: authToken.proxyEndpoint,
+                    username: authToken.userName,
+                    password: secret(authToken.password),
+                  })),
+                ],
+              },
+              { parent: parent },
+            );
           }
 
           const image = createImage();
@@ -1601,9 +1677,9 @@ export class Function extends Component implements Link.Linkable {
               entry.isDir
                 ? archive.directory(entry.from, entry.to, { date: new Date(0) })
                 : archive.file(entry.from, {
-                  name: entry.to,
-                  date: new Date(0),
-                });
+                    name: entry.to,
+                    date: new Date(0),
+                  });
               //if (mode === "start") {
               //  try {
               //    const dir = path.dirname(toPath);
@@ -1617,7 +1693,7 @@ export class Function extends Component implements Link.Linkable {
             await archive.finalize();
           });
 
-          return {zipPath, image};
+          return { zipPath, image };
         },
       );
     }
@@ -1642,14 +1718,16 @@ export class Function extends Component implements Link.Linkable {
     function createLogGroup() {
       return logging.apply((logging) => {
         if (!logging) return;
+        if (logging.logGroup) return;
 
         return new cloudwatch.LogGroup(
           ...transform(
             args.transform?.logGroup,
             `${name}LogGroup`,
             {
-              name: interpolate`/aws/lambda/${args.name ?? physicalName(64, `${name}Function`)
-                }`,
+              name: interpolate`/aws/lambda/${
+                args.name ?? physicalName(64, `${name}Function`)
+              }`,
               retentionInDays: RETENTION[logging.retention],
             },
             { parent },
@@ -1659,81 +1737,101 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function createFunction() {
-      return all([logging, logGroup, runtime, pythonContainerMode, image, dev, containerDeployment])
-      .apply(([logging, logGroup, runtime, pythonContainerMode, image, dev, containerDeployment]) => {
-        const transformed = transform(
-          args.transform?.function,
-          `${name}Function`,
-          {
-            name: args.name,
-            description: all([args.description, dev]).apply(
-              ([description, dev]) =>
-                dev
-                  ? description
-                    ? `${description.substring(0, 240)} (live)`
-                    : "live"
-                  : `${description ?? ""}`,
-            ),
-            code: new asset.FileArchive(
-              path.join($cli.paths.platform, "functions", "empty-function"),
-            ),
-            handler: unsecret(handler),
-            role: args.role ?? role!.arn,
-            runtime,
-            timeout: timeout.apply((timeout) => toSeconds(timeout)),
-            memorySize: memory.apply((memory) => toMBs(memory)),
-            environment: {
-              variables: environment,
+      return all([
+        logging,
+        logGroup,
+        runtime,
+        pythonContainerMode,
+        image,
+        dev,
+        containerDeployment,
+      ]).apply(
+        ([
+          logging,
+          logGroup,
+          runtime,
+          pythonContainerMode,
+          image,
+          dev,
+          containerDeployment,
+        ]) => {
+          const transformed = transform(
+            args.transform?.function,
+            `${name}Function`,
+            {
+              name: args.name,
+              description: all([args.description, dev]).apply(
+                ([description, dev]) =>
+                  dev
+                    ? description
+                      ? `${description.substring(0, 240)} (live)`
+                      : "live"
+                    : `${description ?? ""}`,
+              ),
+              code: new asset.FileArchive(
+                path.join($cli.paths.platform, "functions", "empty-function"),
+              ),
+              handler: unsecret(handler),
+              role: args.role ?? role!.arn,
+              runtime,
+              timeout: timeout.apply((timeout) => toSeconds(timeout)),
+              memorySize: memory.apply((memory) => toMBs(memory)),
+              environment: {
+                variables: environment,
+              },
+              architectures,
+              loggingConfig: logging && {
+                logFormat: logging.format === "json" ? "JSON" : "Text",
+                logGroup: logging.logGroup ?? logGroup!.name,
+              },
+              vpcConfig: args.vpc && {
+                securityGroupIds: output(args.vpc).securityGroups,
+                subnetIds: output(args.vpc).privateSubnets,
+              },
+              layers: args.layers,
+              tags: args.tags,
             },
-            architectures,
-            loggingConfig: logging && {
-              logFormat: logging.format === "json" ? "JSON" : "Text",
-              logGroup: logGroup!.name,
-            },
-            vpcConfig: args.vpc && {
-              securityGroupIds: output(args.vpc).securityGroups,
-              subnetIds: output(args.vpc).privateSubnets,
-            },
-            layers: args.layers,
-          },
-          { parent },
-        );
-        if (containerDeployment && !dev) {
+            { parent },
+          );
+          if (containerDeployment && !dev) {
+            return new lambda.Function(
+              transformed[0],
+              {
+                ...transformed[1],
+                // if the runtime is python3.11 and we are in container mode, deploy image
+                packageType: "Image",
+                imageUri: image?.ref.apply(
+                  (ref) => ref?.replace(":latest", ""),
+                ),
+                code: undefined,
+                runtime: undefined,
+                handler: undefined,
+                imageConfig: {
+                  commands: [handler],
+                },
+                architectures: all([transformed[1].architectures]).apply(
+                  ([architectures]) => (dev ? ["x86_64"] : architectures!),
+                ),
+              },
+              transformed[2],
+            );
+          }
           return new lambda.Function(
             transformed[0],
             {
               ...transformed[1],
-              // if the runtime is python3.11 and we are in container mode, deploy image
-              packageType: "Image",
-              imageUri: image?.ref.apply((ref) => ref?.replace(":latest", "")),
-              code: undefined,
-              runtime: undefined,
-              handler: undefined,
-              imageConfig: {
-                commands: [handler]
-              },
+              packageType: "Zip",
+              runtime: all([transformed[1].runtime]).apply(([runtime]) =>
+                dev ? "provided.al2023" : runtime!,
+              ),
               architectures: all([transformed[1].architectures]).apply(
                 ([architectures]) => (dev ? ["x86_64"] : architectures!),
               ),
             },
             transformed[2],
           );
-        }
-        return new lambda.Function(
-          transformed[0],
-          {
-            ...transformed[1],
-            packageType: "Zip",            
-            runtime: all([transformed[1].runtime]).apply(
-              ([runtime]) => (dev ? "provided.al2023" : runtime!),
-            ),
-            architectures: all([transformed[1].architectures]).apply(
-              ([architectures]) => (dev ? ["x86_64"] : architectures!),
-            ),
-          },
-          transformed[2],
-        );
-      });
+        },
+      );
     }
 
     function createUrl() {
@@ -1757,23 +1855,21 @@ export class Function extends Component implements Link.Linkable {
 
     function updateFunctionCode() {
       return all([image]).apply(([image]) => {
-          return new FunctionCodeUpdater(
-            `${name}CodeUpdater`,
-            {
-              functionName: fn.name,
-              s3Bucket: file.bucket,
-              s3Key: file.key,
-              functionLastModified: fn.lastModified,
-              region,
-              imageUri: image?.ref.apply((ref) => ref?.replace(":latest", ""))
-            },
-            { parent },
-          );
-        
-    });
+        return new FunctionCodeUpdater(
+          `${name}CodeUpdater`,
+          {
+            functionName: fn.name,
+            s3Bucket: file.bucket,
+            s3Key: file.key,
+            functionLastModified: fn.lastModified,
+            region,
+            imageUri: image?.ref.apply((ref) => ref?.replace(":latest", "")),
+          },
+          { parent },
+        );
+      });
+    }
   }
-}
-  
 
   /**
    * The underlying [resources](/docs/components/#nodes) this component creates.

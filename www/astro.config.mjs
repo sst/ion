@@ -26,6 +26,7 @@ const sidebar = [
       { label: "Svelte", slug: "docs/start/aws/svelte" },
       { label: "Drizzle", slug: "docs/start/aws/drizzle" },
       { label: "Next.js", slug: "docs/start/aws/nextjs" },
+      { label: "Angular", slug: "docs/start/aws/angular" },
       { label: "Realtime", slug: "docs/start/aws/realtime" },
       { label: "Container", slug: "docs/start/aws/container" },
       {
@@ -52,6 +53,7 @@ const sidebar = [
   {
     label: "How to",
     items: [
+      { label: "AWS Accounts", slug: "docs/aws-accounts" },
       { label: "IAM Credentials", slug: "docs/iam-credentials" },
       { label: "Migrate From v2", slug: "docs/migrate-from-v2" },
       { label: "Custom Domains", slug: "docs/custom-domains" },
@@ -150,6 +152,7 @@ const sidebar = [
       "docs/component/aws/apigatewayv1-lambda-route",
       "docs/component/aws/apigatewayv2-lambda-route",
       "docs/component/aws/apigateway-websocket-route",
+      "docs/component/aws/apigatewayv1-integration-route",
       "docs/component/aws/kinesis-stream-lambda-subscriber",
     ],
   },
@@ -164,10 +167,7 @@ const sidebar = [
 if (import.meta.env.DEV) {
   sidebar.push({
     label: "Dummy",
-    items: [
-      { slug: "dummy/tsdoc" },
-      { slug: "dummy/markdown" },
-    ],
+    items: [{ slug: "dummy/tsdoc" }, { slug: "dummy/markdown" }],
   });
 }
 

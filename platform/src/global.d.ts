@@ -60,7 +60,7 @@ interface $APP
      * The providers currently being used in the app.
      */
     providers: App["providers"];
-  }> {}
+  }> { }
 
 declare global {
   // @ts-expect-error
@@ -225,8 +225,9 @@ declare global {
    *
    * ```ts title="sst.config.ts"
    * $transform(sst.aws.Function, (args, opts) => {
-   *   args.runtime = "nodejs18.x";
-   * })
+   *   // Set the default if it's not set by the component
+   *   args.runtime ??= "nodejs18.x";
+   * });
    * ```
    *
    * Here, `args` and `opts` are what you'd pass to the `Function` component. Recall the

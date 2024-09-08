@@ -8,9 +8,9 @@ import { FunctionArgs } from "../components/aws/function.js";
 import { findAbove } from "../util/fs.js";
 import os from "os";
 
-
-
-const limiter = new Semaphore(parseInt(process.env.SST_BUILD_CONCURRENCY || "4"));
+const limiter = new Semaphore(
+  parseInt(process.env.SST_BUILD_CONCURRENCY || "4"),
+);
 
 export async function buildPythonContainer(
   name: string,
@@ -20,11 +20,14 @@ export async function buildPythonContainer(
       properties: any;
     }[];
   },
-): Promise<{
-  type: "success",
-  out: string,
-  handler: string,
-} | { type: "error", errors: string[] }> {
+): Promise<
+  | {
+      type: "success";
+      out: string;
+      handler: string;
+    }
+  | { type: "error"; errors: string[] }
+> {
   const out = path.join($cli.paths.work, "artifacts", `${name}-src`);
   await fs.rm(out, { recursive: true, force: true });
   await fs.mkdir(out, { recursive: true });
@@ -40,7 +43,7 @@ export async function buildPythonContainer(
 
   // Calculate the relative path from the project root to the handler's directory
   const relativePath = path.relative($cli.paths.root, parsed.dir);
-  
+
   // Target directory should preserve the relative path
   const targetDir = path.join(out, relativePath);
   await fs.mkdir(targetDir, { recursive: true });
@@ -67,7 +70,10 @@ export async function buildPythonContainer(
     }
 
     // Copy pyproject.toml to the output directory
-    await fs.copyFile(path.join(pyProjectFile, "pyproject.toml"), path.join(out, path.join(pyProjectFile, "pyproject.toml")));
+    await fs.copyFile(
+      path.join(pyProjectFile, "pyproject.toml"),
+      path.join(out, path.join(pyProjectFile, "pyproject.toml")),
+    );
 
     // Check for uv.lock and copy it if it exists
     const uvLockFile = path.join(pyProjectFile, "uv.lock");
@@ -80,13 +86,24 @@ export async function buildPythonContainer(
     if (fsSync.existsSync(dockerFile)) {
       await fs.copyFile(dockerFile, path.join(out, "Dockerfile"));
     } else {
-      await fs.copyFile(path.join($cli.paths.platform, "functions", "docker", "python.Dockerfile"), path.join(out, "Dockerfile"));
+      await fs.copyFile(
+        path.join(
+          $cli.paths.platform,
+          "functions",
+          "docker",
+          "python.Dockerfile",
+        ),
+        path.join(out, "Dockerfile"),
+      );
     }
 
     return {
       type: "success",
       out,
-      handler: path.join(relativePath, parsed.base).split(path.sep).join(path.posix.sep),
+      handler: path
+        .join(relativePath, parsed.base)
+        .split(path.sep)
+        .join(path.posix.sep),
     };
   } catch (ex: any) {
     return {
@@ -98,7 +115,6 @@ export async function buildPythonContainer(
   }
 }
 
-
 export async function buildPython(
   name: string,
   input: pulumi.Unwrap<FunctionArgs> & {
@@ -107,11 +123,14 @@ export async function buildPython(
       properties: any;
     }[];
   },
-): Promise<{
-  type: "success",
-  out: string,
-  handler: string,
-} | { type: "error", errors: string[] }> {
+): Promise<
+  | {
+      type: "success";
+      out: string;
+      handler: string;
+    }
+  | { type: "error"; errors: string[] }
+> {
   const out = path.join($cli.paths.work, "artifacts", `${name}-src`);
   await fs.rm(out, { recursive: true, force: true });
   await fs.mkdir(out, { recursive: true });
@@ -127,7 +146,7 @@ export async function buildPython(
 
   // Calculate the relative path from the project root to the handler's directory
   const relativePath = path.relative($cli.paths.root, parsed.dir);
-  
+
   // Target directory should preserve the relative path
   const targetDir = path.join(out, relativePath);
   await fs.mkdir(targetDir, { recursive: true });
@@ -143,30 +162,48 @@ export async function buildPython(
     await fs.copyFile(file, target);
 
     // Find the closest pyproject.toml
-    const pyProjectFile  = await findAbove(parsed.dir, "pyproject.toml");
-    if (!pyProjectFile ) {
+    const pyProjectFile = await findAbove(parsed.dir, "pyproject.toml");
+    if (!pyProjectFile) {
       return {
         type: "error",
         errors: [
           `Could not find pyproject.toml or requirements.txt for handler "${input.handler}"`,
         ],
-      }
+      };
     }
 
     // Copy pyproject.toml to the output directory
-    await fs.copyFile(path.join(pyProjectFile, "pyproject.toml"), path.join(out, path.join(pyProjectFile, "pyproject.toml")));
+    await fs.copyFile(
+      path.join(pyProjectFile, "pyproject.toml"),
+      path.join(out, path.join(pyProjectFile, "pyproject.toml")),
+    );
 
     // Install Python dependencies
     // in the output directory we run uv sync to create a virtual environment
     // first make the output directory the working directory
     // also need to use sst uv path because it is not guaranteed to be in the path
-    const installCmd = `cd ${path.join(out, pyProjectFile)} && ${uvPath()} sync`;
+    const installCmd = `cd ${path.join(
+      out,
+      pyProjectFile,
+    )} && ${uvPath()} sync`;
 
     // Once the packages are synced, we need to convert the virtual environment to site-packages so that lambda can find the packages
-    const sitePackagesCmd = `cp -r ${path.join(out, pyProjectFile, ".venv", "lib", "python3.*", "site-packages", "*")} ${out}`;
+    const sitePackagesCmd = `cp -r ${path.join(
+      out,
+      pyProjectFile,
+      ".venv",
+      "lib",
+      "python3.*",
+      "site-packages",
+      "*",
+    )} ${out}`;
 
     // Now remove the virtual environment because it does not need to be included in the zip
-    const removeVirtualEnvCmd = `rm -rf ${path.join(out, pyProjectFile, ".venv")}`;
+    const removeVirtualEnvCmd = `rm -rf ${path.join(
+      out,
+      pyProjectFile,
+      ".venv",
+    )}`;
 
     const command = `${installCmd} && ${sitePackagesCmd} && ${removeVirtualEnvCmd}`;
 
@@ -179,17 +216,19 @@ export async function buildPython(
       });
     });
 
-
     return {
       type: "success",
       out,
-      handler: path.join(relativePath, parsed.base).split(path.sep).join(path.posix.sep),
+      handler: path
+        .join(relativePath, parsed.base)
+        .split(path.sep)
+        .join(path.posix.sep),
     };
   } catch (ex: any) {
     return {
       type: "error",
       errors: [ex.toString()],
-    }
+    };
   } finally {
     limiter.release();
   }
@@ -198,29 +237,29 @@ export async function buildPython(
 const configDir: string = (function (): string {
   const homeDir = os.homedir(); // Get the user's home directory
   if (!homeDir) {
-      throw new Error('Unable to determine user home directory');
+    throw new Error("Unable to determine user home directory");
   }
-  const result = path.join(homeDir, '.config', 'sst'); // Config directory path
-  const binDir = path.join(result, 'bin');
+  const result = path.join(homeDir, ".config", "sst"); // Config directory path
+  const binDir = path.join(result, "bin");
 
   // Add the bin directory to the PATH environment variable
   process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH}`;
 
   // Create the directories if they don't exist
   if (!fsSync.existsSync(result)) {
-      fsSync.mkdirSync(result, { recursive: true });
+    fsSync.mkdirSync(result, { recursive: true });
   }
   if (!fsSync.existsSync(binDir)) {
-      fsSync.mkdirSync(binDir, { recursive: true });
+    fsSync.mkdirSync(binDir, { recursive: true });
   }
 
   return result;
 })();
 
 function binPath(): string {
-  return path.join(configDir, 'bin');
+  return path.join(configDir, "bin");
 }
 
 function uvPath(): string {
-  return path.join(binPath(), 'uv');
+  return path.join(binPath(), "uv");
 }

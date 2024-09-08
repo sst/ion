@@ -1,5 +1,5 @@
 import { ComponentResourceOptions, all, output } from "@pulumi/pulumi";
-import { Component, Transform, transform } from "../component";
+import { Component, Prettify, Transform, transform } from "../component";
 import { Input } from "../input";
 import { Link } from "../link";
 import { CognitoIdentityProvider } from "./cognito-identity-provider";
@@ -8,6 +8,113 @@ import { Function, FunctionArgs } from "./function.js";
 import { VisibleError } from "../error";
 import { cognito, lambda } from "@pulumi/aws";
 import { permission } from "./permission";
+
+interface Triggers {
+  /**
+   * The ARN of the AWS KMS key used for encryption.
+   *
+   * When `customEmailSender` or `customSmsSender` are configured, Cognito encrypts the
+   * verification code and temporary passwords before sending them to your Lambda functions.
+   */
+  kmsKey?: string;
+  /**
+   * Triggered after the user successfully responds to the previous challenge, and a new
+   * challenge needs to be created.
+   *
+   * Takes the handler path or the function args.
+   */
+  createAuthChallenge?: string | FunctionArgs;
+  /**
+   * Triggered during events like user sign-up, password recovery, email/phone number
+   * verification, and when an admin creates a user. Use this trigger to customize the
+   * email provider.
+   *
+   * Takes the handler path or the function args.
+   */
+  customEmailSender?: string | FunctionArgs;
+  /**
+   * Triggered during events like user sign-up, password recovery, email/phone number
+   * verification, and when an admin creates a user. Use this trigger to customize the
+   * message that is sent to your users.
+   *
+   * Takes the handler path or the function args.
+   */
+  customMessage?: string | FunctionArgs;
+  /**
+   * Triggered when an SMS message needs to be sent, such as for MFA or verification codes.
+   * Use this trigger to customize the SMS provider.
+   *
+   * Takes the handler path or the function args.
+   */
+  customSmsSender?: string | FunctionArgs;
+  /**
+   * Triggered after each challenge response to determine the next action. Evaluates whether the
+   * user has completed the authentication process or if additional challenges are needed.
+   * ARN of the lambda function to name a custom challenge.
+   *
+   * Takes the handler path or the function args.
+   */
+  defineAuthChallenge?: string | FunctionArgs;
+  /**
+   * Triggered after a successful authentication event. Use this to perform custom actions,
+   * such as logging or modifying user attributes, after the user is authenticated.
+   *
+   * Takes the handler path or the function args.
+   */
+  postAuthentication?: string | FunctionArgs;
+  /**
+   * Triggered after a user is successfully confirmed; sign-up or email/phone number
+   * verification. Use this to perform additional actions, like sending a welcome email or
+   * initializing user data, after user confirmation.
+   *
+   * Takes the handler path or the function args.
+   */
+  postConfirmation?: string | FunctionArgs;
+  /**
+   * Triggered before the authentication process begins. Use this to implement custom
+   * validation or checks (like checking if the user is banned) before continuing
+   * authentication.
+   *
+   * Takes the handler path or the function args.
+   */
+  preAuthentication?: string | FunctionArgs;
+  /**
+   * Triggered before the user sign-up process completes. Use this to perform custom
+   * validation, auto-confirm users, or auto-verify attributes based on custom logic.
+   *
+   * Takes the handler path or the function args.
+   */
+  preSignUp?: string | FunctionArgs;
+  /**
+   * Triggered before tokens are generated in the authentication process. Use this to
+   * customize or add claims to the tokens that will be generated and returned to the user.
+   *
+   * Takes the handler path or the function args.
+   */
+  preTokenGeneration?: string | FunctionArgs;
+  /**
+   * The version of the preTokenGeneration trigger to use. Higher versions have access to
+   * more information that support new features.
+   * @default `"v1"`
+   */
+  preTokenGenerationVersion?: "v1" | "v2";
+  /**
+   * Triggered when a user attempts to sign in but does not exist in the current user pool.
+   * Use this to import and validate users from an existing user directory into the
+   * Cognito User Pool during sign-in.
+   *
+   * Takes the handler path or the function args.
+   */
+  userMigration?: string | FunctionArgs;
+  /**
+   * Triggered after the user responds to a custom authentication challenge. Use this to
+   * verify the user's response to the challenge and determine whether to continue
+   * authenticating the user.
+   *
+   * Takes the handler path or the function args.
+   */
+  verifyAuthChallengeResponse?: string | FunctionArgs;
+}
 
 export interface CognitoUserPoolArgs {
   /**
@@ -48,6 +155,96 @@ export interface CognitoUserPoolArgs {
    */
   usernames?: Input<Input<"email" | "phone">[]>;
   /**
+   * Enable advanced security features.
+   *
+   * Learn more about [advanced security](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pool-settings-advanced-security.html).
+   *
+   * @default Advanced security is disabled.
+   * @example
+   *
+   * ```ts
+   * {
+   *   advancedSecurity: "enforced"
+   * }
+   * ```
+   */
+  advancedSecurity?: Input<"audit" | "enforced">;
+  /**
+   * Configure the multi-factor authentication (MFA) settings for the User Pool.
+   *
+   * @default MFA is disabled.
+   * @example
+   *
+   * ```ts
+   * {
+   *   mfa: "on"
+   * }
+   * ```
+   */
+  mfa?: Input<"on" | "optional">;
+  /**
+   * Configure the SMS settings for the User Pool.
+   *
+   * @default No SMS settings.
+   * @example
+   *
+   * ```ts
+   * {
+   *   sms: {
+   *     externalId: "1234567890",
+   *     snsCallerArn: "arn:aws:iam::1234567890:role/CognitoSnsCaller",
+   *     snsRegion: "us-east-1",
+   *   }
+   * }
+   * ```
+   */
+  sms?: Input<{
+    /**
+     * The external ID used in IAM role trust relationships.
+     *
+     * Learn more about [external IDs](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_common-scenarios_third-party.html).
+     */
+    externalId: Input<string>;
+    /**
+     * The ARN of the IAM role that Amazon Cognito can assume to access the Amazon SNS
+     *
+     */
+    snsCallerArn: Input<string>;
+    /**
+     * The AWS Region that Amazon Cognito uses to send SMS messages.
+     */
+    snsRegion?: Input<string>;
+  }>;
+  /**
+   * The message template for SMS messages sent to users who are being authenticated.
+   *
+   * The template must include the `{####}` placeholder, which will be replaced with the
+   * verification code.
+   *
+   * @default The default message template.
+   * @example
+   *
+   * ```ts
+   * {
+   *   smsAuthenticationMessage: "Your authentication code is {####}"
+   * }
+   * ```
+   */
+  smsAuthenticationMessage?: Input<string>;
+  /**
+   * Enable software token MFA for the User Pool.
+   *
+   * @default Software token MFA is disabled.
+   * @example
+   *
+   * ```ts
+   * {
+   *   softwareToken: true
+   * }
+   * ```
+   */
+  softwareToken?: Input<true>;
+  /**
    * Configure triggers for this User Pool
    * @default No triggers
    * @example
@@ -61,106 +258,7 @@ export interface CognitoUserPoolArgs {
    * }
    * ```
    */
-  triggers?: Input<{
-    /**
-     * The ARN of the AWS KMS key used for encryption.
-     *
-     * When `customEmailSender` or `customSmsSender` are configured, Cognito encrypts the
-     * verification code and temporary passwords before sending them to your Lambda functions.
-     */
-    kmsKey?: string;
-    /**
-     * Triggered after the user successfully responds to the previous challenge, and a new
-     * challenge needs to be created.
-     *
-     * Takes the handler path or the function args.
-     */
-    createAuthChallenge?: string | FunctionArgs;
-    /**
-     * Triggered during events like user sign-up, password recovery, email/phone number
-     * verification, and when an admin creates a user. Use this trigger to customize the
-     * email provider.
-     *
-     * Takes the handler path or the function args.
-     */
-    customEmailSender?: string | FunctionArgs;
-    /**
-     * Triggered during events like user sign-up, password recovery, email/phone number
-     * verification, and when an admin creates a user. Use this trigger to customize the
-     * message that is sent to your users.
-     *
-     * Takes the handler path or the function args.
-     */
-    customMessage?: string | FunctionArgs;
-    /**
-     * Triggered when an SMS message needs to be sent, such as for MFA or verification codes.
-     * Use this trigger to customize the SMS provider.
-     *
-     * Takes the handler path or the function args.
-     */
-    customSmsSender?: string | FunctionArgs;
-    /**
-     * Triggered after each challenge response to determine the next action. Evaluates whether the
-     * user has completed the authentication process or if additional challenges are needed.
-     * ARN of the lambda function to name a custom challenge.
-     *
-     * Takes the handler path or the function args.
-     */
-    defineAuthChallenge?: string | FunctionArgs;
-    /**
-     * Triggered after a successful authentication event. Use this to perform custom actions,
-     * such as logging or modifying user attributes, after the user is authenticated.
-     *
-     * Takes the handler path or the function args.
-     */
-    postAuthentication?: string | FunctionArgs;
-    /**
-     * Triggered after a user is successfully confirmed; sign-up or email/phone number
-     * verification. Use this to perform additional actions, like sending a welcome email or
-     * initializing user data, after user confirmation.
-     *
-     * Takes the handler path or the function args.
-     */
-    postConfirmation?: string | FunctionArgs;
-    /**
-     * Triggered before the authentication process begins. Use this to implement custom
-     * validation or checks (like checking if the user is banned) before continuing
-     * authentication.
-     *
-     * Takes the handler path or the function args.
-     */
-    preAuthentication?: string | FunctionArgs;
-    /**
-     * Triggered before the user sign-up process completes. Use this to perform custom
-     * validation, auto-confirm users, or auto-verify attributes based on custom logic.
-     *
-     * Takes the handler path or the function args.
-     */
-    preSignUp?: string | FunctionArgs;
-    /**
-     * Triggered before tokens are generated in the authentication process. Use this to
-     * customize or add claims to the tokens that will be generated and returned to the user.
-     *
-     * Takes the handler path or the function args.
-     */
-    preTokenGeneration?: string | FunctionArgs;
-    /**
-     * Triggered when a user attempts to sign in but does not exist in the current user pool.
-     * Use this to import and validate users from an existing user directory into the
-     * Cognito User Pool during sign-in.
-     *
-     * Takes the handler path or the function args.
-     */
-    userMigration?: string | FunctionArgs;
-    /**
-     * Triggered after the user responds to a custom authentication challenge. Use this to
-     * verify the user's response to the challenge and determine whether to continue
-     * authenticating the user.
-     *
-     * Takes the handler path or the function args.
-     */
-    verifyAuthChallengeResponse?: string | FunctionArgs;
-  }>;
+  triggers?: Input<Prettify<Triggers>>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -231,6 +329,11 @@ export interface CognitoUserPoolClientArgs {
   };
 }
 
+interface CognitoUserPoolRef {
+  ref: boolean;
+  userPool: cognito.UserPool;
+}
+
 /**
  * The `CognitoUserPool` component lets you add a [Amazon Cognito User Pool](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools.html) to your app.
  *
@@ -297,12 +400,18 @@ export class CognitoUserPool extends Component implements Link.Linkable {
   ) {
     super(__pulumiType, name, args, opts);
 
+    if (args && "ref" in args) {
+      const ref = args as unknown as CognitoUserPoolRef;
+      this.constructorOpts = opts;
+      this.userPool = ref.userPool;
+      return;
+    }
+
     const parent = this;
 
     normalizeAliasesAndUsernames();
-    const triggers = createTriggers();
+    const triggers = normalizeTriggers();
     const userPool = createUserPool();
-    createPermissions();
 
     this.constructorOpts = opts;
     this.userPool = userPool;
@@ -316,7 +425,7 @@ export class CognitoUserPool extends Component implements Link.Linkable {
       });
     }
 
-    function createTriggers() {
+    function normalizeTriggers() {
       if (!args.triggers) return;
 
       return output(args.triggers).apply((triggers) => {
@@ -328,22 +437,11 @@ export class CognitoUserPool extends Component implements Link.Linkable {
             "You must provide a KMS key via `kmsKey` when configuring `customEmailSender` or `customSmsSender`.",
           );
 
-        return Object.fromEntries(
-          Object.entries(triggers).map(([key, value]) => {
-            if (key === "kmsKey") return [key, output(value as string)];
-
-            const fn = Function.fromDefinition(
-              `${name}Trigger${key}`,
-              value,
-              {
-                description: `Subscribed to ${key} from ${name}`,
-              },
-              undefined,
-              { parent },
-            );
-            return [key, fn.arn];
-          }),
-        );
+        return {
+          ...triggers,
+          preTokenGenerationVersion:
+            triggers.preTokenGenerationVersion === "v2" ? "V2_0" : "V1_0",
+        };
       });
     }
 
@@ -406,55 +504,88 @@ export class CognitoUserPool extends Component implements Link.Linkable {
               emailSubject: "Verify your new account",
               smsMessage: "The verification code to your new account is {####}",
             },
+            userPoolAddOns: {
+              advancedSecurityMode: output(args.advancedSecurity).apply((v) =>
+                (v ?? "off").toUpperCase(),
+              ),
+            },
+            mfaConfiguration: output(args.mfa).apply((v) =>
+              (v ?? "off").toUpperCase(),
+            ),
+            smsAuthenticationMessage: args.smsAuthenticationMessage,
+            smsConfiguration: args.sms,
+            softwareTokenMfaConfiguration: args.softwareToken && {
+              enabled: true,
+            },
             lambdaConfig:
               triggers &&
-              triggers.apply((triggers) => ({
-                kmsKeyId: triggers.kmsKey,
-                createAuthChallenge: triggers.createAuthChallenge,
-                customEmailSender: triggers.customEmailSender && {
-                  lambdaArn: triggers.customEmailSender,
-                  lambdaVersion: "V1_0",
-                },
-                customMessage: triggers.customMessage,
-                customSmsSender: triggers.customSmsSender && {
-                  lambdaArn: triggers.customSmsSender,
-                  lambdaVersion: "V1_0",
-                },
-                defineAuthChallenge: triggers.defineAuthChallenge,
-                postAuthentication: triggers.postAuthentication,
-                postConfirmation: triggers.postConfirmation,
-                preAuthentication: triggers.preAuthentication,
-                preSignUp: triggers.preSignUp,
-                preTokenGeneration: triggers.preTokenGeneration,
-                userMigration: triggers.userMigration,
-                verifyAuthChallengeResponse:
-                  triggers.verifyAuthChallengeResponse,
-              })),
+              triggers.apply((triggers) => {
+                return {
+                  kmsKeyId: triggers.kmsKey,
+                  createAuthChallenge: createTrigger("createAuthChallenge"),
+                  customEmailSender:
+                    triggers.customEmailSender === undefined
+                      ? undefined
+                      : {
+                          lambdaArn: createTrigger("customEmailSender")!,
+                          lambdaVersion: "V1_0",
+                        },
+                  customMessage: createTrigger("customMessage"),
+                  customSmsSender:
+                    triggers.customSmsSender === undefined
+                      ? undefined
+                      : {
+                          lambdaArn: createTrigger("customSmsSender")!,
+                          lambdaVersion: "V1_0",
+                        },
+                  defineAuthChallenge: createTrigger("defineAuthChallenge"),
+                  postAuthentication: createTrigger("postAuthentication"),
+                  postConfirmation: createTrigger("postConfirmation"),
+                  preAuthentication: createTrigger("preAuthentication"),
+                  preSignUp: createTrigger("preSignUp"),
+                  preTokenGenerationConfig:
+                    triggers.preTokenGeneration === undefined
+                      ? undefined
+                      : {
+                          lambdaArn: createTrigger("preTokenGeneration")!,
+                          lambdaVersion: triggers.preTokenGenerationVersion,
+                        },
+                  userMigration: createTrigger("userMigration"),
+                  verifyAuthChallengeResponse: createTrigger(
+                    "verifyAuthChallengeResponse",
+                  ),
+                };
+
+                function createTrigger(key: keyof Triggers) {
+                  if (!triggers[key]) return;
+
+                  const fn = Function.fromDefinition(
+                    `${name}Trigger${key}`,
+                    triggers[key]!,
+                    {
+                      description: `Subscribed to ${key} from ${name}`,
+                    },
+                    undefined,
+                    { parent },
+                  );
+
+                  new lambda.Permission(
+                    `${name}Permission${key}`,
+                    {
+                      action: "lambda:InvokeFunction",
+                      function: fn.arn,
+                      principal: "cognito-idp.amazonaws.com",
+                      sourceArn: userPool.arn,
+                    },
+                    { parent },
+                  );
+                  return fn.arn;
+                }
+              }),
           },
           { parent },
         ),
       );
-    }
-
-    function createPermissions() {
-      if (!triggers) return;
-
-      triggers.apply((triggers) => {
-        Object.entries(triggers).forEach(([key, functionArn]) => {
-          if (key === "kmsKey") return;
-
-          new lambda.Permission(
-            `${name}Permission${key}`,
-            {
-              action: "lambda:InvokeFunction",
-              function: functionArn,
-              principal: "cognito-idp.amazonaws.com",
-              sourceArn: userPool.arn,
-            },
-            { parent },
-          );
-        });
-      });
     }
   }
 
@@ -497,6 +628,9 @@ export class CognitoUserPool extends Component implements Link.Linkable {
    * ```
    */
   public addClient(name: string, args?: CognitoUserPoolClientArgs) {
+    // Note: Referencing an existing client will be implemented in the future:
+    // sst.aws.UserPool.getClient("pool", { userPooldID, clientID });
+
     return new CognitoUserPoolClient(
       name,
       {
@@ -581,6 +715,45 @@ export class CognitoUserPool extends Component implements Link.Linkable {
         }),
       ],
     };
+  }
+
+  /**
+   * Reference an existing User Pool with the given ID. This is useful when you
+   * create a User Pool in one stage and want to share it in another. It avoids having to
+   * create a new User Pool in the other stage.
+   *
+   * :::tip
+   * You can use the `static get` method to share User Pools across stages.
+   * :::
+   *
+   * @param name The name of the component.
+   * @param userPoolID The ID of the existing User Pool.
+   *
+   * @example
+   * Imagine you create a User Pool in the `dev` stage. And in your personal stage `frank`,
+   * instead of creating a new pool, you want to share the same pool from `dev`.
+   *
+   * ```ts title="sst.config.ts"
+   * const userPool = $app.stage === "frank"
+   *   ? sst.aws.CognitoUserPool.get("MyUserPool", "us-east-1_gcF5PjhQK")
+   *   : new sst.aws.CognitoUserPool("MyUserPool");
+   * ```
+   *
+   * Here `us-east-1_gcF5PjhQK` is the ID of the User Pool created in the `dev` stage.
+   * You can find this by outputting the User Pool ID in the `dev` stage.
+   *
+   * ```ts title="sst.config.ts"
+   * return {
+   *   userPool: userPool.id
+   * };
+   * ```
+   */
+  public static get(name: string, userPoolID: Input<string>) {
+    const userPool = cognito.UserPool.get(`${name}UserPool`, userPoolID);
+    return new CognitoUserPool(name, {
+      ref: true,
+      userPool,
+    } as unknown as CognitoUserPoolArgs);
   }
 }
 

@@ -1,7 +1,6 @@
 package project
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/sst/ion/pkg/global"
@@ -26,7 +24,7 @@ func (p *Project) NeedsInstall() bool {
 		config := p.app.Providers[entry.Name].(map[string]interface{})
 		version := config["version"]
 		if version == nil || version == "" {
-			version = "latest"
+			continue
 		}
 		slog.Info("checking provider", "name", entry.Name, "version", version, "compare", entry.Version)
 		if version != entry.Version {
@@ -139,7 +137,7 @@ func (p *Project) writeTypes() error {
 	file.WriteString(`  interface Providers {` + "\n")
 	file.WriteString(`    providers?: {` + "\n")
 	for _, entry := range p.lock {
-		file.WriteString(`      "` + entry.Name + `"?:  (_` + entry.Alias + `.ProviderArgs & { version?: string }) | boolean;` + "\n")
+		file.WriteString(`      "` + entry.Name + `"?:  (_` + entry.Alias + `.ProviderArgs & { version?: string }) | boolean | string;` + "\n")
 	}
 	file.WriteString(`    }` + "\n")
 	file.WriteString(`  }` + "\n")
@@ -164,29 +162,6 @@ func (p *Project) fetchDeps() error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return errors.New("failed to run bun install " + string(output))
-	}
-	for _, entry := range p.lock {
-		path := filepath.Join(p.PathPlatformDir(), "node_modules", entry.Package, "provider.js")
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-		scanner := bufio.NewScanner(file)
-		pulumiTypePattern := regexp.MustCompile(`Provider\.__pulumiType = ['"]([^'"]+)['"]`)
-		for scanner.Scan() {
-			matches := pulumiTypePattern.FindStringSubmatch(scanner.Text())
-			if len(matches) > 1 {
-				entry.Alias = strings.ReplaceAll(matches[1], "-", "")
-				break
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			return err
-		}
-		if entry.Alias == "" {
-			return fmt.Errorf("failed to find __pulumiType for %s", entry.Package)
-		}
 	}
 	return nil
 }
@@ -225,19 +200,12 @@ func (p *Project) generateProviderLock() error {
 			version = "latest"
 		}
 		wg.Go(func() error {
-			for _, prefix := range []string{"@sst-provider/", "@pulumi/", "@pulumiverse/", "@", ""} {
-				pkg, err := npm.Get(prefix+n, version.(string))
-				if err != nil {
-					continue
-				}
-				results <- ProviderLockEntry{
-					Name:    n,
-					Package: pkg.Name,
-					Version: version.(string),
-				}
-				return nil
+			result, err := FindProvider(n, version.(string))
+			if err != nil {
+				return err
 			}
-			return fmt.Errorf("provider %s not found", n)
+			results <- *result
+			return nil
 		})
 	}
 	wg.Go(func() error {
@@ -254,6 +222,33 @@ func (p *Project) generateProviderLock() error {
 	}
 	p.lock = out
 	return nil
+}
+
+func FindProvider(name string, version string) (*ProviderLockEntry, error) {
+	for _, prefix := range []string{"@sst-provider/", "@pulumi/", "@pulumiverse/", "pulumi-", "@", ""} {
+		pkg, err := npm.Get(prefix+name, version)
+		if err != nil {
+			continue
+		}
+		if pkg.Pulumi == nil {
+			continue
+		}
+		alias := pkg.Pulumi.Name
+		if alias == "" {
+			alias = pkg.Name
+			alias = strings.ReplaceAll(alias, "/", "")
+			alias = strings.ReplaceAll(alias, "@", "")
+			alias = strings.ReplaceAll(alias, "pulumi", "")
+		}
+		alias = strings.ReplaceAll(alias, "-", "")
+		return &ProviderLockEntry{
+			Name:    name,
+			Package: pkg.Name,
+			Version: pkg.Version,
+			Alias:   alias,
+		}, nil
+	}
+	return nil, fmt.Errorf("provider %s not found", name)
 }
 
 func (p *Project) writeProviderLock() error {

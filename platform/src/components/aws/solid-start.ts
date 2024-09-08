@@ -1,12 +1,6 @@
 import fs from "fs";
 import path from "path";
-import {
-  ComponentResourceOptions,
-  Input,
-  Output,
-  all,
-  output,
-} from "@pulumi/pulumi";
+import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
 import { Function } from "./function.js";
 import {
   SsrSiteArgs,
@@ -23,8 +17,8 @@ import { Component } from "../component.js";
 import { Link } from "../link.js";
 import { DevArgs } from "../dev.js";
 import { buildApp } from "../base/base-ssr-site.js";
-import { VisibleError } from "../error.js";
 import { URL_UNAVAILABLE } from "./linkable.js";
+import { VisibleError } from "../error.js";
 
 export interface SolidStartArgs extends SsrSiteArgs {
   /**
@@ -37,8 +31,10 @@ export interface SolidStartArgs extends SsrSiteArgs {
    * Instead of deploying your SolidStart app, this starts it in dev mode. It's run
    * as a separate process in the `sst dev` multiplexer. Read more about
    * [`sst dev`](/docs/reference/cli/#dev).
+   *
+   * To disable dev mode, pass in `false`.
    */
-  dev?: DevArgs["dev"];
+  dev?: false | DevArgs["dev"];
   /**
    * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
    *
@@ -363,10 +359,12 @@ export class SolidStart extends Component implements Link.Linkable {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
-    const { sitePath, partition } = prepare(args, opts);
-    if ($dev) {
+    const { sitePath, partition } = prepare(parent, args);
+    const dev = normalizeDev();
+
+    if (dev) {
       const server = createDevServer(parent, name, args);
-      this.devUrl = output(args.dev?.url ?? URL_UNAVAILABLE);
+      this.devUrl = dev.url;
       this.registerOutputs({
         _metadata: {
           mode: "placeholder",
@@ -391,13 +389,9 @@ export class SolidStart extends Component implements Link.Linkable {
             role: server.nodes.role.arn,
           },
           environment: args.environment,
-          autostart: output(args.dev?.autostart).apply((val) => val ?? true),
-          directory: output(args.dev?.directory).apply(
-            (dir) => dir || sitePath,
-          ),
-          command: output(args.dev?.command).apply(
-            (val) => val || "npm run dev",
-          ),
+          command: dev.command,
+          directory: dev.directory,
+          autostart: dev.autostart,
         },
       });
       return;
@@ -409,6 +403,11 @@ export class SolidStart extends Component implements Link.Linkable {
       const nitro = JSON.parse(
         fs.readFileSync(path.join(output, ".output/nitro.json")).toString(),
       );
+      if (!["aws-lambda-streaming", "aws-lambda"].includes(nitro.preset)) {
+        throw new VisibleError(
+          `SolidStart's app.config.ts must be configured to use the "aws-lambda-streaming" or "aws-lambda" preset. It is currently set to "${nitro.preset}".`,
+        );
+      }
       return nitro.preset;
     });
     const buildMeta = loadBuildMetadata();
@@ -439,6 +438,19 @@ export class SolidStart extends Component implements Link.Linkable {
         server: serverFunction.arn,
       },
     });
+
+    function normalizeDev() {
+      if (!$dev) return undefined;
+      if (args.dev === false) return undefined;
+
+      return {
+        ...args.dev,
+        url: output(args.dev?.url ?? URL_UNAVAILABLE),
+        command: output(args.dev?.command ?? "npm run dev"),
+        autostart: output(args.dev?.autostart ?? true),
+        directory: output(args.dev?.directory ?? sitePath),
+      };
+    }
 
     function loadBuildMetadata() {
       return outputPath.apply((outputPath) => {
