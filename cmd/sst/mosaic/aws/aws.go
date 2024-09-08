@@ -29,6 +29,7 @@ import (
 	"github.com/sst/ion/pkg/project/provider"
 	"github.com/sst/ion/pkg/runtime"
 	"github.com/sst/ion/pkg/runtime/node"
+	"github.com/sst/ion/pkg/runtime/python"
 	"github.com/sst/ion/pkg/server"
 )
 
@@ -85,6 +86,7 @@ func Start(
 
 	runtimes := []runtime.Runtime{
 		node.New(),
+		python.New(),
 	}
 	expire := time.Hour * 24
 	from := time.Now()

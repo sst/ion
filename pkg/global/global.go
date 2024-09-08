@@ -148,7 +148,7 @@ func NeedsUv() bool {
 	if err != nil {
 		return true
 	}
-	version := strings.TrimSpace(string(output))
+	version := strings.Fields(strings.TrimSpace(string(output)))[1]
 	return version != UV_VERSION
 }
 
@@ -239,7 +239,6 @@ func InstallUv() error {
 
 	return nil
 }
-
 
 func NeedsBun() bool {
 	path := BunPath()

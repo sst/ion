@@ -1,4 +1,4 @@
-package runtime
+package python
 
 import (
 	"context"
@@ -15,20 +15,21 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
+	"github.com/sst/ion/pkg/runtime"
 )
 
-type PythonWorker struct {
+type Worker struct {
 	stdout io.ReadCloser
 	stderr io.ReadCloser
 	cmd    *exec.Cmd
 }
 
-func (w *PythonWorker) Stop() {
+func (w *Worker) Stop() {
 	// Terminate the whole process group
 	util.TerminateProcess(w.cmd.Process.Pid)
 }
 
-func (w *PythonWorker) Logs() io.ReadCloser {
+func (w *Worker) Logs() io.ReadCloser {
 	reader, writer := io.Pipe()
 
 	go func() {
@@ -71,13 +72,13 @@ type PythonRuntime struct {
 	lastBuiltHandler map[string]string
 }
 
-func newPythonRuntime() *PythonRuntime {
+func New() *PythonRuntime {
 	return &PythonRuntime{
 		lastBuiltHandler: map[string]string{},
 	}
 }
 
-func (r *PythonRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOutput, error) {
+func (r *PythonRuntime) Build(ctx context.Context, input *runtime.BuildInput) (*runtime.BuildOutput, error) {
 	slog.Info("building python function", "handler", input.Warp.Handler)
 
 	file, ok := r.getFile(input)
@@ -116,7 +117,7 @@ func (r *PythonRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOut
 
 	errors := []string{}
 
-	return &BuildOutput{
+	return &runtime.BuildOutput{
 		Handler: input.Warp.Handler,
 		Errors:  errors,
 	}, nil
@@ -139,11 +140,11 @@ type PyProject struct {
 	} `toml:"tool"`
 }
 
-func (r *PythonRuntime) Run(ctx context.Context, input *RunInput) (Worker, error) {
+func (r *PythonRuntime) Run(ctx context.Context, input *runtime.RunInput) (runtime.Worker, error) {
 	// Get the directory of the Handler
 	handlerDir := filepath.Dir(filepath.Join(input.Build.Out, input.Build.Handler))
 
-	// We have to manually construct the dependencies to install because uv curerntly does not support importing a 
+	// We have to manually construct the dependencies to install because uv curerntly does not support importing a
 	// foreign pyproject.toml as a configuration file and we have to run the python-runtime file rather than
 	// the handler file
 
@@ -164,7 +165,7 @@ func (r *PythonRuntime) Run(ctx context.Context, input *RunInput) (Worker, error
 
 	// Extract the sources
 	sources := pyProject.Tool.Uv.Sources
-	
+
 	args := []string{
 		"run",
 		"--with",
@@ -189,12 +190,11 @@ func (r *PythonRuntime) Run(ctx context.Context, input *RunInput) (Worker, error
 	)
 
 	uvPath := global.UvPath()
-	
 
 	cmd := exec.CommandContext(
-		ctx, 
+		ctx,
 		uvPath,
-		args...	)
+		args...)
 
 	util.SetProcessGroupID(cmd)
 	cmd.Cancel = func() error {
@@ -213,7 +213,7 @@ func (r *PythonRuntime) Run(ctx context.Context, input *RunInput) (Worker, error
 		return nil, fmt.Errorf("failed to create stderr pipe: %v", err)
 	}
 	cmd.Start()
-	return &PythonWorker{
+	return &Worker{
 		stdout,
 		stderr,
 		cmd,
@@ -226,7 +226,7 @@ func (r *PythonRuntime) ShouldRebuild(functionID string, file string) bool {
 
 var PYTHON_EXTENSIONS = []string{".py"}
 
-func (r *PythonRuntime) getFile(input *BuildInput) (string, bool) {
+func (r *PythonRuntime) getFile(input *runtime.BuildInput) (string, bool) {
 	slog.Info("getting python file", "handler", input.Warp.Handler)
 	dir := filepath.Dir(input.Warp.Handler)
 	base := strings.TrimSuffix(filepath.Base(input.Warp.Handler), filepath.Ext(input.Warp.Handler))
@@ -268,7 +268,6 @@ func copyFile(src, dst string) error {
 
 	return nil
 }
-
 
 // FindClosestPyProjectToml traverses up the directory tree to find the closest pyproject.toml file.
 func FindClosestPyProjectToml(startingPath string) (string, error) {
