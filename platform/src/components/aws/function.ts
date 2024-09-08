@@ -34,6 +34,7 @@ import {
 } from "@pulumi/aws";
 import { Permission, permission } from "./permission.js";
 import { Vpc } from "./vpc.js";
+import { parseIamRoleArn } from "./helpers/arn.js";
 
 export type FunctionPermissionArgs = {
   /**
@@ -998,7 +999,7 @@ export interface FunctionArgs {
  */
 export class Function extends Component implements Link.Linkable {
   private function: Output<lambda.Function>;
-  private role?: iam.Role;
+  private role: Output<iam.Role>;
   private logGroup: Output<cloudwatch.LogGroup | undefined>;
   private fnUrl: Output<lambda.FunctionUrl | undefined>;
   private missingSourcemap?: boolean;
@@ -1025,11 +1026,11 @@ export class Function extends Component implements Link.Linkable {
     const copyFiles = normalizeCopyFiles();
     const vpc = normalizeVpc();
 
+    const role = buildRole();
     const linkData = buildLinkData();
     const linkPermissions = buildLinkPermissions();
     const { bundle, handler: handler0 } = buildHandler();
     const { handler, wrapper } = buildHandlerWrapper();
-    const role = createRole();
     const zipPath = zipBundleFolder();
     const bundleHash = calculateHash();
     const file = createBucketObject();
@@ -1242,6 +1243,16 @@ export class Function extends Component implements Link.Linkable {
       });
     }
 
+    function buildRole() {
+      return output(args.role).apply((role) => {
+        if (role) {
+          const roleName = parseIamRoleArn(role).roleName;
+          return iam.Role.get(`${name}Role`, roleName);
+        }
+        return createRole();
+      });
+    }
+
     function buildLinkData() {
       return output(args.link || []).apply((links) => Link.build(links));
     }
@@ -1369,8 +1380,6 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function createRole() {
-      if (args.role) return;
-
       const policy = all([args.permissions || [], linkPermissions, dev]).apply(
         ([argsPermissions, linkPermissions, dev]) =>
           iam.getPolicyDocumentOutput({
@@ -1579,7 +1588,7 @@ export class Function extends Component implements Link.Linkable {
               path.join($cli.paths.platform, "functions", "empty-function"),
             ),
             handler: unsecret(handler),
-            role: args.role ?? role!.arn,
+            role: role.arn,
             runtime,
             timeout: timeout.apply((timeout) => toSeconds(timeout)),
             memorySize: memory.apply((memory) => toMBs(memory)),
@@ -1654,18 +1663,11 @@ export class Function extends Component implements Link.Linkable {
    * The underlying [resources](/docs/components/#nodes) this component creates.
    */
   public get nodes() {
-    const self = this;
     return {
       /**
        * The IAM Role the function will use.
        */
-      get role() {
-        if (!self.role)
-          throw new Error(
-            `"nodes.role" is not available when a pre-existing role is used.`,
-          );
-        return self.role;
-      },
+      role: this.role,
       /**
        * The AWS Lambda function.
        */
