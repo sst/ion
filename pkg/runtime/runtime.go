@@ -43,13 +43,14 @@ func (input *BuildInput) Out() string {
 }
 
 type BuildOutput struct {
-	Out     string
-	Handler string
-	Errors  []string
+	Out     string   `json:"out"`
+	Handler string   `json:"handler"`
+	Errors  []string `json:"errors"`
 }
 
 type RunInput struct {
 	CfgPath    string
+	Runtime    string
 	Server     string
 	FunctionID string
 	WorkerID   string
@@ -125,9 +126,8 @@ func (c *Collection) Build(ctx context.Context, input *BuildInput) (*BuildOutput
 }
 
 func (c *Collection) Run(ctx context.Context, input *RunInput) (Worker, error) {
-	target, _ := c.GetTarget(input.FunctionID)
-	slog.Info("running function", "runtime", target.Runtime, "functionID", input.FunctionID)
-	runtime, ok := c.Runtime(target.Runtime)
+	slog.Info("running function", "runtime", input.Runtime, "functionID", input.FunctionID)
+	runtime, ok := c.Runtime(input.Runtime)
 	input.Env = append(input.Env, "SST_LIVE=true")
 	input.Env = append(input.Env, "SST_DEV=true")
 	if !ok {
@@ -148,16 +148,6 @@ func (c *Collection) ShouldRebuild(runtime string, functionID string, file strin
 }
 
 func (c *Collection) AddTarget(input *BuildInput) {
-	slog.Info("adding target", "functionID", input.FunctionID, "input", input)
 	input.CfgPath = c.cfgPath
 	c.targets[input.FunctionID] = input
-}
-
-func (c *Collection) GetTarget(functionID string) (*BuildInput, bool) {
-	res, ok := c.targets[functionID]
-	return res, ok
-}
-
-func (c *Collection) AllTargets() map[string]*BuildInput {
-	return c.targets
 }

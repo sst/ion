@@ -194,7 +194,7 @@ func Start(
 	workerResponseChan := make(chan workerResponse, 1000)
 	workerShutdownChan := make(chan *WorkerInfo, 1000)
 
-	evts := bus.Subscribe(&watcher.FileChangedEvent{}, &project.CompleteEvent{})
+	evts := bus.Subscribe(&watcher.FileChangedEvent{}, &project.CompleteEvent{}, &runtime.BuildInput{})
 
 	if token := mqttClient.Subscribe(prefix+"/+/init", 1, func(c MQTT.Client, m MQTT.Message) {
 		slog.Info("iot", "topic", m.Topic())
@@ -216,13 +216,14 @@ func Start(
 		workers := map[string]*WorkerInfo{}
 		workerEnv := map[string][]string{}
 		builds := map[string]*runtime.BuildOutput{}
+		targets := map[string]*runtime.BuildInput{}
 
 		getBuildOutput := func(functionID string) *runtime.BuildOutput {
 			build := builds[functionID]
 			if build != nil {
 				return build
 			}
-			target, _ := p.Runtime.GetTarget(functionID)
+			target, _ := targets[functionID]
 			build, err = p.Runtime.Build(ctx, target)
 			if err == nil {
 				bus.Publish(&FunctionBuildEvent{
@@ -248,8 +249,13 @@ func Start(
 			if build == nil {
 				return false
 			}
+			target, ok := targets[functionID]
+			if !ok {
+				return false
+			}
 			worker, err := p.Runtime.Run(ctx, &runtime.RunInput{
 				CfgPath:    p.PathConfig(),
+				Runtime:    target.Runtime,
 				Server:     server + workerID,
 				WorkerID:   workerID,
 				FunctionID: functionID,
@@ -342,12 +348,14 @@ func Start(
 				break
 			case unknown := <-evts:
 				switch evt := unknown.(type) {
+				case *runtime.BuildInput:
+					targets[evt.FunctionID] = evt
 				case *watcher.FileChangedEvent:
 					slog.Info("checking if code needs to be rebuilt", "file", evt.Path)
 					toBuild := map[string]bool{}
 
 					for functionID := range builds {
-						target, ok := p.Runtime.GetTarget(functionID)
+						target, ok := targets[functionID]
 						if !ok {
 							continue
 						}
@@ -392,6 +400,13 @@ func Start(
 				}
 				err := json.Unmarshal(bytes, &payload)
 				if err != nil {
+					continue
+				}
+				if _, ok := targets[payload.FunctionID]; !ok {
+					go func() {
+						time.Sleep(time.Second * 1)
+						initChan <- m
+					}()
 					continue
 				}
 				workerEnv[workerID] = payload.Env
