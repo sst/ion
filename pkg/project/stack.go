@@ -94,19 +94,6 @@ type AwsReceiver struct {
 
 type Receivers map[string]Receiver
 
-type Warp struct {
-	FunctionID string          `json:"functionID"`
-	Handler    string          `json:"handler"`
-	Runtime    string          `json:"runtime"`
-	Properties json.RawMessage `json:"properties"`
-	Links      []string        `json:"links"`
-	CopyFiles  []struct {
-		From string `json:"from"`
-		To   string `json:"to"`
-	} `json:"copyFiles"`
-}
-type Warps map[string]Warp
-
 type CompleteEvent struct {
 	Links       Links
 	Receivers   Receivers

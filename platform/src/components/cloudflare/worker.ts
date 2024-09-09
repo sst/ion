@@ -267,18 +267,14 @@ export class Worker extends Component implements Link.Linkable {
     this.workerUrl = workerUrl;
     this.workerDomain = workerDomain;
 
-    all([name, args.handler, args.build, dev, script.name]).apply(
-      async ([name, handler, build, dev, scriptName]) => {
+    all([dev, buildInput, script.name]).apply(
+      async ([dev, buildInput, scriptName]) => {
         if (!dev) return undefined;
         await rpc.call("Runtime.AddTarget", {
-          functionID: name,
-          links: {},
-          handler,
-          runtime: "worker",
+          ...buildInput,
           properties: {
-            accountID: DEFAULT_ACCOUNT_ID,
+            ...buildInput.properties,
             scriptName,
-            build,
           },
         });
       },

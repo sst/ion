@@ -116,8 +116,26 @@ func (c *Collection) Build(ctx context.Context, input *BuildInput) (*BuildOutput
 			if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 				return nil, err
 			}
-			if err := os.Symlink(from, dest); err != nil {
-				return nil, err
+			if input.Dev {
+				if err := os.Symlink(from, dest); err != nil {
+					return nil, err
+				}
+			}
+			if !input.Dev {
+				sourceFile, err := os.Open(from)
+				if err != nil {
+					return nil, err
+				}
+				defer sourceFile.Close()
+				destFile, err := os.Create(dest)
+				if err != nil {
+					return nil, err
+				}
+				defer destFile.Close()
+				_, err = io.Copy(destFile, sourceFile)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
