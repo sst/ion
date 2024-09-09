@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,6 +14,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
+	"github.com/sst/ion/pkg/project/path"
 	"github.com/sst/ion/pkg/runtime"
 )
 
@@ -79,15 +79,14 @@ func New() *PythonRuntime {
 }
 
 func (r *PythonRuntime) Build(ctx context.Context, input *runtime.BuildInput) (*runtime.BuildOutput, error) {
-	slog.Info("building python function", "handler", input.Warp.Handler)
+	slog.Info("building python function", "handler", input.Handler)
 
 	file, ok := r.getFile(input)
 	if !ok {
-		return nil, fmt.Errorf("handler not found: %v", input.Warp.Handler)
+		return nil, fmt.Errorf("handler not found: %v", input.Handler)
 	}
-	filepath.Rel(input.Project.PathRoot(), file)
-
-	targetDir := filepath.Join(input.Out(), filepath.Dir(input.Warp.Handler))
+	filepath.Rel(path.ResolveRootDir(input.CfgPath), file)
+	targetDir := filepath.Join(input.Out(), filepath.Dir(input.Handler))
 	if err := os.MkdirAll(targetDir, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create target directory: %v", err)
 	}
@@ -109,16 +108,16 @@ func (r *PythonRuntime) Build(ctx context.Context, input *runtime.BuildInput) (*
 	}
 
 	// Copy pyproject.toml to the output directory
-	if err := copyFile(pyProjectFile, path.Join(targetDir, path.Base(pyProjectFile))); err != nil {
+	if err := copyFile(pyProjectFile, filepath.Join(targetDir, filepath.Base(pyProjectFile))); err != nil {
 		return nil, err
 	}
 
-	r.lastBuiltHandler[input.Warp.FunctionID] = file
+	r.lastBuiltHandler[input.FunctionID] = file
 
 	errors := []string{}
 
 	return &runtime.BuildOutput{
-		Handler: input.Warp.Handler,
+		Handler: input.Handler,
 		Errors:  errors,
 	}, nil
 }
@@ -184,7 +183,7 @@ func (r *PythonRuntime) Run(ctx context.Context, input *runtime.RunInput) (runti
 	}
 
 	args = append(args,
-		filepath.Join(input.Project.PathPlatformDir(), "/dist/python-runtime/index.py"),
+		filepath.Join(path.ResolvePlatformDir(input.CfgPath), "/dist/python-runtime/index.py"),
 		filepath.Join(input.Build.Out, input.Build.Handler),
 		input.WorkerID,
 	)
@@ -227,11 +226,11 @@ func (r *PythonRuntime) ShouldRebuild(functionID string, file string) bool {
 var PYTHON_EXTENSIONS = []string{".py"}
 
 func (r *PythonRuntime) getFile(input *runtime.BuildInput) (string, bool) {
-	slog.Info("getting python file", "handler", input.Warp.Handler)
-	dir := filepath.Dir(input.Warp.Handler)
-	base := strings.TrimSuffix(filepath.Base(input.Warp.Handler), filepath.Ext(input.Warp.Handler))
+	slog.Info("getting python file", "handler", input.Handler)
+	dir := filepath.Dir(input.Handler)
+	base := strings.TrimSuffix(filepath.Base(input.Handler), filepath.Ext(input.Handler))
 	for _, ext := range PYTHON_EXTENSIONS {
-		file := filepath.Join(input.Project.PathRoot(), dir, base+ext)
+		file := filepath.Join(path.ResolveRootDir(input.CfgPath), dir, base+ext)
 		if _, err := os.Stat(file); err == nil {
 			return file, true
 		}
