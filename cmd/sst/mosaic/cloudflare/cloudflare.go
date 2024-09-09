@@ -34,9 +34,6 @@ type WorkerInvokedEvent struct {
 }
 
 func Start(ctx context.Context, proj *project.Project, args map[string]interface{}) error {
-	runtimes := []runtime.Runtime{
-		worker.New(),
-	}
 	prov, ok := proj.Provider("cloudflare")
 	if !ok {
 		return util.NewReadableError(nil, "Cloudflare provider not found in project configuration")
@@ -61,20 +58,20 @@ exit:
 			switch evt := unknown.(type) {
 			case *project.CompleteEvent:
 				complete = evt
-				for _, warp := range complete.Warps {
-					if warp.Runtime != "worker" {
+				for _, target := range proj.Runtime.AllTargets() {
+					if target.Runtime != "worker" {
 						continue
 					}
 					var properties worker.Properties
-					json.Unmarshal(warp.Properties, &properties)
+					json.Unmarshal(target.Properties, &properties)
 					account := cloudflare.AccountIdentifier(properties.AccountID)
-					if _, ok := tails[warp.FunctionID]; !ok {
-						slog.Info("cloudflare tail creating", "functionID", warp.FunctionID)
+					if _, ok := tails[target.FunctionID]; !ok {
+						slog.Info("cloudflare tail creating", "functionID", target.FunctionID)
 						tail, err := api.StartWorkersTail(ctx, account, properties.ScriptName)
 						if err != nil {
 							continue
 						}
-						tails[warp.FunctionID] = tailRef{
+						tails[target.FunctionID] = tailRef{
 							ID:         tail.ID,
 							ScriptName: properties.ScriptName,
 							Account:    account,
@@ -101,48 +98,41 @@ exit:
 									TailEvent: msg,
 								})
 							}
-						}(warp.FunctionID)
+						}(target.FunctionID)
 					}
 
-					if _, ok := builds[warp.FunctionID]; ok {
+					if _, ok := builds[target.FunctionID]; ok {
 						continue
 					}
 
-					output, err := runtime.Build(ctx, runtimes, &runtime.BuildInput{
-						Warp:    warp,
-						Dev:     true,
-						Project: proj,
-					})
+					target, _ := proj.Runtime.GetTarget(target.FunctionID)
+					output, err := proj.Runtime.Build(ctx, target)
 					if err != nil {
 						continue
 					}
-					builds[warp.FunctionID] = output
+					builds[target.FunctionID] = output
 				}
 			case *watcher.FileChangedEvent:
 				if complete == nil {
 					continue
 				}
-				for workerID, warp := range complete.Warps {
-					if warp.Runtime != "worker" {
+				for workerID, target := range proj.Runtime.AllTargets() {
+					if target.Runtime != "worker" {
 						continue
 					}
 
-					if runtime.ShouldRebuild(runtimes, warp.Runtime, workerID, evt.Path) {
-						output, err := runtime.Build(ctx, runtimes, &runtime.BuildInput{
-							Warp:    warp,
-							Dev:     true,
-							Project: proj,
-						})
+					if proj.Runtime.ShouldRebuild(target.Runtime, workerID, evt.Path) {
+						output, err := proj.Runtime.Build(ctx, target)
 						if err != nil {
 							continue
 						}
 						bus.Publish(&WorkerBuildEvent{
-							WorkerID: warp.FunctionID,
+							WorkerID: target.FunctionID,
 							Errors:   output.Errors,
 						})
-						builds[warp.FunctionID] = output
+						builds[target.FunctionID] = output
 						var properties worker.Properties
-						json.Unmarshal(warp.Properties, &properties)
+						json.Unmarshal(target.Properties, &properties)
 						account := cloudflare.AccountIdentifier(properties.AccountID)
 
 						content, err := os.ReadFile(filepath.Join(output.Out, output.Handler))
@@ -150,7 +140,7 @@ exit:
 							slog.Info("error reading file", "error", err, "out", filepath.Join(output.Out, output.Handler))
 							continue
 						}
-						slog.Info("updating worker script", "functionID", warp.FunctionID)
+						slog.Info("updating worker script", "functionID", target.FunctionID)
 						_, err = api.UpdateWorkersScriptContent(ctx, account, cloudflare.UpdateWorkersScriptContentParams{
 							ScriptName: properties.ScriptName,
 							Script:     string(content),
@@ -159,9 +149,9 @@ exit:
 						if err != nil {
 							slog.Info("error updating worker script", "error", err)
 						}
-						slog.Info("done worker script", "functionID", warp.FunctionID)
+						slog.Info("done worker script", "functionID", target.FunctionID)
 						bus.Publish(&WorkerUpdatedEvent{
-							WorkerID: warp.FunctionID,
+							WorkerID: target.FunctionID,
 						})
 
 					}

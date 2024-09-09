@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sst/ion/pkg/project"
+	"github.com/sst/ion/pkg/project/path"
 )
 
 type Runtime interface {
@@ -25,13 +25,21 @@ type Worker interface {
 }
 
 type BuildInput struct {
-	Warp    project.Warp
-	Project *project.Project
-	Dev     bool
+	CfgPath    string
+	Dev        bool                       `json:"dev"`
+	FunctionID string                     `json:"functionID"`
+	Handler    string                     `json:"handler"`
+	Runtime    string                     `json:"runtime"`
+	Properties json.RawMessage            `json:"properties"`
+	Links      map[string]json.RawMessage `json:"links"`
+	CopyFiles  []struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	} `json:"copyFiles"`
 }
 
 func (input *BuildInput) Out() string {
-	return filepath.Join(input.Project.PathWorkingDir(), "artifacts", input.Warp.FunctionID)
+	return filepath.Join(path.ResolveWorkingDir(input.CfgPath), "artifacts", input.FunctionID)
 }
 
 type BuildOutput struct {
@@ -41,19 +49,30 @@ type BuildOutput struct {
 }
 
 type RunInput struct {
-	Project    *project.Project
-	Warp       project.Warp
-	Links      project.Links
+	CfgPath    string
 	Server     string
 	FunctionID string
 	WorkerID   string
-	Runtime    string
 	Build      *BuildOutput
 	Env        []string
 }
 
-func GetRuntime(runtimes []Runtime, input string) (Runtime, bool) {
-	for _, runtime := range runtimes {
+type Collection struct {
+	runtimes []Runtime
+	cfgPath  string
+	targets  map[string]*BuildInput
+}
+
+func NewCollection(platform string, runtimes ...Runtime) *Collection {
+	return &Collection{
+		runtimes: runtimes,
+		cfgPath:  platform,
+		targets:  map[string]*BuildInput{},
+	}
+}
+
+func (c *Collection) Runtime(input string) (Runtime, bool) {
+	for _, runtime := range c.runtimes {
 		if runtime.Match(input) {
 			return runtime, true
 		}
@@ -61,12 +80,12 @@ func GetRuntime(runtimes []Runtime, input string) (Runtime, bool) {
 	return nil, false
 }
 
-func Build(ctx context.Context, runtimes []Runtime, input *BuildInput) (*BuildOutput, error) {
-	slog.Info("building function", "runtime", input.Warp.Runtime, "functionID", input.Warp.FunctionID)
-	defer slog.Info("function built", "runtime", input.Warp.Runtime, "functionID", input.Warp.FunctionID)
-	runtime, ok := GetRuntime(runtimes, input.Warp.Runtime)
+func (c *Collection) Build(ctx context.Context, input *BuildInput) (*BuildOutput, error) {
+	slog.Info("building function", "runtime", input.Runtime, "functionID", input.FunctionID)
+	defer slog.Info("function built", "runtime", input.Runtime, "functionID", input.FunctionID)
+	runtime, ok := c.Runtime(input.Runtime)
 	if !ok {
-		return nil, fmt.Errorf("Runtime not found: %v", input.Warp.Runtime)
+		return nil, fmt.Errorf("Runtime not found: %v", input.Runtime)
 	}
 	out := input.Out()
 	if err := os.RemoveAll(out); err != nil {
@@ -81,8 +100,8 @@ func Build(ctx context.Context, runtimes []Runtime, input *BuildInput) (*BuildOu
 	}
 	result.Out = out
 
-	if len(input.Warp.CopyFiles) > 0 {
-		for _, item := range input.Warp.CopyFiles {
+	if len(input.CopyFiles) > 0 {
+		for _, item := range input.CopyFiles {
 			from, err := filepath.Abs(item.From)
 			if err != nil {
 				return nil, err
@@ -105,29 +124,40 @@ func Build(ctx context.Context, runtimes []Runtime, input *BuildInput) (*BuildOu
 	return result, nil
 }
 
-func Run(ctx context.Context, runtimes []Runtime, input *RunInput) (Worker, error) {
-	slog.Info("running function", "runtime", input.Runtime, "functionID", input.FunctionID)
-	runtime, ok := GetRuntime(runtimes, input.Runtime)
+func (c *Collection) Run(ctx context.Context, input *RunInput) (Worker, error) {
+	target, _ := c.GetTarget(input.FunctionID)
+	slog.Info("running function", "runtime", target.Runtime, "functionID", input.FunctionID)
+	runtime, ok := c.Runtime(target.Runtime)
 	input.Env = append(input.Env, "SST_LIVE=true")
 	input.Env = append(input.Env, "SST_DEV=true")
-	for _, name := range input.Warp.Links {
-		value := input.Links[name]
-		serialized, _ := json.Marshal(value)
-		input.Env = append(input.Env, fmt.Sprintf("SST_RESOURCE_%s=%s", name, serialized))
-	}
 	if !ok {
 		return nil, fmt.Errorf("runtime not found")
 	}
 	return runtime.Run(ctx, input)
 }
 
-func ShouldRebuild(runtimes []Runtime, runtime string, functionID string, file string) bool {
+func (c *Collection) ShouldRebuild(runtime string, functionID string, file string) bool {
 	slog.Info("checking if function should be rebuilt", "runtime", runtime, "functionID", functionID, "file", file, "runtime", runtime)
-	r, ok := GetRuntime(runtimes, runtime)
+	r, ok := c.Runtime(runtime)
 	if !ok {
 		return false
 	}
 	result := r.ShouldRebuild(functionID, file)
 	slog.Info("should rebuild", "result", result, "functionID", functionID)
 	return result
+}
+
+func (c *Collection) AddTarget(input *BuildInput) {
+	slog.Info("adding target", "functionID", input.FunctionID, "input", input)
+	input.CfgPath = c.cfgPath
+	c.targets[input.FunctionID] = input
+}
+
+func (c *Collection) GetTarget(functionID string) (*BuildInput, bool) {
+	res, ok := c.targets[functionID]
+	return res, ok
+}
+
+func (c *Collection) AllTargets() map[string]*BuildInput {
+	return c.targets
 }

@@ -19,6 +19,7 @@ import { iam } from "@pulumi/aws";
 import { Permission } from "../aws/permission.js";
 import { Binding, binding } from "./binding.js";
 import { DEFAULT_ACCOUNT_ID } from "./account-id.js";
+import { rpc } from "../rpc/rpc.js";
 
 export interface WorkerArgs {
   /**
@@ -252,6 +253,22 @@ export class Worker extends Component implements Link.Linkable {
     this.workerUrl = workerUrl;
     this.workerDomain = workerDomain;
 
+    all([name, args.handler, args.build, dev]).apply(
+      async ([name, handler, build, dev]) => {
+        if (!dev) return undefined;
+        await rpc.call("Runtime.AddTarget", {
+          functionID: name,
+          links: {},
+          handler,
+          runtime: "worker",
+          properties: {
+            accountID: DEFAULT_ACCOUNT_ID,
+            scriptName: script.name,
+            build,
+          },
+        });
+      },
+    );
     this.registerOutputs({
       _receiver: {
         directory: args.handler,
