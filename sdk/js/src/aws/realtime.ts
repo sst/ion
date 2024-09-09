@@ -131,7 +131,8 @@ export module realtime {
         "base64"
       ).toString();
       const {
-        principalId = evt.protocolData.mqtt?.username || Date.now().toString(),
+        principalId = evt.protocolData.mqtt?.username.split("?").at(0) ||
+          Date.now().toString(),
         disconnectAfterInSeconds = 86400,
         refreshAfterInSeconds = 300,
         subscribe,
