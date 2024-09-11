@@ -142,7 +142,7 @@ export function createRouter(
                     key: path.posix.join(copy.to, file),
                     hash,
                     cacheControl: fileOption.cacheControl,
-                    contentType: getContentType(file, "UTF-8"),
+                    contentType: fileOption.contentType ?? getContentType(file, "UTF-8"),
                   };
                 }),
               )),

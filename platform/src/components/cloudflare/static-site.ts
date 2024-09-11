@@ -346,7 +346,7 @@ export class StaticSite extends Component implements Link.Linkable {
                     key: file,
                     hash,
                     cacheControl: fileOption.cacheControl,
-                    contentType: getContentType(file, "UTF-8"),
+                    contentType: fileOption.contentType ?? getContentType(file, "UTF-8"),
                   };
                 }),
               )),
