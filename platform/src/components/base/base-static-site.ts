@@ -252,14 +252,14 @@ export function prepare(args: BaseStaticSiteArgs) {
         // Create type file
         const filePath = path.resolve(path.join(sitePath, typesPath));
         const content = `/// <reference types="vite/client" />
-  interface ImportMetaEnv {
-  ${Object.keys(environment)
-    .map((key) => `  readonly ${key}: string`)
-    .join("\n")}
-  }
-  interface ImportMeta {
-    readonly env: ImportMetaEnv
-  }`;
+interface ImportMetaEnv {
+${Object.keys(environment)
+  .map((key) => `  readonly ${key}: string`)
+  .join("\n")}
+}
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}`;
 
         const fileDir = path.dirname(filePath);
         fs.mkdirSync(fileDir, { recursive: true });
