@@ -17,18 +17,25 @@ import { Cdn } from "./cdn.js";
 import { Bucket } from "./bucket.js";
 import { Component } from "./../component.js";
 import { Link } from "../link.js";
+import { DevArgs } from "../dev.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { URL_UNAVAILABLE } from "./linkable.js";
 
 export interface AstroArgs extends SsrSiteArgs {
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
+   * Configure how this component works in `sst dev`.
    *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
+   * :::note
+   * In `sst dev` your Astro site is run in dev mode; it's not deployed.
+   * :::
    *
-   * @default `0`
+   * Instead of deploying your Astro site, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   *
+   * To disable dev mode, pass in `false`.
    */
-  warm?: SsrSiteArgs["warm"];
+  dev?: false | DevArgs["dev"];
   /**
    * Permissions and the resources that the [server function](#nodes-server) in your Astro site needs to access. These permissions are used to create the function's IAM role.
    *
@@ -133,7 +140,7 @@ export interface AstroArgs extends SsrSiteArgs {
    * Set [environment variables](https://docs.astro.build/en/guides/environment-variables/) in your Astro site. These are made available:
    *
    * 1. In `astro build`, they are loaded into `import.meta.env`.
-   * 2. Locally while running `sst dev astro dev`.
+   * 2. Locally while running `astro dev` through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your Astro site and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
@@ -352,11 +359,12 @@ export class Astro extends Component implements Link.Linkable {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
-    const { sitePath, partition } = prepare(args, opts);
+    const { sitePath, partition } = prepare(parent, args);
+    const dev = normalizeDev();
 
-    if ($dev) {
+    if (dev) {
       const server = createDevServer(parent, name, args);
-      this.devUrl = output(args.dev?.url ?? URL_UNAVAILABLE);
+      this.devUrl = dev.url;
       this.registerOutputs({
         _metadata: {
           mode: "placeholder",
@@ -381,20 +389,16 @@ export class Astro extends Component implements Link.Linkable {
             role: server.nodes.role.arn,
           },
           environment: args.environment,
-          directory: output(args.dev?.directory).apply(
-            (dir) => dir || sitePath,
-          ),
-          autostart: output(args.dev?.autostart).apply((val) => val ?? true),
-          command: output(args.dev?.command).apply(
-            (val) => val || "npm run dev",
-          ),
+          command: dev.command,
+          directory: dev.directory,
+          autostart: dev.autostart,
         },
       });
       return;
     }
 
     const { access, bucket } = createBucket(parent, name, partition, args);
-    const outputPath = buildApp(name, args, sitePath);
+    const outputPath = buildApp(parent, name, args, sitePath);
     const buildMeta = loadBuildMetadata();
     const plan = buildPlan();
     const { distribution, ssrFunctions, edgeFunctions } =
@@ -424,6 +428,19 @@ export class Astro extends Component implements Link.Linkable {
         server: serverFunction.arn,
       },
     });
+
+    function normalizeDev() {
+      if (!$dev) return undefined;
+      if (args.dev === false) return undefined;
+
+      return {
+        ...args.dev,
+        url: output(args.dev?.url ?? URL_UNAVAILABLE),
+        command: output(args.dev?.command ?? "npm run dev"),
+        autostart: output(args.dev?.autostart ?? true),
+        directory: output(args.dev?.directory ?? sitePath),
+      };
+    }
 
     function loadBuildMetadata() {
       return outputPath.apply((outputPath) => {
@@ -494,22 +511,13 @@ export class Astro extends Component implements Link.Linkable {
             ...fs
               .readdirSync(
                 path.join(outputPath, buildMeta.clientBuildOutputDir),
+                { withFileTypes: true },
               )
               .map(
                 (item) =>
                   ({
                     cacheType: "static",
-                    pattern: fs
-                      .statSync(
-                        path.join(
-                          outputPath,
-                          buildMeta.clientBuildOutputDir,
-                          item,
-                        ),
-                      )
-                      .isDirectory()
-                      ? `${item}/*`
-                      : item,
+                    pattern: item.isDirectory() ? `${item.name}/*` : item.name,
                     origin: "staticsServer",
                   }) as const,
               ),

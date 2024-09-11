@@ -37,9 +37,11 @@ func CmdInit(cli *cli.Cli) error {
 	}
 
 	fmt.Print("\033[?25l")
+	// orange
+	fmt.Print("\033[38;2;255;127;0m")
 	for _, line := range logo {
 		for _, char := range line {
-			color.New(color.FgYellow).Print(string(char))
+			fmt.Print(string(char))
 			time.Sleep(5 * time.Millisecond)
 		}
 		fmt.Println()
@@ -108,6 +110,13 @@ func CmdInit(cli *cli.Cli) error {
 		template = "remix"
 		break
 
+	case slices.ContainsFunc(hints, func(s string) bool { return strings.HasPrefix(s, "angular.json") }):
+		fmt.Println("  Angular detected. This will...")
+		fmt.Println("   - create an sst.config.ts")
+		fmt.Println("   - add sst to package.json")
+		template = "angular"
+		break
+
 	case slices.Contains(hints, "package.json"):
 		fmt.Println("  JS project detected. This will...")
 		fmt.Println("   - use the JS template")
@@ -125,9 +134,9 @@ func CmdInit(cli *cli.Cli) error {
 	fmt.Println()
 
 	p := promptui.Select{
+		Items:        []string{"Yes", "No"},
 		Label:        "‏‏‎ ‎Continue",
 		HideSelected: true,
-		Items:        []string{"Yes", "No"},
 		HideHelp:     true,
 	}
 
@@ -142,7 +151,7 @@ func CmdInit(cli *cli.Cli) error {
 	}
 
 	color.New(color.FgGreen, color.Bold).Print("✓")
-	color.New(color.FgWhite).Println("  Template: ", template)
+	color.New(color.FgWhite).Println("  Template:", template)
 	fmt.Println()
 
 	home := "aws"

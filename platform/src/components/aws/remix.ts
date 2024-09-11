@@ -15,19 +15,27 @@ import { Cdn } from "./cdn.js";
 import { Bucket } from "./bucket.js";
 import { Component } from "../component.js";
 import { Link } from "../link.js";
+import { DevArgs } from "../dev.js";
 import type { Input } from "../input.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { URL_UNAVAILABLE } from "./linkable.js";
+import { VisibleError } from "../error.js";
 
 export interface RemixArgs extends SsrSiteArgs {
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
+   * Configure how this component works in `sst dev`.
    *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
+   * :::note
+   * In `sst dev` your Remix app is run in dev mode; it's not deployed.
+   * :::
    *
-   * @default `0`
+   * Instead of deploying your Remix app, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   *
+   * To disable dev mode, pass in `false`.
    */
-  warm?: SsrSiteArgs["warm"];
+  dev?: false | DevArgs["dev"];
   /**
    * Permissions and the resources that the [server function](#nodes-server) in your Remix app needs to access. These permissions are used to create the function's IAM role.
    *
@@ -132,7 +140,7 @@ export interface RemixArgs extends SsrSiteArgs {
    * Set [environment variables](https://remix.run/docs/en/main/guides/envvars) in your Remix app. These are made available:
    *
    * 1. In `remix build`, they are loaded into `process.env`.
-   * 2. Locally while running `sst dev remix dev`.
+   * 2. Locally while running through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your Remix app and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
@@ -354,10 +362,12 @@ export class Remix extends Component implements Link.Linkable {
 
     const parent = this;
     const edge = normalizeEdge();
-    const { sitePath, partition } = prepare(args, opts);
-    if ($dev) {
+    const { sitePath, partition } = prepare(parent, args);
+    const dev = normalizeDev();
+
+    if (dev) {
       const server = createDevServer(parent, name, args);
-      this.devUrl = output(args.dev?.url ?? URL_UNAVAILABLE);
+      this.devUrl = dev.url;
       this.registerOutputs({
         _metadata: {
           mode: "placeholder",
@@ -383,21 +393,17 @@ export class Remix extends Component implements Link.Linkable {
             role: server.nodes.role.arn,
           },
           environment: args.environment,
-          autostart: output(args.dev?.autostart).apply((val) => val ?? true),
-          directory: output(args.dev?.directory).apply(
-            (dir) => dir || sitePath,
-          ),
-          command: output(args.dev?.command).apply(
-            (val) => val || "npm run dev",
-          ),
+          command: dev.command,
+          directory: dev.directory,
+          autostart: dev.autostart,
         },
       });
       return;
     }
 
-    const isUsingVite = checkIsUsingVite();
+    const viteConfig = loadViteConfig();
     const { access, bucket } = createBucket(parent, name, partition, args);
-    const outputPath = buildApp(name, args, sitePath);
+    const outputPath = buildApp(parent, name, args, sitePath);
     const buildMeta = loadBuildMetadata();
     const plan = buildPlan();
     const { distribution, ssrFunctions, edgeFunctions } =
@@ -428,41 +434,105 @@ export class Remix extends Component implements Link.Linkable {
       },
     });
 
+    function normalizeDev() {
+      if (!$dev) return undefined;
+      if (args.dev === false) return undefined;
+
+      return {
+        ...args.dev,
+        url: output(args.dev?.url ?? URL_UNAVAILABLE),
+        command: output(args.dev?.command ?? "npm run dev"),
+        autostart: output(args.dev?.autostart ?? true),
+        directory: output(args.dev?.directory ?? sitePath),
+      };
+    }
+
     function normalizeEdge() {
       return output(args?.edge).apply((edge) => edge ?? false);
     }
 
-    function checkIsUsingVite() {
-      return sitePath.apply(
-        (sitePath) =>
-          fs.existsSync(path.join(sitePath, "vite.config.ts")) ||
-          fs.existsSync(path.join(sitePath, "vite.config.js")),
-      );
+    function loadViteConfig() {
+      return sitePath.apply(async (sitePath) => {
+        const file = [
+          "vite.config.ts",
+          "vite.config.js",
+          "vite.config.mts",
+          "vite.config.mjs",
+        ].find((filename) => fs.existsSync(path.join(sitePath, filename)));
+        if (!file) return;
+
+        let resolvedConfig;
+        try {
+          const vite = await import("vite");
+          const viteConfig = await vite.loadConfigFromFile(
+            { command: "build", mode: "production" },
+            path.join(sitePath, file),
+          );
+          if (!viteConfig) throw new Error();
+
+          resolvedConfig = (await vite.resolveConfig(
+            // root defaults to process.cwd(), which will be where the sst.config.ts file is located
+            // since we're invoking vite programatically. In a monorepo, this is likely incorrect, and
+            // should be the defined sitePath.
+            { ...viteConfig.config, root: viteConfig.config.root ?? sitePath },
+            "build",
+            "production",
+          )) as Awaited<ReturnType<typeof vite.resolveConfig>> & {
+            __remixPluginContext: {
+              remixConfig: {
+                serverBuildFile: string;
+                buildDirectory: string;
+              };
+            };
+          };
+        } catch (e) {
+          throw new VisibleError(`Failed to load Vite config file "${file}"`);
+        }
+
+        if (
+          resolvedConfig.__remixPluginContext.remixConfig.serverBuildFile !==
+          "index.js"
+        ) {
+          throw new VisibleError(
+            `SST does not support a custom "serverBuildFile".`,
+          );
+        }
+
+        return resolvedConfig;
+      });
     }
 
     function loadBuildMetadata() {
-      return all([outputPath, isUsingVite]).apply(
-        ([outputPath, isUsingVite]) => {
+      return all([outputPath, viteConfig]).apply(
+        async ([outputPath, viteConfig]) => {
           // The path for all files that need to be in the "/" directory (static assets)
           // is different when using Vite. These will be located in the "build/client"
-          // path of the output. It will be the "public" folder when using remix config.
-          const assetsPath = isUsingVite
-            ? path.join("build", "client")
-            : "public";
-          const assetsVersionedSubDir = isUsingVite ? undefined : "build";
+          // path of the output by default. It will be the "public" folder when using remix config.
+          let assetsPath = "public";
+          let assetsVersionedSubDir = "build";
+          let buildPath = path.join(outputPath, "build");
+
+          if (viteConfig) {
+            buildPath =
+              viteConfig.__remixPluginContext.remixConfig.buildDirectory;
+            assetsPath = path.relative(
+              viteConfig.root,
+              viteConfig.build.outDir,
+            );
+            assetsVersionedSubDir = viteConfig.build.assetsDir;
+          }
 
           return {
+            buildPath,
             assetsPath,
             assetsVersionedSubDir,
             // create 1 behaviour for each top level asset file/folder
             staticRoutes: fs
-              .readdirSync(path.join(outputPath, assetsPath))
+              .readdirSync(path.join(outputPath, assetsPath), {
+                withFileTypes: true,
+              })
               .map((item) =>
-                fs
-                  .statSync(path.join(outputPath, assetsPath, item))
-                  .isDirectory()
-                  ? `${item}/*`
-                  : item,
+                item.isDirectory() ? `${item.name}/*` : item.name,
               ),
           };
         },
@@ -470,11 +540,11 @@ export class Remix extends Component implements Link.Linkable {
     }
 
     function buildPlan() {
-      return all([isUsingVite, outputPath, edge, buildMeta]).apply(
-        ([isUsingVite, outputPath, edge, buildMeta]) => {
+      return all([viteConfig, edge, buildMeta]).apply(
+        ([viteConfig, edge, buildMeta]) => {
           const serverConfig = createServerLambdaBundle(
-            isUsingVite,
-            outputPath,
+            viteConfig,
+            buildMeta.buildPath,
             edge,
           );
 
@@ -551,8 +621,8 @@ export class Remix extends Component implements Link.Linkable {
     }
 
     function createServerLambdaBundle(
-      isUsingVite: boolean,
-      outputPath: string,
+      viteConfig: any,
+      buildPath: string,
       isEdge: boolean,
     ) {
       // Create a Lambda@Edge handler for the Remix server bundle.
@@ -574,7 +644,6 @@ export class Remix extends Component implements Link.Linkable {
       // directory.
 
       // Ensure build directory exists
-      const buildPath = path.join(outputPath, "build");
       fs.mkdirSync(buildPath, { recursive: true });
 
       // Copy the server lambda handler and pre-append the build injection based
@@ -583,7 +652,7 @@ export class Remix extends Component implements Link.Linkable {
         // When using Vite config, the output build will be "server/index.js"
         // and when using Remix config it will be `server.js`.
         `// Import the server build that was produced by 'remix build'`,
-        isUsingVite
+        viteConfig
           ? `import * as remixServerBuild from "./server/index.js";`
           : `import * as remixServerBuild from "./index.js";`,
         ``,

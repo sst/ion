@@ -11,8 +11,9 @@ import {
   all,
   interpolate,
   unsecret,
+  secret,
 } from "@pulumi/pulumi";
-import { build } from "../../runtime/node.js";
+import { buildNode } from "../../runtime/node.js";
 import { FunctionCodeUpdater } from "./providers/function-code-updater.js";
 import { bootstrap } from "./helpers/bootstrap.js";
 import { Duration, DurationMinutes, toSeconds } from "../duration.js";
@@ -21,10 +22,11 @@ import { Component, Prettify, Transform, transform } from "../component.js";
 import { Link } from "../link.js";
 import { VisibleError } from "../error.js";
 import type { Input } from "../input.js";
-import { prefixName } from "../naming.js";
+import { physicalName } from "../naming.js";
 import { RETENTION } from "./logging.js";
 import {
   cloudwatch,
+  ecr,
   getCallerIdentityOutput,
   getRegionOutput,
   iam,
@@ -33,6 +35,15 @@ import {
   types,
 } from "@pulumi/aws";
 import { Permission, permission } from "./permission.js";
+import { Vpc } from "./vpc.js";
+import { buildPython, buildPythonContainer } from "../../runtime/python.js";
+import { Image } from "@pulumi/docker-build";
+import { rpc } from "../rpc/rpc.js";
+
+/**
+ * Helper type to define function ARN type
+ */
+export type FunctionArn = `arn:${string}` & {};
 
 export type FunctionPermissionArgs = {
   /**
@@ -180,6 +191,7 @@ interface FunctionUrlCorsArgs {
 export interface FunctionArgs {
   /**
    * Disable running this function [Live](/docs/live/) in `sst dev`.
+   * @deprecated Use `dev` instead.
    * @default `true`
    * @example
    * ```js
@@ -190,16 +202,38 @@ export interface FunctionArgs {
    */
   live?: Input<false>;
   /**
-   * The name for the function. This is displayed in the AWS Console.
+   * Disable running this function [Live](/docs/live/) in `sst dev`.
+   * @default Live mode enabled in `sst dev`
+   * @example
+   * ```js
+   * {
+   *   dev: false
+   * }
+   * ```
+   */
+  dev?: Input<false>;
+  /**
+   * The name for the function.
    *
-   * :::note
-   * Changing the name will create a new function and delete the old one.
+   * By default, the name is generated from the app name, stage name, and component name. This
+   * is displayed in the AWS Console for this function.
+   *
+   * :::caution
+   * To avoid the name from thrashing, you want to make sure that it includes the app and stage
+   * name.
    * :::
+   *
+   * If you are going to set the name, you need to make sure:
+   * 1. It's unique across your app.
+   * 2. Uses the app and stage name, so it doesn't thrash when you deploy to different stages.
+   *
+   * Also, changing the name after your've deployed it once will create a new function and delete
+   * the old one.
    *
    * @example
    * ```js
    * {
-   *   name: ""
+   *   name: `${$app.name}-${$app.stage}-my-function`
    * }
    * ```
    */
@@ -225,7 +259,9 @@ export interface FunctionArgs {
    * }
    * ```
    */
-  runtime?: Input<"nodejs18.x" | "nodejs20.x" | "provided.al2023">;
+  runtime?: Input<
+    "nodejs18.x" | "nodejs20.x" | "provided.al2023" | "python3.11"
+  >;
   /**
    * Path to the source code directory for the function. By default, the handler is
    * bundled with [esbuild](https://esbuild.github.io/). Use `bundle` to skip bundling.
@@ -428,38 +464,68 @@ export interface FunctionArgs {
    */
   injections?: Input<string[]>;
   /**
-   * Configure the function logs in CloudWatch.
+   * Configure the function logs in CloudWatch. Or pass in `false` to disable writing logs.
    * @default `{retention: "forever", format: "text"}`
+   * @example
+   * ```js
+   * {
+   *   logging: false
+   * }
+   * ```
+   * When set to `false`, the function is not given permissions to write to CloudWatch.
+   * Logs.
    */
-  logging?: Input<{
-    /**
-     * The duration the function logs are kept in CloudWatch.
-     * @default `forever`
-     * @example
-     * ```js
-     * {
-     *   logging: {
-     *     retention: "1 week"
-     *   }
-     * }
-     * ```
-     */
-    retention?: Input<keyof typeof RETENTION>;
-    /**
-     * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
-     * of the Lambda function.
-     * @default `"text"`
-     * @example
-     * ```js
-     * {
-     *   logging: {
-     *     format: "json"
-     *   }
-     * }
-     * ```
-     */
-    format?: Input<"text" | "json">;
-  }>;
+  logging?: Input<
+    | false
+    | {
+        /**
+         * The duration the function logs are kept in CloudWatch.
+         *
+         * Not application when an existing log group is provided.
+         *
+         * @default `forever`
+         * @example
+         * ```js
+         * {
+         *   logging: {
+         *     retention: "1 week"
+         *   }
+         * }
+         * ```
+         */
+        retention?: Input<keyof typeof RETENTION>;
+        /**
+         * Assigns the given CloudWatch log group name to the function. This allows you to pass in a previously created log group.
+         *
+         * By default, the function creates a new log group when it's created.
+         *
+         * @default Creates a log group
+         * @example
+         * ```js
+         * {
+         *   logging: {
+         *     logGroup: "/existing/log-group"
+         *   }
+         * }
+         * ```
+         */
+        logGroup?: Input<string>;
+        /**
+         * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
+         * of the Lambda function.
+         * @default `"text"`
+         * @example
+         * ```js
+         * {
+         *   logging: {
+         *     format: "json"
+         *   }
+         * }
+         * ```
+         */
+        format?: Input<"text" | "json">;
+      }
+  >;
   /**
    * The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
    * of the Lambda function.
@@ -712,6 +778,43 @@ export interface FunctionArgs {
     splitting?: Input<boolean>;
   }>;
   /**
+   * Configure your python function.
+   *
+   *
+   * By default, SST will package all files in the same directory as the `handler` file.
+   * This means that you need to your handler file be the root of all files that need to be
+   * included in the function package. The only exception to this is a parent `pyproject.toml`
+   * file. SST will look for this file by finding the closest parent directory that contains
+   * a `pyproject.toml` file.
+   *
+   * @example
+   * ```markdown
+   * project-root/
+   * ├── functions/
+   * │   ├── pyproject.toml
+   * │   ├── handler.py
+   * │   └── utils.py
+   * └── sst.config.ts
+   * ```
+   */
+  python?: Input<{
+    /**
+     * Whether to deploy the function to the container runtime. You should use this
+     * if you are deploying a function that needs native dependencies, is large,
+     * or if you need to customize some runtime configuration.
+     * @default `false`
+     * @example
+     * ```ts
+     * {
+     *   python: {
+     *     container: true
+     *   }
+     * }
+     * ```
+     */
+    container?: Input<boolean>;
+  }>;
+  /**
    * Add additional files to copy into the function package. Takes a list of objects
    * with `from` and `to` paths. These will be copied over before the function package
    * is zipped up.
@@ -765,6 +868,14 @@ export interface FunctionArgs {
   /**
    * A list of Lambda layer ARNs to add to the function.
    *
+   * :::note
+   * Layers are only added when the function is deployed.
+   * :::
+   *
+   * These are only added when the function is deployed. In `sst dev`, your functions are run
+   * locally, so the layers are not used. Instead you should use a local version of what's
+   * in the layer.
+   *
    * @example
    * ```js
    * {
@@ -774,14 +885,27 @@ export interface FunctionArgs {
    */
   layers?: Input<Input<string>[]>;
   /**
+   * A list of tags to add to the function.
+   *
+   * @example
+   * ```js
+   * {
+   *   tags: {
+   *     "my-tag": "my-value"
+   *   }
+   * }
+   * ```
+   */
+  tags?: Input<Record<string, Input<string>>>;
+  /**
    * Configure the function to connect to private subnets in a virtual private cloud or VPC. This allows your function to access private resources.
    *
    * @example
    * ```js
    * {
    *   vpc: {
+   *     privateSubnets: ["subnet-0b6a2b73896dc8c4c", "subnet-021389ebee680c2f0"]
    *     securityGroups: ["sg-0399348378a4c256c"],
-   *     subnets: ["subnet-0b6a2b73896dc8c4c", "subnet-021389ebee680c2f0"]
    *   }
    * }
    * ```
@@ -794,7 +918,12 @@ export interface FunctionArgs {
     /**
      * A list of VPC subnet IDs.
      */
-    subnets: Input<Input<string>[]>;
+    privateSubnets: Input<Input<string>[]>;
+    /**
+     * A list of VPC subnet IDs.
+     * @deprecated Use `privateSubnets` instead.
+     */
+    subnets?: Input<Input<string>[]>;
   }>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -919,7 +1048,7 @@ export interface FunctionArgs {
 export class Function extends Component implements Link.Linkable {
   private function: Output<lambda.Function>;
   private role?: iam.Role;
-  private logGroup: cloudwatch.LogGroup;
+  private logGroup: Output<cloudwatch.LogGroup | undefined>;
   private fnUrl: Output<lambda.FunctionUrl | undefined>;
   private missingSourcemap?: boolean;
 
@@ -931,8 +1060,14 @@ export class Function extends Component implements Link.Linkable {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
-    const dev = output(args.live).apply((v) => $dev && v !== false);
+    const pythonContainerMode = output(args.python).apply(
+      (python) => python?.container ?? false,
+    );
+    // Useful for future runtimes
+    const containerDeployment = pythonContainerMode;
+    const dev = normalizeDev();
     const region = normalizeRegion();
+    const bootstrapData = region.apply((region) => bootstrap.forRegion(region));
     const injections = normalizeInjections();
     const runtime = normalizeRuntime();
     const timeout = normalizeTimeout();
@@ -943,17 +1078,21 @@ export class Function extends Component implements Link.Linkable {
     const logging = normalizeLogging();
     const url = normalizeUrl();
     const copyFiles = normalizeCopyFiles();
+    const vpc = normalizeVpc();
 
     const linkData = buildLinkData();
     const linkPermissions = buildLinkPermissions();
     const { bundle, handler: handler0 } = buildHandler();
     const { handler, wrapper } = buildHandlerWrapper();
     const role = createRole();
-    const zipPath = zipBundleFolder();
+    const { zipPath, image } = createBuildAsset();
+
     const bundleHash = calculateHash();
     const file = createBucketObject();
+
     const logGroup = createLogGroup();
     const fn = createFunction();
+
     const codeUpdater = updateFunctionCode();
 
     const fnUrl = createUrl();
@@ -965,9 +1104,45 @@ export class Function extends Component implements Link.Linkable {
     this.logGroup = logGroup;
     this.fnUrl = fnUrl;
 
+    all([
+      dev,
+      name,
+      linkData,
+      args.handler,
+      args.bundle,
+      runtime,
+      args.nodejs,
+      copyFiles,
+    ]).apply(
+      async ([
+        dev,
+        name,
+        links,
+        handler,
+        bundle,
+        runtime,
+        nodejs,
+        copyFiles,
+      ]) => {
+        if (!dev) return;
+        await rpc.call("Runtime.AddTarget", {
+          functionID: name,
+          handler: handler,
+          bundle: bundle,
+          runtime: runtime,
+          links: Object.fromEntries(
+            links.map((link) => [link.name, link.properties]),
+          ),
+          copyFiles: copyFiles,
+          properties: nodejs,
+          dev: true,
+        });
+      },
+    );
+
     this.registerOutputs({
       _live: unsecret(
-        all([dev]).apply(([dev]) => {
+        output(dev).apply((dev) => {
           if (!dev) return undefined;
           return all([
             name,
@@ -998,8 +1173,14 @@ export class Function extends Component implements Link.Linkable {
       },
     });
 
+    function normalizeDev() {
+      return all([args.dev, args.live]).apply(
+        ([d, l]) => $dev && d !== false && l !== false,
+      );
+    }
+
     function normalizeRegion() {
-      return getRegionOutput(undefined, { provider: opts?.provider }).name;
+      return getRegionOutput(undefined, { parent }).name;
     }
 
     function normalizeInjections() {
@@ -1025,18 +1206,21 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function normalizeEnvironment() {
-      return all([args.environment, dev, args.link]).apply(
-        ([environment, dev]) => {
+      return all([args.environment, dev, bootstrapData]).apply(
+        ([environment, dev, bootstrap]) => {
           const result = environment ?? {};
           result.SST_RESOURCE_App = JSON.stringify({
             name: $app.name,
             stage: $app.stage,
           });
           if (dev) {
+            result.SST_REGION = process.env.SST_AWS_REGION!;
             result.SST_FUNCTION_ID = name;
             result.SST_APP = $app.name;
             result.SST_STAGE = $app.stage;
-            // result.SST_LINK = (link || []).map((l) => l.urn).join(",");
+            result.SST_ASSET_BUCKET = bootstrap.asset;
+            if (process.env.SST_FUNCTION_TIMEOUT)
+              result.SST_FUNCTION_TIMEOUT = process.env.SST_FUNCTION_TIMEOUT;
           }
           return result;
         },
@@ -1048,11 +1232,20 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function normalizeLogging() {
-      return output(args.logging).apply((logging) => ({
-        ...logging,
-        retention: logging?.retention ?? "forever",
-        format: logging?.format ?? "text",
-      }));
+      return output(args.logging).apply((logging) => {
+        if (logging === false) return undefined;
+
+        if (logging?.retention && logging?.logGroup)
+          throw new VisibleError(
+            `Cannot set both "logging.retention" and "logging.logGroup"`,
+          );
+
+        return {
+          logGroup: logging?.logGroup,
+          retention: logging?.retention ?? "forever",
+          format: logging?.format ?? "text",
+        };
+      });
     }
 
     function normalizeUrl() {
@@ -1107,6 +1300,35 @@ export class Function extends Component implements Link.Linkable {
       );
     }
 
+    function normalizeVpc() {
+      // "vpc" is undefined
+      if (!args.vpc) return;
+
+      // "vpc" is a Vpc component
+      if (args.vpc instanceof Vpc) {
+        const result = {
+          privateSubnets: args.vpc.privateSubnets,
+          securityGroups: args.vpc.securityGroups,
+        };
+        return args.vpc.nodes.natGateways.apply((natGateways) => {
+          if (natGateways.length === 0)
+            throw new VisibleError(
+              `The VPC configured for the function does not have NAT enabled. Enable NAT by configuring "nat" on the "sst.aws.Vpc" component.`,
+            );
+          return result;
+        });
+      }
+
+      // "vpc" is object
+      return output(args.vpc).apply((vpc) => {
+        if (vpc.subnets)
+          throw new VisibleError(
+            `The "vpc.subnets" property has been renamed to "vpc.privateSubnets". Update your code to use "vpc.privateSubnets" instead.`,
+          );
+
+        return vpc;
+      });
+    }
     function calculateHash() {
       return zipPath.apply(async (zipPath) => {
         const hash = crypto.createHash("sha256");
@@ -1124,11 +1346,47 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function buildHandler() {
-      return dev.apply((dev) => {
+      return all([runtime, dev]).apply(([runtime, dev]) => {
         if (dev) {
           return {
             handler: "bootstrap",
             bundle: path.join($cli.paths.platform, "dist", "bridge"),
+          };
+        }
+
+        if (runtime === "python3.11") {
+          const buildResult = all([args, pythonContainerMode, linkData]).apply(
+            async ([args, pythonContainerMode, linkData]) => {
+              if (pythonContainerMode) {
+                const result = await buildPythonContainer(name, {
+                  ...args,
+                  links: linkData,
+                });
+                if (result.type === "error") {
+                  throw new Error(
+                    `Failed to build function "${args.handler}": ` +
+                      result.errors.join("\n").trim(),
+                  );
+                }
+                return result;
+              }
+              const result = await buildPython(name, {
+                ...args,
+                links: linkData,
+              });
+              if (result.type === "error") {
+                throw new Error(
+                  `Failed to build function "${args.handler}": ` +
+                    result.errors.join("\n").trim(),
+                );
+              }
+              return result;
+            },
+          );
+
+          return {
+            handler: buildResult.handler,
+            bundle: buildResult.out,
           };
         }
 
@@ -1141,13 +1399,14 @@ export class Function extends Component implements Link.Linkable {
 
         const buildResult = all([args, linkData]).apply(
           async ([args, linkData]) => {
-            const result = await build(name, {
+            const result = await buildNode(name, {
               ...args,
               links: linkData,
             });
             if (result.type === "error") {
               throw new Error(
-                "Failed to build function: " + result.errors.join("\n").trim(),
+                `Failed to build function "${args.handler}": ` +
+                  result.errors.join("\n").trim(),
               );
             }
             return result;
@@ -1168,9 +1427,21 @@ export class Function extends Component implements Link.Linkable {
         linkData,
         streaming,
         injections,
+        runtime,
       ]).apply(
-        async ([dev, bundle, handler, linkData, streaming, injections]) => {
+        async ([
+          dev,
+          bundle,
+          handler,
+          linkData,
+          streaming,
+          injections,
+          runtime,
+        ]) => {
           if (dev) return { handler };
+          if (runtime === "python3.11") {
+            return { handler };
+          }
 
           const hasUserInjections = injections.length > 0;
           // already injected via esbuild when bundle is undefined
@@ -1258,6 +1529,13 @@ export class Function extends Component implements Link.Linkable {
                       actions: ["iot:*"],
                       resources: ["*"],
                     },
+                    {
+                      actions: ["s3:*"],
+                      resources: [
+                        interpolate`arn:aws:s3:::${bootstrapData.asset}`,
+                        interpolate`arn:aws:s3:::${bootstrapData.asset}/*`,
+                      ],
+                    },
                   ]
                 : []),
             ],
@@ -1299,27 +1577,104 @@ export class Function extends Component implements Link.Linkable {
             inlinePolicies: policy.apply(({ statements }) =>
               statements ? [{ name: "inline", policy: policy.json }] : [],
             ),
-            managedPolicyArns: [
-              "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+            managedPolicyArns: logging.apply((logging) => [
+              ...(logging
+                ? [
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                  ]
+                : []),
               ...(args.vpc
                 ? [
                     "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
                   ]
                 : []),
-            ],
+            ]),
           },
           { parent },
         ),
       );
     }
 
-    function zipBundleFolder() {
+    function createBuildAsset() {
       // Note: cannot point the bundle to the `.open-next/server-function`
       //       b/c the folder contains node_modules. And pnpm node_modules
       //       contains symlinks. Pulumi cannot zip symlinks correctly.
       //       We will zip the folder ourselves.
-      return all([bundle, wrapper, copyFiles]).apply(
-        async ([bundle, wrapper, copyFiles]) => {
+
+      // If deploying to a container we need to first build the image. The zip
+      // is always needed so the FunctionCodeUpdater can track the contents of the
+      // image. This is convoluted, but I did not want to change too much of the function
+      // internals.
+      return all([bundle, wrapper, copyFiles, containerDeployment, dev]).apply(
+        async ([bundle, wrapper, copyFiles, containerDeployment, dev]) => {
+          function createImage() {
+            if (!containerDeployment) return undefined;
+            if (dev) return undefined;
+            // The build artifact directory already exists, with all the user code and
+            // config files. It also has the dockerfile, we need to now just build and push to
+            // the container registry.
+
+            // TODO: walln - check service implementation for .dockerignore stuff
+
+            const authToken = ecr.getAuthorizationTokenOutput({
+              registryId: bootstrapData.assetEcrRegistryId,
+            });
+
+            // build image
+            //aws-python-container::sst:aws:Function::MyPythonFunction
+            return new Image(
+              `${name}Image`,
+              {
+                // tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
+                tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
+                // Cannot use latest tag it breaks lambda because for whatever reason
+                // .ref is actually digest + tags and is not properly qualified???
+                context: {
+                  location: path.join(
+                    $cli.paths.work,
+                    "artifacts",
+                    `${name}-src`,
+                  ),
+                },
+                // Use the pushed image as a cache source.
+                cacheFrom: [
+                  {
+                    registry: {
+                      ref: $interpolate`${bootstrapData.assetEcrUrl}:cache`,
+                    },
+                  },
+                ],
+                // TODO: walln - investigate buildx ecr caching best practices
+                // Include an inline cache with our pushed image.
+                // cacheTo: [{
+                //     registry: {
+                //       imageManifest: true,
+                //       ociMediaTypes: true,
+                //       ref: $interpolate`${bootstrapData.assetEcrUrl}:cache`,
+                //     }
+                // }],
+                cacheTo: [
+                  {
+                    inline: {},
+                  },
+                ],
+                /// TODO: walln - enable arm64 builds by using architecture args
+                push: true,
+                registries: [
+                  authToken.apply((authToken) => ({
+                    address: authToken.proxyEndpoint,
+                    username: authToken.userName,
+                    password: secret(authToken.password),
+                  })),
+                ],
+              },
+              { parent: parent },
+            );
+          }
+
+          const image = createImage();
+
+          // Now proceed with the zipping this is the normal path for non-container deployments
           const zipPath = path.resolve(
             $cli.paths.work,
             "artifacts",
@@ -1385,7 +1740,7 @@ export class Function extends Component implements Link.Linkable {
             await archive.finalize();
           });
 
-          return zipPath;
+          return { zipPath, image };
         },
       );
     }
@@ -1396,7 +1751,7 @@ export class Function extends Component implements Link.Linkable {
         {
           key: interpolate`assets/${name}-code-${bundleHash}.zip`,
           bucket: region.apply((region) =>
-            bootstrap.forRegion(region).then((d) => d.bucket),
+            bootstrap.forRegion(region).then((d) => d.asset),
           ),
           source: zipPath.apply((zipPath) => new asset.FileArchive(zipPath)),
         },
@@ -1408,73 +1763,121 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function createLogGroup() {
-      return new cloudwatch.LogGroup(
-        ...transform(
-          args.transform?.logGroup,
-          `${name}LogGroup`,
-          {
-            name: `/aws/lambda/${prefixName(64, `${name}Function`)}`,
-            retentionInDays: logging.apply(
-              (logging) => RETENTION[logging.retention],
-            ),
-          },
-          { parent },
-        ),
-      );
+      return logging.apply((logging) => {
+        if (!logging) return;
+        if (logging.logGroup) return;
+
+        return new cloudwatch.LogGroup(
+          ...transform(
+            args.transform?.logGroup,
+            `${name}LogGroup`,
+            {
+              name: interpolate`/aws/lambda/${
+                args.name ?? physicalName(64, `${name}Function`)
+              }`,
+              retentionInDays: RETENTION[logging.retention],
+            },
+            { parent },
+          ),
+        );
+      });
     }
 
     function createFunction() {
-      const transformed = transform(
-        args.transform?.function,
-        `${name}Function`,
-        {
-          name: args.name,
-          description: all([args.description, dev]).apply(
-            ([description, dev]) =>
-              dev
-                ? description
-                  ? `${description.substring(0, 240)} (live)`
-                  : "live"
-                : `${description ?? ""}`,
-          ),
-          code: new asset.FileArchive(
-            path.join($cli.paths.platform, "functions", "empty-function"),
-          ),
-          handler: unsecret(handler),
-          role: args.role ?? role!.arn,
+      return all([
+        logging,
+        logGroup,
+        runtime,
+        pythonContainerMode,
+        image,
+        dev,
+        containerDeployment,
+      ]).apply(
+        ([
+          logging,
+          logGroup,
           runtime,
-          timeout: timeout.apply((timeout) => toSeconds(timeout)),
-          memorySize: memory.apply((memory) => toMBs(memory)),
-          environment: {
-            variables: environment,
-          },
-          architectures,
-          loggingConfig: {
-            logFormat: logging.apply((logging) =>
-              logging.format === "json" ? "JSON" : "Text",
-            ),
-            logGroup: logGroup.name,
-          },
-          vpcConfig: args.vpc && {
-            securityGroupIds: output(args.vpc).securityGroups,
-            subnetIds: output(args.vpc).subnets,
-          },
-          layers: args.layers,
+          pythonContainerMode,
+          image,
+          dev,
+          containerDeployment,
+        ]) => {
+          const transformed = transform(
+            args.transform?.function,
+            `${name}Function`,
+            {
+              name: args.name,
+              description: all([args.description, dev]).apply(
+                ([description, dev]) =>
+                  dev
+                    ? description
+                      ? `${description.substring(0, 240)} (live)`
+                      : "live"
+                    : `${description ?? ""}`,
+              ),
+              code: new asset.FileArchive(
+                path.join($cli.paths.platform, "functions", "empty-function"),
+              ),
+              handler: unsecret(handler),
+              role: args.role ?? role!.arn,
+              runtime,
+              timeout: timeout.apply((timeout) => toSeconds(timeout)),
+              memorySize: memory.apply((memory) => toMBs(memory)),
+              environment: {
+                variables: environment,
+              },
+              architectures,
+              loggingConfig: logging && {
+                logFormat: logging.format === "json" ? "JSON" : "Text",
+                logGroup: logging.logGroup ?? logGroup!.name,
+              },
+              vpcConfig: args.vpc && {
+                securityGroupIds: output(args.vpc).securityGroups,
+                subnetIds: output(args.vpc).privateSubnets,
+              },
+              layers: args.layers,
+              tags: args.tags,
+            },
+            { parent },
+          );
+          if (containerDeployment && !dev) {
+            return new lambda.Function(
+              transformed[0],
+              {
+                ...transformed[1],
+                // if the runtime is python3.11 and we are in container mode, deploy image
+                packageType: "Image",
+                imageUri: image?.ref.apply(
+                  (ref) => ref?.replace(":latest", ""),
+                ),
+                code: undefined,
+                runtime: undefined,
+                handler: undefined,
+                imageConfig: {
+                  commands: [handler],
+                },
+                architectures: all([transformed[1].architectures]).apply(
+                  ([architectures]) => (dev ? ["x86_64"] : architectures!),
+                ),
+              },
+              transformed[2],
+            );
+          }
+          return new lambda.Function(
+            transformed[0],
+            {
+              ...transformed[1],
+              packageType: "Zip",
+              runtime: all([transformed[1].runtime]).apply(([runtime]) =>
+                dev ? "provided.al2023" : runtime!,
+              ),
+              architectures: all([transformed[1].architectures]).apply(
+                ([architectures]) => (dev ? ["x86_64"] : architectures!),
+              ),
+            },
+            transformed[2],
+          );
         },
-        { parent },
-      );
-      return new lambda.Function(
-        transformed[0],
-        {
-          ...transformed[1],
-          runtime: all([transformed[1].runtime, dev]).apply(([runtime, dev]) =>
-            dev ? "provided.al2023" : runtime!,
-          ),
-          architectures: all([transformed[1].architectures, dev]).apply(
-            ([architectures, dev]) => (dev ? ["x86_64"] : architectures!),
-          ),
-        },
-        transformed[2],
       );
     }
 
@@ -1498,17 +1901,20 @@ export class Function extends Component implements Link.Linkable {
     }
 
     function updateFunctionCode() {
-      return new FunctionCodeUpdater(
-        `${name}CodeUpdater`,
-        {
-          functionName: fn.name,
-          s3Bucket: file.bucket,
-          s3Key: file.key,
-          functionLastModified: fn.lastModified,
-          region,
-        },
-        { parent },
-      );
+      return all([image]).apply(([image]) => {
+        return new FunctionCodeUpdater(
+          `${name}CodeUpdater`,
+          {
+            functionName: fn.name,
+            s3Bucket: file.bucket,
+            s3Key: file.key,
+            functionLastModified: fn.lastModified,
+            region,
+            imageUri: image?.ref.apply((ref) => ref?.replace(":latest", "")),
+          },
+          { parent },
+        );
+      });
     }
   }
 

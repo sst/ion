@@ -8,8 +8,8 @@ import {
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
-import { hashStringToPrettyString, sanitizeToPascalCase } from "../naming";
+import { FunctionArgs, FunctionArn } from "./function";
+import { hashStringToPrettyString, logicalName } from "../naming";
 import { parseDynamoStreamArn } from "./helpers/arn";
 import { DynamoLambdaSubscriber } from "./dynamo-lambda-subscriber";
 import { dynamodb, lambda } from "@pulumi/aws";
@@ -83,6 +83,29 @@ export interface DynamoArgs {
          * The range key field of the index. This field needs to be defined in the `fields`.
          */
         rangeKey?: Input<string>;
+        /**
+         * The fields to project into the index.
+         * @default `"all"`
+         * @example
+         * Project only the key fields: `userId` and `createdAt`.
+         * ```js
+         * {
+         *   hashKey: "userId",
+         *   rangeKey: "createdAt",
+         *   projection: "keys-only"
+         * }
+         * ```
+         *
+         * Project the `noteId` field in addition to the key fields.
+         * ```js
+         * {
+         *   hashKey: "userId",
+         *   rangeKey: "createdAt",
+         *   projection: ["noteId"]
+         * }
+         * ```
+         */
+        projection?: Input<"all" | "keys-only" | Input<string>[]>;
       }>
     >
   >;
@@ -110,6 +133,27 @@ export interface DynamoArgs {
          * The range key field of the index. This field needs to be defined in the `fields`.
          */
         rangeKey: Input<string>;
+        /**
+         * The fields to project into the index.
+         * @default `"all"`
+         * @example
+         * Project only the key field: `createdAt`.
+         * ```js
+         * {
+         *   rangeKey: "createdAt",
+         *   projection: "keys-only"
+         * }
+         * ```
+         *
+         * Project the `noteId` field in addition to the key field.
+         * ```js
+         * {
+         *   rangeKey: "createdAt",
+         *   projection: ["noteId"]
+         * }
+         * ```
+         */
+        projection?: Input<"all" | "keys-only" | Input<string>[]>;
       }>
     >
   >;
@@ -350,6 +394,7 @@ export interface DynamoSubscriberArgs {
  */
 export class Dynamo extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorOpts: ComponentResourceOptions;
   private table: Output<dynamodb.Table>;
   private isStreamEnabled: boolean = false;
 
@@ -365,6 +410,7 @@ export class Dynamo extends Component implements Link.Linkable {
     const table = createTable();
 
     this.constructorName = name;
+    this.constructorOpts = opts;
     this.table = table;
     this.isStreamEnabled = Boolean(args.stream);
 
@@ -408,14 +454,28 @@ export class Dynamo extends Component implements Link.Linkable {
                     name,
                     hashKey: index.hashKey,
                     rangeKey: index.rangeKey,
-                    projectionType: "ALL",
+                    ...(index.projection === "keys-only"
+                      ? { projectionType: "KEYS_ONLY" }
+                      : Array.isArray(index.projection)
+                        ? {
+                            projectionType: "INCLUDE",
+                            nonKeyAttributes: index.projection,
+                          }
+                        : { projectionType: "ALL" }),
                   }),
                 ),
                 localSecondaryIndexes: Object.entries(localIndexes ?? {}).map(
                   ([name, index]) => ({
                     name,
                     rangeKey: index.rangeKey,
-                    projectionType: "ALL",
+                    ...(index.projection === "keys-only"
+                      ? { projectionType: "KEYS_ONLY" }
+                      : Array.isArray(index.projection)
+                        ? {
+                            projectionType: "INCLUDE",
+                            nonKeyAttributes: index.projection,
+                          }
+                        : { projectionType: "ALL" }),
                   }),
                 ),
               },
@@ -494,9 +554,15 @@ export class Dynamo extends Component implements Link.Linkable {
    *   timeout: "60 seconds"
    * });
    * ```
+   *
+   * Subscribe with an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * table.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: DynamoSubscriberArgs,
   ) {
     const sourceName = this.constructorName;
@@ -512,6 +578,7 @@ export class Dynamo extends Component implements Link.Linkable {
       this.nodes.table.streamArn,
       subscriber,
       args,
+      { provider: this.constructorOpts.provider },
     );
   }
 
@@ -568,21 +635,25 @@ export class Dynamo extends Component implements Link.Linkable {
     subscriber: string | FunctionArgs,
     args?: DynamoSubscriberArgs,
   ) {
-    const tableName = output(streamArn).apply(
-      (streamArn) => parseDynamoStreamArn(streamArn).tableName,
+    return output(streamArn).apply((streamArn) =>
+      this._subscribe(
+        logicalName(parseDynamoStreamArn(streamArn).tableName),
+        streamArn,
+        subscriber,
+        args,
+      ),
     );
-    return this._subscribe(tableName, streamArn, subscriber, args);
   }
 
   private static _subscribe(
-    name: Input<string>,
+    name: string,
     streamArn: Input<string>,
     subscriber: string | FunctionArgs,
     args: DynamoSubscriberArgs = {},
+    opts: ComponentResourceOptions = {},
   ) {
     return all([name, subscriber, args]).apply(([name, subscriber, args]) => {
-      const prefix = sanitizeToPascalCase(name);
-      const suffix = sanitizeToPascalCase(
+      const suffix = logicalName(
         hashStringToPrettyString(
           [
             streamArn,
@@ -593,11 +664,15 @@ export class Dynamo extends Component implements Link.Linkable {
         ),
       );
 
-      return new DynamoLambdaSubscriber(`${prefix}Subscriber${suffix}`, {
-        dynamo: { streamArn },
-        subscriber,
-        ...args,
-      });
+      return new DynamoLambdaSubscriber(
+        `${name}Subscriber${suffix}`,
+        {
+          dynamo: { streamArn },
+          subscriber,
+          ...args,
+        },
+        opts,
+      );
     });
   }
 

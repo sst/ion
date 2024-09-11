@@ -2,8 +2,8 @@ import { ComponentResourceOptions, all, output } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
-import { hashStringToPrettyString, sanitizeToPascalCase } from "../naming";
+import { FunctionArgs, FunctionArn } from "./function";
+import { hashStringToPrettyString, logicalName } from "../naming";
 import { parseTopicArn } from "./helpers/arn";
 import { SnsTopicLambdaSubscriber } from "./sns-topic-lambda-subscriber";
 import { SnsTopicQueueSubscriber } from "./sns-topic-queue-subscriber";
@@ -152,6 +152,7 @@ export interface SnsTopicSubscriberArgs {
  */
 export class SnsTopic extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorOpts: ComponentResourceOptions;
   private topic: sns.Topic;
 
   constructor(
@@ -167,6 +168,7 @@ export class SnsTopic extends Component implements Link.Linkable {
     const topic = createTopic();
 
     this.constructorName = name;
+    this.constructorOpts = opts;
     this.topic = topic;
 
     function normalizeFifo() {
@@ -243,9 +245,15 @@ export class SnsTopic extends Component implements Link.Linkable {
    *   timeout: "60 seconds"
    * });
    * ```
+   *
+   * Subscribe with an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * topic.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args: SnsTopicSubscriberArgs = {},
   ) {
     return SnsTopic._subscribeFunction(
@@ -253,6 +261,7 @@ export class SnsTopic extends Component implements Link.Linkable {
       this.arn,
       subscriber,
       args,
+      { provider: this.constructorOpts.provider },
     );
   }
 
@@ -298,24 +307,28 @@ export class SnsTopic extends Component implements Link.Linkable {
    */
   public static subscribe(
     topicArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: SnsTopicSubscriberArgs,
   ) {
-    const topicName = output(topicArn).apply(
-      (topicArn) => parseTopicArn(topicArn).topicName,
+    return output(topicArn).apply((topicArn) =>
+      this._subscribeFunction(
+        logicalName(parseTopicArn(topicArn).topicName),
+        topicArn,
+        subscriber,
+        args,
+      ),
     );
-    return this._subscribeFunction(topicName, topicArn, subscriber, args);
   }
 
   private static _subscribeFunction(
-    name: Input<string>,
+    name: string,
     topicArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args: SnsTopicSubscriberArgs = {},
+    opts: $util.ComponentResourceOptions = {},
   ) {
-    return all([name, subscriber, args]).apply(([name, subscriber, args]) => {
-      const prefix = sanitizeToPascalCase(name);
-      const suffix = sanitizeToPascalCase(
+    return all([subscriber, args]).apply(([subscriber, args]) => {
+      const suffix = logicalName(
         hashStringToPrettyString(
           [
             topicArn,
@@ -326,11 +339,15 @@ export class SnsTopic extends Component implements Link.Linkable {
         ),
       );
 
-      return new SnsTopicLambdaSubscriber(`${prefix}Subscriber${suffix}`, {
-        topic: { arn: topicArn },
-        subscriber,
-        ...args,
-      });
+      return new SnsTopicLambdaSubscriber(
+        `${name}Subscriber${suffix}`,
+        {
+          topic: { arn: topicArn },
+          subscriber,
+          ...args,
+        },
+        opts,
+      );
     });
   }
 
@@ -413,28 +430,31 @@ export class SnsTopic extends Component implements Link.Linkable {
     queueArn: Input<string>,
     args?: SnsTopicSubscriberArgs,
   ) {
-    const topicName = output(topicArn).apply(
-      (topicArn) => parseTopicArn(topicArn).topicName,
+    return output(topicArn).apply((topicArn) =>
+      this._subscribeQueue(
+        logicalName(parseTopicArn(topicArn).topicName),
+        topicArn,
+        queueArn,
+        args,
+      ),
     );
-    return this._subscribeQueue(topicName, topicArn, queueArn, args);
   }
 
   private static _subscribeQueue(
-    name: Input<string>,
+    name: string,
     topicArn: Input<string>,
     queueArn: Input<string>,
     args: SnsTopicSubscriberArgs = {},
   ) {
-    return all([name, queueArn, args]).apply(([name, queueArn, args]) => {
-      const prefix = sanitizeToPascalCase(name);
-      const suffix = sanitizeToPascalCase(
+    return all([queueArn, args]).apply(([queueArn, args]) => {
+      const suffix = logicalName(
         hashStringToPrettyString(
           [topicArn, JSON.stringify(args.filter ?? {}), queueArn].join(""),
           6,
         ),
       );
 
-      return new SnsTopicQueueSubscriber(`${prefix}Subscriber${suffix}`, {
+      return new SnsTopicQueueSubscriber(`${name}Subscriber${suffix}`, {
         topic: { arn: topicArn },
         queue: queueArn,
         ...args,

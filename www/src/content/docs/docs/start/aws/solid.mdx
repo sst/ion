@@ -9,7 +9,7 @@ We are going to create a SolidStart app, add an S3 Bucket for file uploads, and 
 You can [view the source](https://github.com/sst/ion/tree/dev/examples/aws-solid-start) of this example in our repo.
 :::
 
-Before you get started, make sure to [configure your AWS credentials](https://docs.sst.dev/advanced/iam-credentials#loading-from-a-file).
+Before you get started, make sure to [configure your AWS credentials](/docs/iam-credentials#credentials).
 
 ---
 
@@ -28,10 +28,10 @@ We are picking the **_bare_**, and **_TypeScript_** options.
 
 #### Init SST
 
-Now let's initialize SST in our app. Make sure to add the `@ion` part.
+Now let's initialize SST in our app.
 
-```bash "sst@ion"
-npx sst@ion init
+```bash
+npx sst@latest init
 npm install
 ```
 
@@ -42,7 +42,7 @@ It'll also ask you to update your `app.config.ts` with something like this.
 ```diff lang="ts" title="app.config.ts"
 export default defineConfig({
 +  server: {
-+    preset: "aws-lambda",
++    preset: "aws-lambda-streaming",
 +  },
 });
 ```
@@ -70,6 +70,8 @@ const bucket = new sst.aws.Bucket("MyBucket", {
   public: true
 });
 ```
+
+Add this above the `SolidStart` component.
 
 #### Link the bucket
 

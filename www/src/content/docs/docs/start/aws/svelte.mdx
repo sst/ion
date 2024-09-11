@@ -9,7 +9,7 @@ We are going to create a SvelteKit app, add an S3 Bucket for file uploads, and d
 You can [view the source](https://github.com/sst/ion/tree/dev/examples/aws-svelte-kit) of this example in our repo.
 :::
 
-Before you get started, make sure to [configure your AWS credentials](https://docs.sst.dev/advanced/iam-credentials#loading-from-a-file).
+Before you get started, make sure to [configure your AWS credentials](/docs/iam-credentials#credentials).
 
 ---
 
@@ -28,10 +28,10 @@ We are picking the **_Skeleton project_** and **_Yes, using TypeScript syntax_**
 
 #### Init SST
 
-Now let's initialize SST in our app. Make sure to add the `@ion` part.
+Now let's initialize SST in our app.
 
-```bash "sst@ion"
-npx sst@ion init
+```bash
+npx sst@latest init
 npm install
 ```
 
@@ -67,6 +67,8 @@ const bucket = new sst.aws.Bucket("MyBucket", {
   public: true
 });
 ```
+
+Add this above the `SvelteKit` component.
 
 #### Link the bucket
 

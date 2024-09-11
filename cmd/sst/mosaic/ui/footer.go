@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/sst/ion/cmd/sst/mosaic/deployer"
 	"github.com/sst/ion/pkg/project"
 	"golang.org/x/crypto/ssh/terminal"
 )
@@ -74,7 +76,7 @@ func (m *footer) Start(ctx context.Context) {
 			width, _, _ := terminal.GetSize(int(os.Stdout.Fd()))
 			switch evt := val.(type) {
 			case lineMsg:
-				m.Render(width, "")
+				m.clear()
 				fmt.Println(evt)
 			default:
 				m.Update(val)
@@ -85,19 +87,36 @@ func (m *footer) Start(ctx context.Context) {
 	}
 }
 
+func (m *footer) clear() {
+	oldLines := strings.Split(m.previous, "\n")
+	out := &bytes.Buffer{}
+	if len(oldLines) > 0 {
+		for i := range oldLines {
+			out.WriteString(ansi.EraseEntireLine)
+			if i < len(oldLines)-1 {
+				out.WriteString(ansi.CursorUp1)
+			}
+		}
+	}
+	os.Stdout.Write(out.Bytes())
+	m.previous = ""
+}
+
 func (m *footer) Render(width int, next string) {
 	oldLines := strings.Split(m.previous, "\n")
 	nextLines := strings.Split(next, "\n")
 
 	out := &bytes.Buffer{}
 
-	if next == m.previous {
-		return
-	}
+	// if next == m.previous {
+	// 	return
+	// }
 
 	if len(oldLines) > 0 {
 		for i := range oldLines {
-			out.WriteString(ansi.EraseEntireLine)
+			if i < len(oldLines)-len(nextLines) || next == "" {
+				out.WriteString(ansi.EraseEntireLine)
+			}
 			if i < len(oldLines)-1 {
 				out.WriteString(ansi.CursorUp1)
 			}
@@ -110,6 +129,7 @@ func (m *footer) Render(width int, next string) {
 		}
 		truncated := ansi.Truncate(line, width, "…")
 		out.WriteString(truncated)
+		out.WriteString(ansi.EraseLine(0))
 		if i < len(nextLines)-1 {
 			out.WriteString("\r\n")
 		}
@@ -118,8 +138,6 @@ func (m *footer) Render(width int, next string) {
 	os.Stdout.Write(out.Bytes())
 	m.previous = next
 }
-
-type lineMsg string
 
 func (m *footer) Reset() {
 	m.started = false
@@ -158,8 +176,11 @@ func (m *footer) Update(msg any) {
 	case *project.ConcurrentUpdateEvent:
 		m.Reset()
 		break
+	case *deployer.DeployFailedEvent:
+		m.Reset()
+		break
 	case *apitype.ResourcePreEvent:
-		if resource.URN(msg.Metadata.URN).Type().DisplayName() == "pulumi:pulumi:Stack" {
+		if slices.Contains(IGNORED_RESOURCES, msg.Metadata.Type) {
 			break
 		}
 		if msg.Metadata.Old != nil && msg.Metadata.Old.Parent != "" {
@@ -302,3 +323,5 @@ func (u *footer) formatURN(urn string) string {
 	}
 	return result
 }
+
+type lineMsg = string

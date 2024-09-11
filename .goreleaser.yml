@@ -71,5 +71,6 @@ changelog:
       - '^docs:'
       - '^doc:'
       - '^test:'
-      - '^tweak:'
+      - '^ci:'
+      - '^ignore:'
 

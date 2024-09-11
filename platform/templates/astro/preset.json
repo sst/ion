@@ -7,8 +7,7 @@
       "type": "npm",
       "properties": {
         "file": "package.json",
-        "package": "sst",
-        "version": "ion"
+        "package": "sst"
       }
     },
     {
@@ -25,7 +24,7 @@
         "",
         "import aws from \"astro-sst\";",
         "export default defineConfig({",
-        "  output: \"server\",",
+        "  output: \"dist\",",
         "  adapter: aws()",
         "});"
       ]

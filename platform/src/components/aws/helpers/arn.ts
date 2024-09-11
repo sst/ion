@@ -1,6 +1,16 @@
 import { aws } from "../..";
 import { VisibleError } from "../../error";
 
+export function parseFunctionArn(arn: string) {
+  // arn:aws:lambda:region:account-id:function:function-name
+  const functionName = arn.split(":")[6];
+  if (!arn.startsWith("arn:") || !functionName)
+    throw new VisibleError(
+      `The provided ARN "${arn}" is not a Lambda function ARN.`,
+    );
+  return { functionName };
+}
+
 export function parseBucketArn(arn: string) {
   // arn:aws:s3:::bucket-name
   const bucketName = arn.split(":")[5];
@@ -72,6 +82,14 @@ export function parseEventBusArn(arn: string) {
       `The provided ARN "${arn}" is not a EventBridge event bus ARN.`,
     );
   return { busName };
+}
+
+export function parseIamRoleArn(arn: string) {
+  // arn:aws:iam::123456789012:role/MyRole
+  const roleName = arn.split("/")[1];
+  if (!arn.startsWith("arn:") || !roleName)
+    throw new VisibleError(`The provided ARN "${arn}" is not an IAM role ARN.`);
+  return { roleName };
 }
 
 export function parseElasticSearch(arn: string) {

@@ -5,7 +5,7 @@ import {
   runtime,
   output,
 } from "@pulumi/pulumi";
-import { prefixName } from "./naming.js";
+import { physicalName } from "./naming.js";
 import { VisibleError } from "./error.js";
 import { getRegionOutput } from "@pulumi/aws";
 
@@ -42,6 +42,7 @@ export class Component extends ComponentResource {
     name: string,
     args?: Inputs,
     opts?: ComponentResourceOptions,
+    _version: number = 1,
   ) {
     const transforms = ComponentTransforms.get(type) ?? [];
     for (const transform of transforms) {
@@ -49,6 +50,7 @@ export class Component extends ComponentResource {
     }
     super(type, name, args, {
       transformations: [
+        // Ensure logical and physical names are prefixed
         (args) => {
           // Ensure names are prefixed with parent's name
           if (
@@ -57,7 +59,12 @@ export class Component extends ComponentResource {
             !args.name.startsWith(args.opts.parent!.__name)
           ) {
             throw new Error(
-              `In "${name}" component, the logical name of "${args.name}" (${args.type}) is not prefixed with parent's name`,
+              `In "${name}" component, the logical name of "${args.name}" (${
+                args.type
+              }) is not prefixed with parent's name ${
+                // @ts-expect-error
+                args.opts.parent!.__name
+              }`,
             );
           }
 
@@ -85,7 +92,9 @@ export class Component extends ComponentResource {
             [
               "aws:acm/certificate:Certificate",
               "aws:acm/certificateValidation:CertificateValidation",
+              "aws:apigateway/basePathMapping:BasePathMapping",
               "aws:apigateway/deployment:Deployment",
+              "aws:apigateway/domainName:DomainName",
               "aws:apigateway/integration:Integration",
               "aws:apigateway/method:Method",
               "aws:apigateway/resource:Resource",
@@ -104,11 +113,11 @@ export class Component extends ComponentResource {
               "aws:iam/userPolicy:UserPolicy",
               "aws:cloudfront/cachePolicy:CachePolicy",
               "aws:cloudfront/distribution:Distribution",
-              "aws:cloudfront/originAccessIdentity:OriginAccessIdentity",
               "aws:cloudwatch/eventRule:EventRule",
               "aws:cloudwatch/eventTarget:EventTarget",
               "aws:cloudwatch/logGroup:LogGroup",
               "aws:cognito/identityPoolRoleAttachment:IdentityPoolRoleAttachment",
+              "aws:cognito/identityProvider:IdentityProvider",
               "aws:cognito/userPoolClient:UserPoolClient",
               "aws:lambda/eventSourceMapping:EventSourceMapping",
               "aws:lambda/functionUrl:FunctionUrl",
@@ -128,7 +137,7 @@ export class Component extends ComponentResource {
               "aws:sns/topicSubscription:TopicSubscription",
               "cloudflare:index/record:Record",
               "cloudflare:index/workerDomain:WorkerDomain",
-              "docker:index/image:Image",
+              "docker-build:index:Image",
               "vercel:index/dnsRecord:DnsRecord",
             ].includes(args.type)
           )
@@ -140,17 +149,17 @@ export class Component extends ComponentResource {
               // ie. "-1234567" is automatically added
               types: ["aws:lb/loadBalancer:LoadBalancer"],
               field: "name",
-              cb: () => prefixName(24, args.name),
+              cb: () => physicalName(24, args.name),
             },
             {
               types: ["aws:rds/cluster:Cluster"],
               field: "clusterIdentifier",
-              cb: () => prefixName(63, args.name).toLowerCase(),
+              cb: () => physicalName(63, args.name).toLowerCase(),
             },
             {
               types: ["aws:rds/clusterInstance:ClusterInstance"],
               field: "identifier",
-              cb: () => prefixName(63, args.name).toLowerCase(),
+              cb: () => physicalName(63, args.name).toLowerCase(),
             },
             {
               types: [
@@ -160,14 +169,14 @@ export class Component extends ComponentResource {
                 "aws:lambda/function:Function",
               ],
               field: "name",
-              cb: () => prefixName(64, args.name),
+              cb: () => physicalName(64, args.name),
             },
             {
               types: ["aws:sqs/queue:Queue"],
               field: "name",
               cb: () =>
                 output(args.props.fifoQueue).apply((fifo) =>
-                  prefixName(80, args.name, fifo ? ".fifo" : undefined),
+                  physicalName(80, args.name, fifo ? ".fifo" : undefined),
                 ),
             },
             {
@@ -175,9 +184,10 @@ export class Component extends ComponentResource {
               field: "name",
               cb: () =>
                 getRegionOutput(undefined, {
+                  parent: args.opts.parent,
                   provider: args.opts.provider,
                 }).name.apply((region) =>
-                  prefixName(
+                  physicalName(
                     64,
                     args.name,
                     `-${region.toLowerCase().replace(/-/g, "")}`,
@@ -190,16 +200,17 @@ export class Component extends ComponentResource {
                 "aws:apigateway/restApi:RestApi",
                 "aws:apigatewayv2/api:Api",
                 "aws:apigatewayv2/authorizer:Authorizer",
+                "aws:apigatewayv2/vpcLink:VpcLink",
                 "aws:cognito/userPool:UserPool",
                 "aws:iot/authorizer:Authorizer",
               ],
               field: "name",
-              cb: () => prefixName(128, args.name),
+              cb: () => physicalName(128, args.name),
             },
             {
               types: ["aws:iot/topicRule:TopicRule"],
               field: "name",
-              cb: () => prefixName(128, args.name).replaceAll("-", "_"),
+              cb: () => physicalName(128, args.name).replaceAll("-", "_"),
             },
             {
               types: [
@@ -209,12 +220,12 @@ export class Component extends ComponentResource {
                 "aws:ecs/cluster:Cluster",
               ],
               field: "name",
-              cb: () => prefixName(255, args.name),
+              cb: () => physicalName(255, args.name),
             },
             {
               types: ["aws:rds/subnetGroup:SubnetGroup"],
               field: "name",
-              cb: () => prefixName(255, args.name).toLowerCase(),
+              cb: () => physicalName(255, args.name).toLowerCase(),
             },
             {
               types: [
@@ -223,6 +234,7 @@ export class Component extends ComponentResource {
                 "aws:ec2/natGateway:NatGateway",
                 "aws:ec2/routeTable:RouteTable",
                 "aws:ec2/securityGroup:SecurityGroup",
+                "aws:ec2/defaultSecurityGroup:DefaultSecurityGroup",
                 "aws:ec2/subnet:Subnet",
                 "aws:ec2/vpc:Vpc",
               ],
@@ -230,7 +242,7 @@ export class Component extends ComponentResource {
               cb: () => ({
                 // @ts-expect-error
                 ...args.tags,
-                Name: prefixName(255, args.name),
+                Name: physicalName(255, args.name),
               }),
             },
             {
@@ -238,13 +250,13 @@ export class Component extends ComponentResource {
               field: "name",
               cb: () =>
                 output(args.props.fifoTopic).apply((fifo) =>
-                  prefixName(256, args.name, fifo ? ".fifo" : undefined),
+                  physicalName(256, args.name, fifo ? ".fifo" : undefined),
                 ),
             },
             {
               types: ["aws:appsync/graphQLApi:GraphQLApi"],
               field: "name",
-              cb: () => prefixName(65536, args.name),
+              cb: () => physicalName(65536, args.name),
             },
             {
               types: [
@@ -254,12 +266,12 @@ export class Component extends ComponentResource {
                 "cloudflare:index/queue:Queue",
               ],
               field: "name",
-              cb: () => prefixName(64, args.name).toLowerCase(),
+              cb: () => physicalName(64, args.name).toLowerCase(),
             },
             {
               types: ["cloudflare:index/workersKvNamespace:WorkersKvNamespace"],
               field: "title",
-              cb: () => prefixName(64, args.name).toLowerCase(),
+              cb: () => physicalName(64, args.name).toLowerCase(),
             },
           ];
 
@@ -277,6 +289,10 @@ export class Component extends ComponentResource {
             opts: args.opts,
           };
         },
+        // When renaming a CloudFront function, when `deleteBeforeReplace` is not set,
+        // the engine tries to remove the existing function first, and fails with in-use
+        // error. Setting `deleteBeforeReplace` to `false` seems to force the new one
+        // gets created and attached first.
         (args) => {
           let override = {};
           if (args.type === "aws:cloudfront/function:Function") {
@@ -287,10 +303,45 @@ export class Component extends ComponentResource {
             opts: { ...args.opts, ...override },
           };
         },
+        // Set child resources `retainOnDelete` if set on component
+        (args) => ({
+          props: args.props,
+          opts: {
+            ...args.opts,
+            retainOnDelete: args.opts.retainOnDelete ?? opts?.retainOnDelete,
+          },
+        }),
         ...(opts?.transformations ?? []),
       ],
       ...opts,
     });
+
+    // Check component version
+    const oldVersion = $cli.state.version[name];
+    const newVersion = _version;
+    if (oldVersion) {
+      const className = type.replaceAll(":", ".");
+      if (oldVersion < newVersion) {
+        throw new VisibleError(
+          [
+            `There is a new version of "${className}" that has breaking changes.`,
+            `To continue using the previous version, rename "${className}" to "${className}.v${oldVersion}".`,
+            `Or recreate this component to update - https://ion.sst.dev/docs/components/#versioning`,
+          ].join(" "),
+        );
+      }
+      if (oldVersion > newVersion) {
+        throw new VisibleError(
+          [
+            `It seems you are trying to use an older version of "${className}".`,
+            `You need to recreate this component to rollback - https://ion.sst.dev/docs/components/#versioning`,
+          ].join(" "),
+        );
+      }
+    }
+    if (newVersion > 1) {
+      new Version(name, newVersion, { parent: this });
+    }
   }
 }
 
@@ -318,4 +369,11 @@ export function $transform<T, Args, Options>(
     cb(input.props as any, input.opts as any);
     return input;
   });
+}
+
+export class Version extends ComponentResource {
+  constructor(target: string, version: number, opts: ComponentResourceOptions) {
+    super("sst:sst:Version", target + "Version", {}, opts);
+    this.registerOutputs({ target, version });
+  }
 }

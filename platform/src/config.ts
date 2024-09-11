@@ -20,7 +20,12 @@
  *   },
  *   // Your app's resources
  *   async run() {
- *     new sst.aws.Bucket("MyBucket");
+ *     const bucket = new sst.aws.Bucket("MyBucket");
+ *
+ *     // Your app's outputs
+ *     return {
+ *       bucket: bucket.name
+ *     };
  *   }
  * });
  * ```
@@ -38,18 +43,40 @@
  * You can add Pulumi code in the `run` function not the `app` function. While the `run`
  * function is where you define your resources using SST or Pulumi's components.
  *
- * :::tip
- * The [Global](/docs/reference/global/) library can help you with your app config and resources.
- * :::
- *
  * The run function also has access to a list of [Global](/docs/reference/global/) `$` variables and functions. These serve as the context for your app config.
- * 
+ *
  * :::caution
  * Do not `import` the provider packages in your `sst.config.ts`.
  * :::
  *
  * Since SST manages importing your provider packages, it's recommended not to add any imports
  * in your `sst.config.ts`.
+ *
+ * ---
+ *
+ * #### .env
+ *
+ * Your `.env` and `.env.<stage>` files are loaded as environment variables in your config.
+ * They need to be in the same directory as your `sst.config.ts`.
+ *
+ * ```bash title=".env"
+ * MY_ENV_VAR=hello
+ * ```
+ *
+ * And are available as `process.env` in both your `app` and `run` functions.
+ *
+ * ```ts title="sst.config.ts"
+ * process.env.MY_ENV_VAR
+ * ```
+ *
+ * The `.env` file takes precedence over `.env.<stage>`. So if you have a `.env` and a
+ * `.env.dev` file, the values in the `.env` file will be used.
+ *
+ * :::note
+ * You need to restart `sst dev` for changes in your `.env` files to take effect.
+ * :::
+ *
+ * Make sure the stage name in your `.env.<stage>` matches the stage your app is running on.
  *
  * @packageDocumentation
  */
@@ -110,7 +137,7 @@ export interface App {
    * - `retain-all`: Retains all your resources on remove.
    *
    * :::tip
-   * It's a good idea to use `retain` for your production stage.
+   * If you change your removal policy, you'll need to deploy your app once for it to take effect.
    * :::
    *
    * @default `"retain"`
@@ -124,11 +151,22 @@ export interface App {
    */
   removal?: "remove" | "retain" | "retain-all";
   /**
-   * The providers that are being used in this app. This allows you to use the components from these providers in your app.
+   * The providers that are being used in this app. This allows you to use the resources from
+   * these providers in your app.
+   *
+   * ```ts
+   * {
+   *   providers: {
+   *     aws: "6.27.0",
+   *     cloudflare: "5.37.1"
+   *   }
+   * }
+   * ```
+   *
    * Check out the full list in the [Directory](/docs/providers#directory).
    *
-   * :::note
-   * By default, your `home` provider is included in the `providers` list.
+   * :::tip
+   * You'll need to run `sst install` after you update the `providers` in your config.
    * :::
    *
    * If you don't set a `provider` it uses your `home` provider with the default config. So if you set `home` to `aws`, it's the same as doing:
@@ -137,18 +175,16 @@ export interface App {
    * {
    *   home: "aws",
    *   providers: {
-   *     aws: true
+   *     aws: "6.27.0"
    *   }
    * }
    * ```
    *
-   * @default The `home` provider.
-   *
-   * @example
-   *
    * You can also configure the provider props. Here's the config for some common providers:
    * - [AWS](https://www.pulumi.com/registry/packages/aws/api-docs/provider/#inputs)
    * - [Cloudflare](https://www.pulumi.com/registry/packages/cloudflare/api-docs/provider/#inputs)
+   *
+   * @example
    *
    * For example, to change the region for AWS.
    *
@@ -162,52 +198,21 @@ export interface App {
    * }
    * ```
    *
-   * You also add multiple providers.
-   *
-   * ```ts
-   * {
-   *   providers: {
-   *     aws: true,
-   *     cloudflare: true
-   *   }
-   * }
-   * ```
-   *
-   * By default, we use the latest version of a provider. But you can optionally specify a version.
-   *
-   * ```ts
-   * {
-   *   providers: {
-   *     aws: {
-   *       version: "6.27.0"
-   *     }
-   *   }
-   * }
-   * ```
+   * @default The `home` provider.
    */
   providers?: Record<string, any>;
 
   /**
    * The provider SST will use to store the state for your app. The state keeps track of all your resources and secrets. The state is generated locally and backed up in your cloud provider.
    *
+   *
+   * Currently supports AWS, Cloudflare and local.
+   *
    * :::tip
-   * SST uses the `home` provider to store the state for your app.
+   * SST uses the `home` provider to store the state for your app. If you use the local provider it will be saved on your machine. You can see where by running `sst version`.
    * :::
    *
-   * Currently supports AWS and Cloudflare.
-   *
-   * Setting the `home` provider is the same as setting the `providers` list. So if you set `home` to `aws`, it's the same as doing:
-   *
-   * ```ts
-   * {
-   *   home: "aws",
-   *   providers: {
-   *     aws: true
-   *   }
-   * }
-   * ```
-   *
-   * If you want to configure your home provider, you can:
+   * If you want to configure the aws or cloudflare home provider, you can:
    *
    * ```ts
    * {
@@ -221,7 +226,7 @@ export interface App {
    * ```
    *
    */
-  home: "aws" | "cloudflare";
+  home: "aws" | "cloudflare" | "local";
 }
 
 export interface AppInput {
@@ -283,7 +288,7 @@ export interface Target {
      */
     engine: "codebuild";
     /**
-     * The timeout for the build. CodeBuild supports a timeout of up to 8 hours.
+     * The timeout for the build. It can be from `5 minutes` to `1 hour`.
      * @default `1 hour`
      */
     timeout?: `${number} ${"minute" | "minutes" | "hour" | "hours"}`;
@@ -305,7 +310,12 @@ export interface Target {
      * - `small`: 4 GB, 2 vCPUs
      * - `large`: 8 GB, 4 vCPUs
      *
+     * To increase the memory used by your Node.js process in the build environment, you'll want
+     * to set the `NODE_OPTIONS` environment variable to `--max-old-space-size=xyz`. Where `xyz`
+     * is the memory size in MB. By default, this is set to 1.5 GB.
+     *
      * Read more about the [CodeBuild build environments](https://docs.aws.amazon.com/codebuild/latest/userguide/build-env-ref-compute-types.html).
+     *
      * @default `small`
      */
     compute?: "small" | "medium" | "large" | "xlarge";
@@ -587,15 +597,18 @@ export interface PullRequestEvent {
 
 export interface Config {
   /**
-   * The config for your app. It needs to return an object of type [`App`](#app-1).
+   * The config for your app. It needs to return an object of type [`App`](#app-1). The `app`
+   * function is evaluated when your app loads.
    *
-   * :::tip
-   * The `app` function is evaluated when your app loads.
+   * :::caution
+   * You cannot define any components or resources in the `app` function.
    * :::
+   *
+   * Here's an example of a simple `app` function.
    *
    * @example
    *
-   * ```ts
+   * ```ts title="sst.config.ts"
    * app(input) {
    *   return {
    *     name: "my-sst-app",
@@ -638,7 +651,7 @@ export interface Config {
      * You can pass in your own `target` function to customize this behaviour and the machine
      * that'll be used to run the build.
      *
-     * ```ts
+     * ```ts title="sst.config.ts"
      * console: {
      *   autodeploy: {
      *     target(event) {
@@ -673,7 +686,7 @@ export interface Config {
        *
        * By default, this is what the `target` function looks like:
        *
-       * ```ts
+       * ```ts title="sst.config.ts"
        * target(event) {
        *   if (event.type === "branch" && event.action === "pushed") {
        *     return {
@@ -702,7 +715,7 @@ export interface Config {
        * For example, to auto-deploy to the `production` stage when you git push to the
        * `main` branch.
        *
-       * ```ts
+       * ```ts title="sst.config.ts"
        * target(event) {
        *   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
        *     return { stage: "production" };
@@ -713,7 +726,7 @@ export interface Config {
        * If you don't want to auto-deploy for a given event, you can return `undefined`. For
        * example, to skip any deploys to the `staging` stage.
        *
-       * ```ts {2}
+       * ```ts title="sst.config.ts" {2}
        * target(event) {
        *   if (event.type === "branch" && event.branch === "staging") return;
        *   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
@@ -734,7 +747,7 @@ export interface Config {
        * In addition to the `stage` you can also configure the `runner` that will run the build.
        * For example, to use a larger machine for the `production` stage.
        *
-       * ```ts
+       * ```ts title="sst.config.ts"
        * target(event) {
        *   if (event.type === "branch" && event.branch === "main" && event.action === "pushed") {
        *     return {
@@ -766,7 +779,7 @@ export interface Config {
    *
    * For example, here we return the name of the bucket we created.
    *
-   * ```ts
+   * ```ts title="sst.config.ts"
    * async run() {
    *   const bucket = new sst.aws.Bucket("MyBucket");
    *
@@ -776,10 +789,17 @@ export interface Config {
    * }
    * ```
    *
-   * This will display the following in the CLI.
+   * This will display the following in the CLI on `sst deploy` and `sst dev`.
    *
    * ```bash frame=\"none\"
    * bucket: bucket-jOaikGu4rla
+   * ```
+   *
+   * These outputs are also written to a `.sst/output.json` file after every successful deploy.
+   * It contains the above outputs in JSON.
+   *
+   * ```json title=".sst/output.json"
+   * {"bucket": "bucket-jOaikGu4rla"}
    * ```
    */
   run(): Promise<Record<string, any> | void>;

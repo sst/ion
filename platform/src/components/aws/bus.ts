@@ -2,12 +2,8 @@ import { ComponentResourceOptions, all, output } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
-import {
-  hashStringToPrettyString,
-  prefixName,
-  sanitizeToPascalCase,
-} from "../naming";
+import { FunctionArgs, FunctionArn } from "./function";
+import { hashStringToPrettyString, physicalName, logicalName } from "../naming";
 import { parseEventBusArn } from "./helpers/arn";
 import { BusLambdaSubscriber } from "./bus-lambda-subscriber";
 import { cloudwatch } from "@pulumi/aws";
@@ -168,6 +164,7 @@ export interface BusSubscriberArgs {
  */
 export class Bus extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorOpts: ComponentResourceOptions;
   private bus: cloudwatch.EventBus;
 
   constructor(
@@ -182,6 +179,7 @@ export class Bus extends Component implements Link.Linkable {
     const bus = createBus();
 
     this.constructorName = name;
+    this.constructorOpts = opts;
     this.bus = bus;
 
     function createBus() {
@@ -190,7 +188,7 @@ export class Bus extends Component implements Link.Linkable {
           args.transform?.bus,
           `${name}Bus`,
           {
-            name: prefixName(256, name),
+            name: physicalName(256, name),
           },
           { parent },
         ),
@@ -248,16 +246,24 @@ export class Bus extends Component implements Link.Linkable {
    *   timeout: "60 seconds"
    * });
    * ```
+   *
+   * Subscribe with an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * bus.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args: BusSubscriberArgs = {},
   ) {
     return Bus._subscribeFunction(
+      this.constructorName,
       this.nodes.bus.name,
       this.nodes.bus.arn,
       subscriber,
       args,
+      { provider: this.constructorOpts.provider },
     );
   }
 
@@ -303,24 +309,31 @@ export class Bus extends Component implements Link.Linkable {
    */
   public static subscribe(
     busArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: BusSubscriberArgs,
   ) {
-    const busName = output(busArn).apply(
-      (busArn) => parseEventBusArn(busArn).busName,
-    );
-    return this._subscribeFunction(busName, busArn, subscriber, args);
+    return output(busArn).apply((busArn) => {
+      const busName = parseEventBusArn(busArn).busName;
+      return this._subscribeFunction(
+        logicalName(busName),
+        busName,
+        busArn,
+        subscriber,
+        args,
+      );
+    });
   }
 
   private static _subscribeFunction(
-    name: Input<string>,
+    name: string,
+    busName: Input<string>,
     busArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args: BusSubscriberArgs = {},
+    opts: ComponentResourceOptions = {},
   ) {
-    return all([name, subscriber, args]).apply(([name, subscriber, args]) => {
-      const prefix = sanitizeToPascalCase(name);
-      const suffix = sanitizeToPascalCase(
+    return all([subscriber, args]).apply(([subscriber, args]) => {
+      const suffix = logicalName(
         hashStringToPrettyString(
           [
             busArn,
@@ -331,11 +344,15 @@ export class Bus extends Component implements Link.Linkable {
         ),
       );
 
-      return new BusLambdaSubscriber(`${prefix}Subscriber${suffix}`, {
-        bus: { name, arn: busArn },
-        subscriber,
-        ...args,
-      });
+      return new BusLambdaSubscriber(
+        `${name}Subscriber${suffix}`,
+        {
+          bus: { name: busName, arn: busArn },
+          subscriber,
+          ...args,
+        },
+        opts,
+      );
     });
   }
 

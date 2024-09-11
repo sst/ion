@@ -9,20 +9,17 @@ import {
   all,
   interpolate,
   ComponentResource,
-  ComponentResourceOptions,
 } from "@pulumi/pulumi";
 import { Cdn, CdnArgs } from "./cdn.js";
 import { Function, FunctionArgs } from "./function.js";
-import { DistributionInvalidation } from "./providers/distribution-invalidation.js";
 import { useProvider } from "./helpers/provider.js";
 import { Bucket, BucketArgs } from "./bucket.js";
 import { BucketFile, BucketFiles } from "./providers/bucket-files.js";
-import { sanitizeToPascalCase } from "../naming.js";
+import { logicalName, physicalName } from "../naming.js";
 import { Input } from "../input.js";
 import { transform, type Prettify, type Transform } from "../component.js";
 import { VisibleError } from "../error.js";
 import { Cron } from "./cron.js";
-import { OriginAccessIdentity } from "./providers/origin-access-identity.js";
 import { BaseSiteFileOptions } from "../base/base-site.js";
 import { BaseSsrSiteArgs } from "../base/base-ssr-site.js";
 import {
@@ -33,7 +30,7 @@ import {
   lambda,
   types,
 } from "@pulumi/aws";
-import { DevArgs } from "../dev.js";
+import { OriginAccessControl } from "./providers/origin-access-control.js";
 
 type CloudFrontFunctionConfig = { injections: string[] };
 type EdgeFunctionConfig = { function: Unwrap<FunctionArgs> };
@@ -57,11 +54,10 @@ type OriginGroupConfig = {
 };
 
 export type Plan = ReturnType<typeof validatePlan>;
-export interface SsrSiteArgs extends BaseSsrSiteArgs, DevArgs {
+export interface SsrSiteArgs extends BaseSsrSiteArgs {
   domain?: CdnArgs["domain"];
   permissions?: FunctionArgs["permissions"];
   cachePolicy?: Input<string>;
-  warm?: Input<number>;
   invalidation?: Input<
     | false
     | {
@@ -109,6 +105,14 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs, DevArgs {
       }
   >;
   /**
+   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
+   *
+   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
+   *
+   * @default `0`
+   */
+  warm?: Input<number>;
+  /**
    * Configure the Lambda function used for server.
    * @default `{architecture: "x86_64", memory: "1024 MB"}`
    */
@@ -143,6 +147,157 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs, DevArgs {
      * ```
      */
     architecture?: FunctionArgs["architecture"];
+    /**
+     * Dependencies that need to be excluded from the server function package.
+     *
+     * Certain npm packages cannot be bundled using esbuild. This allows you to exclude them
+     * from the bundle. Instead they'll be moved into a `node_modules/` directory in the
+     * function package.
+     *
+     * :::tip
+     * If esbuild is giving you an error about a package, try adding it to the `install` list.
+     * :::
+     *
+     * This will allow your functions to be able to use these dependencies when deployed. They
+     * just won't be tree shaken. You however still need to have them in your `package.json`.
+     *
+     * :::caution
+     * Packages listed here still need to be in your `package.json`.
+     * :::
+     *
+     * Esbuild will ignore them while traversing the imports in your code. So these are the
+     * **package names as seen in the imports**. It also works on packages that are not directly
+     * imported by your code.
+     *
+     * @example
+     * ```js
+     * {
+     *   server: {
+     *     install: ["sharp"]
+     *   }
+     * }
+     * ```
+     */
+    install?: Input<string[]>;
+    /**
+     * A list of Lambda layer ARNs to add to the server function.
+     *
+     * @example
+     * ```js
+     * {
+     *   server: {
+     *     layers: ["arn:aws:lambda:us-east-1:123456789012:layer:my-layer:1"]
+     *   }
+     * }
+     * ```
+     */
+    layers?: Input<Input<string>[]>;
+    /**
+     * Configure CloudFront Functions to customize the behavior of HTTP requests and responses at the edge locations.
+     */
+    edge?: Input<{
+      /**
+       * Configure the viewer request function.
+       *
+       * The viewer request function can be used to modify incoming requests before they reach your origin server. For example, you can redirect users, rewrite URLs, or add headers.
+       *
+       * By default, a viewer request function is created to inject the `x-forwarded-host` header. The provided code will be injected at the end of the function.
+       *
+       * ```js
+       * function handler(event) {
+       *
+       *   // Default behavior code
+       *   ...
+       *
+       *   // User injected code
+       *   ...
+       *
+       *   return request;
+       * }
+       * ```
+       *
+       * @example
+       * Add a custom header to all requests
+       * ```js
+       * {
+       *   server: {
+       *     edge: {
+       *       viewerRequest: {
+       *         injection: `request.headers["x-foo"] = "bar";`
+       *       }
+       *     }
+       *   }
+       * }
+       * ```
+       */
+      viewerRequest?: Input<{
+        /**
+         * Code to inject into the viewer request function.
+         */
+        injection: Input<string>;
+        /**
+         * The KV stores to associate with the viewer request function.
+         *
+         * @example
+         * ```js
+         * {
+         *   server: {
+         *     edge: {
+         *       viewerRequest: {
+         *         kvStores: ["arn:aws:cloudfront::123456789012:key-value-store/my-store"]
+         *       }
+         *     }
+         *   }
+         * }
+         * ```
+         */
+        kvStores?: Input<Input<string>[]>;
+      }>;
+      /**
+       * Configure the viewer response function.
+       *
+       * The viewer response function can be used to modify outgoing responses before they are sent to the client. For example, you can add security headers or change the response status code.
+       *
+       * By default, no viewer response function is set. A new function will be created with the provided code.
+       *
+       * @example
+       * Add a custom header to all responses
+       * ```js
+       * {
+       *   server: {
+       *     edge: {
+       *       viewerResponse: {
+       *         injection: `response.headers["x-foo"] = "bar";`
+       *       }
+       *     }
+       *   }
+       * }
+       * ```
+       */
+      viewerResponse?: Input<{
+        /**
+         * Code to inject into the viewer response function.
+         */
+        injection: Input<string>;
+        /**
+         * The KV stores to associate with the viewer response function.
+         *
+         * @example
+         * ```js
+         * {
+         *   server: {
+         *     edge: {
+         *       viewerResponse: {
+         *         kvStores: ["arn:aws:cloudfront::123456789012:key-value-store/my-store"]
+         *       }
+         *     }
+         *   }
+         * }
+         * ```
+         */
+        kvStores?: Input<Input<string>[]>;
+      }>;
+    }>;
   };
   vpc?: FunctionArgs["vpc"];
   /**
@@ -169,7 +324,7 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs, DevArgs {
   };
 }
 
-export function prepare(args: SsrSiteArgs, opts: ComponentResourceOptions) {
+export function prepare(parent: ComponentResource, args: SsrSiteArgs) {
   const sitePath = normalizeSitePath();
   const partition = normalizePartition();
   const region = normalizeRegion();
@@ -193,12 +348,11 @@ export function prepare(args: SsrSiteArgs, opts: ComponentResourceOptions) {
   }
 
   function normalizePartition() {
-    return getPartitionOutput(undefined, { provider: opts?.provider })
-      .partition;
+    return getPartitionOutput(undefined, { parent }).partition;
   }
 
   function normalizeRegion() {
-    return getRegionOutput(undefined, { provider: opts?.provider }).name;
+    return getRegionOutput(undefined, { parent }).name;
   }
 
   function checkSupportedRegion() {
@@ -227,14 +381,14 @@ export function createBucket(
   partition: Output<string>,
   args: SsrSiteArgs,
 ) {
-  const access = createCloudFrontOriginAccessIdentity();
+  const access = createCloudFrontOriginAccessControl();
   const bucket = createS3Bucket();
   return { access, bucket };
 
-  function createCloudFrontOriginAccessIdentity() {
-    return new OriginAccessIdentity(
-      `${name}OriginAccessIdentity`,
-      {},
+  function createCloudFrontOriginAccessControl() {
+    return new OriginAccessControl(
+      `${name}S3AccessControl`,
+      { name: physicalName(64, name) },
       { parent },
     );
   }
@@ -252,10 +406,8 @@ export function createBucket(
                   {
                     principals: [
                       {
-                        type: "AWS",
-                        identifiers: [
-                          interpolate`arn:${partition}:iam::cloudfront:user/CloudFront Origin Access Identity ${access.id}`,
-                        ],
+                        type: "Service",
+                        identifiers: ["cloudfront.amazonaws.com"],
                       },
                     ],
                     actions: ["s3:GetObject"],
@@ -300,7 +452,7 @@ export function createDevServer(
         environment: args.environment,
         permissions: args.permissions,
         link: args.link,
-        live: false,
+        dev: false,
       },
       { parent },
     ),
@@ -312,21 +464,21 @@ export function createServersAndDistribution(
   name: string,
   args: SsrSiteArgs,
   outputPath: Output<string>,
-  access: OriginAccessIdentity,
+  access: OriginAccessControl,
   bucket: Bucket,
   plan: Input<Plan>,
 ) {
   return all([outputPath, plan]).apply(([outputPath, plan]) => {
     const ssrFunctions: Function[] = [];
+    const cfFunctions: Record<string, cloudfront.Function> = {};
     let singletonCachePolicy: cloudfront.CachePolicy;
 
     const bucketFile = uploadAssets();
-    const cfFunctions = createCloudFrontFunctions();
     const edgeFunctions = createEdgeFunctions();
     const origins = buildOrigins();
     const originGroups = buildOriginGroups();
+    const invalidation = buildInvalidation();
     const distribution = createDistribution();
-    createDistributionInvalidation();
     createWarmer();
 
     return {
@@ -415,6 +567,7 @@ export function createServersAndDistribution(
           {
             bucketName: bucket.name,
             files: bucketFiles,
+            purge: false,
           },
           { parent },
         );
@@ -466,29 +619,6 @@ export function createServersAndDistribution(
       return `${mime}${charset}`;
     }
 
-    function createCloudFrontFunctions() {
-      const functions: Record<string, cloudfront.Function> = {};
-
-      Object.entries(plan.cloudFrontFunctions ?? {}).forEach(
-        ([fnName, { injections }]) => {
-          functions[fnName] = new cloudfront.Function(
-            `${name}CloudfrontFunction${sanitizeToPascalCase(fnName)}`,
-            {
-              runtime: "cloudfront-js-1.0",
-              code: `
-function handler(event) {
-  var request = event.request;
-  ${injections.join("\n")}
-  return request;
-}`,
-            },
-            { parent },
-          );
-        },
-      );
-      return functions;
-    }
-
     function createEdgeFunctions() {
       const functions: Record<string, Function> = {};
 
@@ -503,7 +633,7 @@ function handler(event) {
           });
 
           const fn = new Function(
-            `${name}Edge${sanitizeToPascalCase(fnName)}`,
+            `${name}Edge${logicalName(fnName)}`,
             {
               runtime: "nodejs20.x",
               timeout: "20 seconds",
@@ -534,7 +664,7 @@ function handler(event) {
                   args.publish = true;
                 },
               },
-              live: false,
+              dev: false,
             },
             { provider: useProvider("us-east-1"), parent },
           );
@@ -594,9 +724,7 @@ function handler(event) {
         originId: name,
         domainName: bucket.nodes.bucket.bucketRegionalDomainName,
         originPath: props.originPath ? `/${props.originPath}` : "",
-        s3OriginConfig: {
-          originAccessIdentity: interpolate`origin-access-identity/cloudfront/${access.id}`,
-        },
+        originAccessControlId: access.id,
       };
     }
 
@@ -604,7 +732,7 @@ function handler(event) {
       const fn = new Function(
         ...transform(
           args.transform?.server,
-          `${name}${sanitizeToPascalCase(fnName)}`,
+          `${name}${logicalName(fnName)}`,
           {
             description: `${name} server`,
             runtime: "nodejs20.x",
@@ -617,6 +745,7 @@ function handler(event) {
             ...props.function,
             nodejs: {
               format: "esm" as const,
+              install: args.server?.install,
               ...props.function.nodejs,
             },
             environment: output(args.environment).apply((environment) => ({
@@ -638,8 +767,12 @@ function handler(event) {
               ...(props.function.link ?? []),
               ...(link ?? []),
             ]),
+            layers: output(args.server?.layers).apply((layers) => [
+              ...(props.function.layers ?? []),
+              ...(layers ?? []),
+            ]),
             url: true,
-            live: false,
+            dev: false,
           },
           { parent },
         ),
@@ -666,7 +799,7 @@ function handler(event) {
       const fn = new Function(
         ...transform(
           args.transform?.imageOptimization,
-          `${name}${sanitizeToPascalCase(fnName)}`,
+          `${name}${logicalName(fnName)}`,
           {
             timeout: "25 seconds",
             logging: {
@@ -680,7 +813,7 @@ function handler(event) {
             ],
             ...props.function,
             url: true,
-            live: false,
+            dev: false,
             _skipMetadata: true,
           },
           { parent },
@@ -702,7 +835,6 @@ function handler(event) {
 
     function buildBehavior(behavior: Plan["behaviors"][number]) {
       const edgeFunction = edgeFunctions[behavior.edgeFunction || ""];
-      const cfFunction = cfFunctions[behavior.cfFunction || ""];
 
       if (behavior.cacheType === "static") {
         return {
@@ -713,11 +845,15 @@ function handler(event) {
           compress: true,
           // CloudFront's managed CachingOptimized policy
           cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
-          functionAssociations: cfFunction
+          functionAssociations: behavior.cfFunction
             ? [
                 {
                   eventType: "viewer-request",
-                  functionArn: cfFunction.arn,
+                  functionArn: useCfFunction(
+                    "assets",
+                    "request",
+                    behavior.cfFunction,
+                  ).arn,
                 },
               ]
             : [],
@@ -740,11 +876,15 @@ function handler(event) {
           cachePolicyId: args.cachePolicy ?? useServerBehaviorCachePolicy().id,
           // CloudFront's Managed-AllViewerExceptHostHeader policy
           originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac",
-          functionAssociations: cfFunction
+          functionAssociations: behavior.cfFunction
             ? [
                 {
                   eventType: "viewer-request",
-                  functionArn: cfFunction.arn,
+                  functionArn: useCfFunction(
+                    "server",
+                    "request",
+                    behavior.cfFunction,
+                  ).arn,
                 },
               ]
             : [],
@@ -761,6 +901,40 @@ function handler(event) {
       }
 
       throw new VisibleError(`Invalid behavior type in the "${name}" site.`);
+    }
+
+    function useCfFunction(
+      origin: "assets" | "server",
+      type: "request" | "response",
+      fnName: string,
+    ) {
+      const { injections } = plan.cloudFrontFunctions![fnName];
+      const config =
+        origin === "server"
+          ? output(args.server).apply((server) =>
+              type === "request"
+                ? server?.edge?.viewerRequest
+                : server?.edge?.viewerResponse,
+            )
+          : output(undefined);
+      cfFunctions[fnName] =
+        cfFunctions[fnName] ??
+        new cloudfront.Function(
+          `${name}CloudfrontFunction${logicalName(fnName)}`,
+          {
+            runtime: "cloudfront-js-2.0",
+            keyValueStoreAssociations: config.apply((v) => v?.kvStores ?? []),
+            code: interpolate`
+function handler(event) {
+  var request = event.request;
+  ${injections.join("\n")}
+  ${config.apply((v) => v?.injection ?? "")}
+  return request;
+}`,
+          },
+          { parent },
+        );
+      return cfFunctions[fnName];
     }
 
     function useServerBehaviorCachePolicy() {
@@ -820,99 +994,11 @@ function handler(event) {
       ].join("\n");
     }
 
-    function createDistribution() {
-      return new Cdn(
-        ...transform(
-          args.transform?.cdn,
-          `${name}Cdn`,
-          {
-            comment: `${name} app`,
-            origins: Object.values(origins),
-            originGroups: Object.values(originGroups),
-            defaultRootObject: plan.defaultRootObject ?? "",
-            defaultCacheBehavior: buildBehavior(
-              plan.behaviors.find((behavior) => !behavior.pattern)!,
-            ),
-            orderedCacheBehaviors: plan.behaviors
-              .filter((behavior) => behavior.pattern)
-              .map((behavior) => ({
-                pathPattern: behavior.pattern!,
-                ...buildBehavior(behavior),
-              })),
-            customErrorResponses: plan.errorResponses,
-            domain: args.domain,
-          },
-          // create distribution after assets are uploaded
-          { dependsOn: bucketFile, parent },
-        ),
-      );
-    }
-
-    function createWarmer() {
-      // note: Currently all sites have a single server function. When we add
-      //       support for multiple server functions (ie. route splitting), we
-      //       need to handle warming multiple functions.
-      if (!args.warm) return;
-
-      if (args.warm && plan.edge) {
-        throw new VisibleError(
-          `In the "${name}" Site, warming is currently supported only for the regional mode.`,
-        );
-      }
-
-      if (ssrFunctions.length === 0) return;
-
-      // Create cron job
-      const cron = new Cron(
-        `${name}Warmer`,
-        {
-          schedule: "rate(5 minutes)",
-          job: {
-            description: `${name} warmer`,
-            bundle: path.join($cli.paths.platform, "dist", "ssr-warmer"),
-            runtime: "nodejs20.x",
-            handler: "index.handler",
-            timeout: "900 seconds",
-            memory: "128 MB",
-            live: false,
-            environment: {
-              FUNCTION_NAME: ssrFunctions[0].nodes.function.name,
-              CONCURRENCY: output(args.warm).apply((warm) => warm.toString()),
-            },
-            link: [ssrFunctions[0]],
-            _skipMetadata: true,
-          },
-          transform: {
-            target: (args) => {
-              args.retryPolicy = {
-                maximumRetryAttempts: 0,
-                maximumEventAgeInSeconds: 60,
-              };
-            },
-          },
-        },
-        { parent },
-      );
-
-      // Prewarm on deploy
-      new lambda.Invocation(
-        `${name}Prewarm`,
-        {
-          functionName: cron.nodes.job.name,
-          triggers: {
-            version: Date.now().toString(),
-          },
-          input: JSON.stringify({}),
-        },
-        { parent },
-      );
-    }
-
-    function createDistributionInvalidation() {
-      all([outputPath, args.invalidation]).apply(
+    function buildInvalidation() {
+      return all([outputPath, args.invalidation]).apply(
         ([outputPath, invalidationRaw]) => {
           // Normalize invalidation
-          if (invalidationRaw === false) return;
+          if (invalidationRaw === false) return false;
           const invalidation = {
             wait: false,
             paths: "all",
@@ -924,9 +1010,9 @@ function handler(event) {
           const s3Origin = Object.values(plan.origins).find(
             (origin) => origin.s3,
           )?.s3;
-          if (!s3Origin) return;
+          if (!s3Origin) return false;
           const cachedS3Files = s3Origin.copy.filter((file) => file.cached);
-          if (cachedS3Files.length === 0) return;
+          if (cachedS3Files.length === 0) return false;
 
           // Build invalidation paths
           const invalidationPaths: string[] = [];
@@ -934,7 +1020,7 @@ function handler(event) {
             invalidationPaths.push("/*");
           } else if (invalidation.paths === "versioned") {
             cachedS3Files.forEach((item) => {
-              if (!item.versionedSubDir) return;
+              if (!item.versionedSubDir) return false;
               invalidationPaths.push(
                 path.posix.join("/", item.to, item.versionedSubDir, "*"),
               );
@@ -942,7 +1028,7 @@ function handler(event) {
           } else {
             invalidationPaths.push(...(invalidation?.paths || []));
           }
-          if (invalidationPaths.length === 0) return;
+          if (invalidationPaths.length === 0) return false;
 
           // Build build ID
           let invalidationBuildId: string;
@@ -992,17 +1078,101 @@ function handler(event) {
             invalidationBuildId = hash.digest("hex");
           }
 
-          new DistributionInvalidation(
-            `${name}Invalidation`,
-            {
-              distributionId: distribution.nodes.distribution.id,
-              paths: invalidationPaths,
-              version: invalidationBuildId,
-              wait: invalidation.wait,
-            },
-            { parent },
-          );
+          return {
+            paths: invalidationPaths,
+            token: invalidationBuildId,
+            wait: invalidation.wait,
+          };
         },
+      );
+    }
+
+    function createDistribution() {
+      return new Cdn(
+        ...transform(
+          args.transform?.cdn,
+          `${name}Cdn`,
+          {
+            comment: `${name} app`,
+            origins: Object.values(origins),
+            originGroups: Object.values(originGroups),
+            defaultRootObject: plan.defaultRootObject ?? "",
+            defaultCacheBehavior: buildBehavior(
+              plan.behaviors.find((behavior) => !behavior.pattern)!,
+            ),
+            orderedCacheBehaviors: plan.behaviors
+              .filter((behavior) => behavior.pattern)
+              .map((behavior) => ({
+                pathPattern: behavior.pattern!,
+                ...buildBehavior(behavior),
+              })),
+            customErrorResponses: plan.errorResponses,
+            domain: args.domain,
+            invalidation,
+          },
+          // create distribution after assets are uploaded
+          { dependsOn: bucketFile, parent },
+        ),
+      );
+    }
+
+    function createWarmer() {
+      // note: Currently all sites have a single server function. When we add
+      //       support for multiple server functions (ie. route splitting), we
+      //       need to handle warming multiple functions.
+      if (!args.warm) return;
+
+      if (args.warm && plan.edge) {
+        throw new VisibleError(
+          `In the "${name}" Site, warming is currently supported only for the regional mode.`,
+        );
+      }
+
+      if (ssrFunctions.length === 0) return;
+
+      // Create cron job
+      const cron = new Cron(
+        `${name}Warmer`,
+        {
+          schedule: "rate(5 minutes)",
+          job: {
+            description: `${name} warmer`,
+            bundle: path.join($cli.paths.platform, "dist", "ssr-warmer"),
+            runtime: "nodejs20.x",
+            handler: "index.handler",
+            timeout: "900 seconds",
+            memory: "128 MB",
+            dev: false,
+            environment: {
+              FUNCTION_NAME: ssrFunctions[0].nodes.function.name,
+              CONCURRENCY: output(args.warm).apply((warm) => warm.toString()),
+            },
+            link: [ssrFunctions[0]],
+            _skipMetadata: true,
+          },
+          transform: {
+            target: (args) => {
+              args.retryPolicy = {
+                maximumRetryAttempts: 0,
+                maximumEventAgeInSeconds: 60,
+              };
+            },
+          },
+        },
+        { parent },
+      );
+
+      // Prewarm on deploy
+      new lambda.Invocation(
+        `${name}Prewarm`,
+        {
+          functionName: cron.nodes.job.name,
+          triggers: {
+            version: Date.now().toString(),
+          },
+          input: JSON.stringify({}),
+        },
+        { parent },
       );
     }
   });

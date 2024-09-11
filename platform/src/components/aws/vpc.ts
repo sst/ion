@@ -2,12 +2,13 @@ import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
 import { ec2, getAvailabilityZonesOutput } from "@pulumi/aws";
-import { InternetGateway } from "@pulumi/aws/ec2";
+import { Vpc as VpcV1 } from "./vpc-v1";
+export type { VpcArgs as VpcV1Args } from "./vpc-v1";
 
 export interface VpcArgs {
   /**
    * Number of Availability Zones or AZs for the VPC. By default, it creates a VPC with 2
-   * AZs since services like RDS and Fargate need at least 2 AZs.
+   * availability zones since services like RDS and Fargate need at least 2 AZs.
    * @default `2`
    * @example
    * ```ts
@@ -17,6 +18,17 @@ export interface VpcArgs {
    * ```
    */
   az?: Input<number>;
+  /**
+   * Configures NAT. Enabling NAT allows resources in private subnets to connect to the internet.
+   * @default NAT is disabled
+   * @example
+   * ```ts
+   * {
+   *   nat: "managed"
+   * }
+   * ```
+   */
+  nat?: Input<"managed">;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -81,21 +93,19 @@ interface VpcRef {
  * This creates a VPC with 2 Availability Zones by default. It also creates the following
  * resources:
  *
- * 1. A security group.
+ * 1. A default security group blocking all incoming internet traffic.
  * 2. A public subnet in each AZ.
  * 3. A private subnet in each AZ.
- * 4. An Internet Gateway, all the traffic from the public subnets are routed through it.
- * 5. A NAT Gateway in each AZ. All the traffic from the private subnets are routed to the
- *    NAT Gateway in the same AZ.
+ * 4. An Internet Gateway. All the traffic from the public subnets are routed through it.
+ * 5. If `nat` is enabled, a NAT Gateway in each AZ. All the traffic from the private subnets
+ *    are routed to the NAT Gateway in the same AZ.
  *
  * :::note
- * By default, this creates two NAT Gateways, one in each AZ. And it roughly costs $33 per
- * NAT Gateway per month.
+ * By default, this does not create NAT Gateways.
  * :::
  *
- * NAT Gateways are billed per hour and per gigabyte of data processed. By default,
- * this creates a NAT Gateway in each AZ. And this would be roughly $33 per NAT
- * Gateway per month. Make sure to [review the pricing](https://aws.amazon.com/vpc/pricing/).
+ * NAT Gateways are billed per hour and per gigabyte of data processed. Each NAT Gateway
+ * roughly costs $33 per month. Make sure to [review the pricing](https://aws.amazon.com/vpc/pricing/).
  *
  * @example
  *
@@ -107,9 +117,17 @@ interface VpcRef {
  *
  * #### Create it with 3 Availability Zones
  *
- * ```ts title="sst.config.ts"
+ * ```ts title="sst.config.ts" {2}
  * new sst.aws.Vpc("MyVPC", {
- *   az: 3,
+ *   az: 3
+ * });
+ * ```
+ *
+ * #### Enable NAT
+ *
+ * ```ts title="sst.config.ts" {2}
+ * new sst.aws.Vpc("MyVPC", {
+ *   nat: "managed"
  * });
  * ```
  */
@@ -123,9 +141,11 @@ export class Vpc extends Component {
   private _privateSubnets: Output<ec2.Subnet[]>;
   private publicRouteTables: Output<ec2.RouteTable[]>;
   private privateRouteTables: Output<ec2.RouteTable[]>;
+  public static v1 = VpcV1;
 
   constructor(name: string, args?: VpcArgs, opts?: ComponentResourceOptions) {
-    super(__pulumiType, name, args, opts);
+    const _version = 2;
+    super(__pulumiType, name, args, opts, _version);
 
     if (args && "ref" in args) {
       const ref = args as VpcRef;
@@ -140,10 +160,10 @@ export class Vpc extends Component {
       this.elasticIps = ref.elasticIps;
       return;
     }
-
     const parent = this;
 
     const zones = normalizeAz();
+    const nat = normalizeNat();
 
     const vpc = createVpc();
     const internetGateway = createInternetGateway();
@@ -171,6 +191,11 @@ export class Vpc extends Component {
           .fill(0)
           .map((_, i) => zones.names[i]),
       );
+    }
+
+    function normalizeNat() {
+      if (!args?.nat) return;
+      return output(args?.nat);
     }
 
     function createVpc() {
@@ -202,7 +227,7 @@ export class Vpc extends Component {
     }
 
     function createSecurityGroup() {
-      return new ec2.SecurityGroup(
+      return new ec2.DefaultSecurityGroup(
         ...transform(
           args?.transform?.securityGroup,
           `${name}SecurityGroup`,
@@ -221,7 +246,8 @@ export class Vpc extends Component {
                 fromPort: 0,
                 toPort: 0,
                 protocol: "-1",
-                cidrBlocks: ["0.0.0.0/0"],
+                // Restricts inbound traffic to only within the VPC
+                cidrBlocks: [vpc.cidrBlock],
               },
             ],
           },
@@ -231,8 +257,10 @@ export class Vpc extends Component {
     }
 
     function createNatGateways() {
-      const ret = publicSubnets.apply((subnets) =>
-        subnets.map((subnet, i) => {
+      const ret = all([nat, publicSubnets]).apply(([nat, subnets]) => {
+        if (!nat) return [];
+
+        return subnets.map((subnet, i) => {
           const elasticIp = new ec2.Eip(
             ...transform(
               args?.transform?.elasticIp,
@@ -256,8 +284,8 @@ export class Vpc extends Component {
             ),
           );
           return { elasticIp, natGateway };
-        }),
-      );
+        });
+      });
 
       return {
         elasticIps: ret.apply((ret) => ret.map((r) => r.elasticIp)),
@@ -274,7 +302,7 @@ export class Vpc extends Component {
               `${name}PublicSubnet${i + 1}`,
               {
                 vpcId: vpc.id,
-                cidrBlock: `10.0.${i + 1}.0/24`,
+                cidrBlock: `10.0.${8 * i}.0/22`,
                 availabilityZone: zone,
                 mapPublicIpOnLaunch: true,
               },
@@ -327,7 +355,7 @@ export class Vpc extends Component {
               `${name}PrivateSubnet${i + 1}`,
               {
                 vpcId: vpc.id,
-                cidrBlock: `10.0.${zones.length + i + 1}.0/24`,
+                cidrBlock: `10.0.${8 * i + 4}.0/22`,
                 availabilityZone: zone,
               },
               { parent },
@@ -340,12 +368,16 @@ export class Vpc extends Component {
               `${name}PrivateRouteTable${i + 1}`,
               {
                 vpcId: vpc.id,
-                routes: [
-                  {
-                    cidrBlock: "0.0.0.0/0",
-                    natGatewayId: natGateways[i].id,
-                  },
-                ],
+                routes: natGateways.apply((natGateways) =>
+                  natGateways[i]
+                    ? [
+                        {
+                          cidrBlock: "0.0.0.0/0",
+                          natGatewayId: natGateways[i].id,
+                        },
+                      ]
+                    : [],
+                ),
               },
               { parent },
             ),
@@ -448,15 +480,20 @@ export class Vpc extends Component {
   }
 
   /**
-   * Reference an existing VPC instance with the given VPC ID. This is useful when you
-   * created a VPC in one stage and you want to reference it in another stage.
+   * Reference an existing VPC with the given ID. This is useful when you
+   * create a VPC in one stage and want to share it in another stage. It avoids having to
+   * create a new VPC in the other stage.
+   *
+   * :::tip
+   * You can use the `static get` method to share VPCs across stages.
+   * :::
    *
    * @param name The name of the component.
-   * @param vpcID The id of the VPC.
+   * @param vpcID The ID of the existing VPC.
    *
    * @example
-   * Imagine you created a VPC in the `dev` stage. And in your personal stage, ie. `frank`,
-   * instead of creating a new VPC, you want to reuse the same VPC from `dev`.
+   * Imagine you create a VPC in the `dev` stage. And in your personal stage `frank`,
+   * instead of creating a new VPC, you want to share the VPC from `dev`.
    *
    * ```ts title="sst.config.ts"
    * const vpc = $app.stage === "frank"
@@ -465,6 +502,13 @@ export class Vpc extends Component {
    * ```
    *
    * Here `vpc-0be8fa4de860618bb` is the ID of the VPC created in the `dev` stage.
+   * You can find this by outputting the VPC ID in the `dev` stage.
+   *
+   * ```ts title="sst.config.ts"
+   * return {
+   *   vpc: vpc.id
+   * };
+   * ```
    */
   public static get(name: string, vpcID: Input<string>) {
     const vpc = ec2.Vpc.get(`${name}Vpc`, vpcID);
@@ -479,7 +523,7 @@ export class Vpc extends Component {
       ec2
         .getSecurityGroupsOutput({
           filters: [
-            { name: "group-name", values: ["*SecurityGroup*"] },
+            { name: "group-name", values: ["default"] },
             { name: "vpc-id", values: [vpc.id] },
           ],
         })
@@ -525,14 +569,20 @@ export class Vpc extends Component {
         ),
       ),
     );
-    const natGateways = publicSubnets.apply((subnets) =>
-      subnets.map((subnet, i) =>
-        ec2.NatGateway.get(
-          `${name}NatGateway${i + 1}`,
-          ec2.getNatGatewayOutput({ subnetId: subnet.id }).id,
-        ),
-      ),
-    );
+    const natGateways = publicSubnets.apply((subnets) => {
+      const natGatewayIds = subnets.map((subnet, i) =>
+        ec2
+          .getNatGatewaysOutput({
+            filters: [{ name: "subnet-id", values: [subnet.id] }],
+          })
+          .ids.apply((ids) => ids[0]),
+      );
+      return output(natGatewayIds).apply((ids) =>
+        ids
+          .filter((id) => id)
+          .map((id, i) => ec2.NatGateway.get(`${name}NatGateway${i + 1}`, id)),
+      );
+    });
     const elasticIps = natGateways.apply((nats) =>
       nats.map((nat, i) =>
         ec2.Eip.get(

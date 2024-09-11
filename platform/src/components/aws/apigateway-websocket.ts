@@ -8,12 +8,8 @@ import {
 import { Component, Prettify, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
-import {
-  hashStringToPrettyString,
-  prefixName,
-  sanitizeToPascalCase,
-} from "../naming";
+import { FunctionArgs, FunctionArn } from "./function";
+import { hashStringToPrettyString, physicalName, logicalName } from "../naming";
 import { DnsValidatedCertificate } from "./dns-validated-certificate";
 import { RETENTION } from "./logging";
 import { dns as awsDns } from "./dns.js";
@@ -201,6 +197,7 @@ export interface ApiGatewayWebSocketRouteArgs {
 export class ApiGatewayWebSocket extends Component implements Link.Linkable {
   private constructorName: string;
   private constructorArgs: ApiGatewayWebSocketArgs;
+  private constructorOpts: ComponentResourceOptions;
   private api: apigatewayv2.Api;
   private stage: apigatewayv2.Stage;
   private apigDomain?: apigatewayv2.DomainName;
@@ -231,6 +228,7 @@ export class ApiGatewayWebSocket extends Component implements Link.Linkable {
 
     this.constructorName = name;
     this.constructorArgs = args;
+    this.constructorOpts = opts;
     this.api = api;
     this.stage = stage;
     this.apigDomain = apigDomain;
@@ -293,7 +291,7 @@ export class ApiGatewayWebSocket extends Component implements Link.Linkable {
           args.transform?.accessLog,
           `${name}AccessLog`,
           {
-            name: `/aws/vendedlogs/apis/${prefixName(64, name)}`,
+            name: `/aws/vendedlogs/apis/${physicalName(64, name)}`,
             retentionInDays: accessLog.apply(
               (accessLog) => RETENTION[accessLog.retention],
             ),
@@ -385,27 +383,15 @@ export class ApiGatewayWebSocket extends Component implements Link.Linkable {
       domain.dns.apply((dns) => {
         if (!dns) return;
 
-        if (dns.provider === "aws") {
-          dns.createAliasRecords(
-            name,
-            {
-              name: domain.name,
-              aliasName: apigDomain.domainNameConfiguration.targetDomainName,
-              aliasZone: apigDomain.domainNameConfiguration.hostedZoneId,
-            },
-            { parent },
-          );
-        } else {
-          dns.createRecord(
-            name,
-            {
-              type: "CNAME",
-              name: domain.name,
-              value: apigDomain.domainNameConfiguration.targetDomainName,
-            },
-            { parent },
-          );
-        }
+        dns.createAlias(
+          name,
+          {
+            name: domain.name,
+            aliasName: apigDomain.domainNameConfiguration.targetDomainName,
+            aliasZone: apigDomain.domainNameConfiguration.hostedZoneId,
+          },
+          { parent },
+        );
       });
     }
 
@@ -530,14 +516,20 @@ export class ApiGatewayWebSocket extends Component implements Link.Linkable {
    *   memory: "2048 MB"
    * });
    * ```
+   *
+   * Add a route with an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * api.route("sendMessage", "arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public route(
     route: string,
-    handler: string | FunctionArgs,
+    handler: string | FunctionArgs | FunctionArn,
     args: ApiGatewayWebSocketRouteArgs = {},
   ) {
     const prefix = this.constructorName;
-    const suffix = sanitizeToPascalCase(
+    const suffix = logicalName(
       ["$connect", "$disconnect", "$default"].includes(route)
         ? route
         : hashStringToPrettyString(`${this.api.id}${route}`, 6),
@@ -547,7 +539,7 @@ export class ApiGatewayWebSocket extends Component implements Link.Linkable {
       this.constructorArgs.transform?.route?.args,
       `${prefix}Route${suffix}`,
       args,
-      {},
+      { provider: this.constructorOpts.provider },
     );
 
     return new ApiGatewayWebSocketRoute(

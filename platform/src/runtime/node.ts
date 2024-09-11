@@ -6,8 +6,13 @@ import pulumi from "@pulumi/pulumi";
 import { findAbove } from "../util/fs.js";
 import { FunctionArgs } from "../components/aws/function.js";
 import fsSync from "fs";
+import { Semaphore } from "../util/semaphore.js";
 
-export async function build(
+const limiter = new Semaphore(
+  parseInt(process.env.SST_BUILD_CONCURRENCY || "4"),
+);
+
+export async function buildNode(
   name: string,
   input: pulumi.Unwrap<FunctionArgs> & {
     links?: {
@@ -110,6 +115,7 @@ export async function build(
   };
   Object.assign(options, nodejs.esbuild);
   try {
+    await limiter.acquire(name);
     const result = await esbuild.build(options);
 
     // Install node_modules
@@ -139,7 +145,7 @@ export async function build(
 
     if (installPackages.length) {
       const src = await findAbove(parsed.dir, "package.json");
-      if (!src) {
+      if (src === undefined) {
         return {
           type: "error" as const,
           errors: [
@@ -213,5 +219,7 @@ export async function build(
       type: "error" as const,
       errors: [ex.toString()],
     };
+  } finally {
+    limiter.release();
   }
 }

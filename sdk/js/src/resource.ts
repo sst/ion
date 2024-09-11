@@ -11,7 +11,13 @@ const raw: Record<string, any> = {
   // @ts-expect-error,
   ...globalThis.$SST_LINKS,
 };
-for (const [key, value] of Object.entries(env)) {
+
+const environment = {
+  ...env,
+  ...globalThis.process?.env,
+};
+
+for (const [key, value] of Object.entries(environment)) {
   if (key.startsWith("SST_RESOURCE_") && value) {
     raw[key.slice("SST_RESOURCE_".length)] = JSON.parse(value);
   }
@@ -25,6 +31,9 @@ export function fromCloudflareEnv(input: any) {
       } catch {}
     }
     raw[key] = value;
+    if (key.startsWith("SST_RESOURCE_")) {
+      raw[key.replace("SST_RESOURCE_", "")] = value;
+    }
   }
 }
 
@@ -62,7 +71,7 @@ export const Resource = new Proxy(raw, {
         "It does not look like SST links are active. If this is in local development and you are not starting this process through the multiplexer, wrap your command with `sst dev -- <command>`",
       );
     }
-    let msg = `"${prop}" is not linked`;
+    let msg = `"${prop}" is not linked in your sst.config.ts`;
     if (env.AWS_LAMBDA_FUNCTION_NAME) {
       msg += ` to ${env.AWS_LAMBDA_FUNCTION_NAME}`;
     }

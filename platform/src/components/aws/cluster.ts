@@ -1,13 +1,12 @@
 import { ComponentResourceOptions } from "@pulumi/pulumi";
-import * as docker from "@pulumi/docker";
 import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
 import { Dns } from "../dns";
 import { FunctionArgs } from "./function";
 import { Service } from "./service";
 import { RETENTION } from "./logging.js";
-import { cloudwatch, ecs, iam, lb } from "@pulumi/aws";
-import { DevArgs } from "../dev";
+import { cloudwatch, ec2, ecs, iam, lb } from "@pulumi/aws";
+import { ImageArgs } from "@pulumi/docker-build";
 
 export const supportedCpus = {
   "0.25 vCPU": 256,
@@ -158,7 +157,7 @@ export interface ClusterArgs {
      */
     privateSubnets: Input<Input<string>[]>;
     /**
-     * A list of VPC security group IDs.
+     * A list of VPC security group IDs for the service.
      */
     securityGroups: Input<Input<string>[]>;
   }>;
@@ -174,7 +173,45 @@ export interface ClusterArgs {
   };
 }
 
-export interface ClusterServiceArgs extends DevArgs {
+export interface ClusterServiceArgs {
+  /**
+   * Configure how this component works in `sst dev`.
+   *
+   * :::note
+   * In `sst dev` your service is run locally; it's not deployed.
+   * :::
+   *
+   * Instead of deploying your service, this starts it locally. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   */
+  dev?: {
+    /**
+     * The `url` when this is running in dev mode.
+     *
+     * Since this component is not deployed in `sst dev`, there is no real URL. But if you are
+     * using this component's `url` or linking to this component's `url`, it can be useful to
+     * have a placeholder URL. It avoids having to handle it being `undefined`.
+     * @default `"http://url-unavailable-in-dev.mode"`
+     */
+    url?: Input<string>;
+    /**
+     * The command that `sst dev` runs to start this in dev mode. This is the command you run
+     * when you want to run your service locally.
+     */
+    command?: Input<string>;
+    /**
+     * Configure if you want to automatically start this when `sst dev` starts. You can still
+     * start it manually later.
+     * @default `true`
+     */
+    autostart?: Input<boolean>;
+    /**
+     * Change the directory from where the `command` is run.
+     * @default Uses the `image.dockerfile` path
+     */
+    directory?: Input<string>;
+  };
   /**
    * Configure the docker build command for building the image.
    *
@@ -693,7 +730,7 @@ export interface ClusterServiceArgs extends DevArgs {
     /**
      * Transform the Docker Image resource.
      */
-    image?: Transform<docker.ImageArgs>;
+    image?: Transform<ImageArgs>;
     /**
      * Transform the ECS Service resource.
      */
@@ -710,6 +747,10 @@ export interface ClusterServiceArgs extends DevArgs {
      * Transform the AWS Load Balancer resource.
      */
     loadBalancer?: Transform<lb.LoadBalancerArgs>;
+    /**
+     * Transform the AWS Security Group resource for the Load Balancer.
+     */
+    loadBalancerSecurityGroup?: Transform<ec2.SecurityGroupArgs>;
     /**
      * Transform the AWS Load Balancer listener resource.
      */

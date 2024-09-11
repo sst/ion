@@ -86,11 +86,11 @@ There are a couple of quirks with this setup that are worth noting.
 
 ### Live mode
 
-When a function is running live it sets the `SST_LIVE` environment variable to `true`. So in your Node.js functions you can access it using `process.env.SST_LIVE`.
+When a function is running live it sets the `SST_DEV` environment variable to `true`. So in your Node.js functions you can access it using `process.env.SST_DEV`.
 
-```js title="src/lambda.js" "process.env.SST_LIVE"
+```js title="src/lambda.js" "process.env.SST_DEV"
 export async function main(event) {
-  const body = process.env.SST_LIVE ? "Hello, Live!" : "Hello, World!";
+  const body = process.env.SST_DEV ? "Hello, Live!" : "Hello, World!";
 
   return {
     body,
@@ -105,10 +105,10 @@ This is useful if you want to access some resources locally.
 
 #### Connect to a local DB
 
-For example, when running locally you might want to connect to a local database. You can do that with the `SST_LIVE` environment variable.
+For example, when running locally you might want to connect to a local database. You can do that with the `SST_DEV` environment variable.
 
 ```js
-const dbHost = process.env.SST_LIVE
+const dbHost = process.env.SST_DEV
   ? "localhost"
   : "amazon-string.rds.amazonaws.com";
 ```
@@ -149,21 +149,12 @@ Note that, the AWS Client VPC service is billed on an hourly basis but it's fair
 
 Since Live runs your functions locally, you can set breakpoints and debug your functions in your favorite IDE.
 
-For VS Code, add the following Launch Configuration to `.vscode/launch.json`.
+![VS Code Enable Auto Attach](../../../assets/docs/live/vs-code-enable-auto-attach.png)
 
-```json title=".vscode/launch.json"
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Debug SST Live",
-      "type": "node",
-      "request": "launch",
-      "runtimeArgs": ["dev"],
-      "console": "integratedTerminal",
-      "skipFiles": ["<node_internals>/**"],
-      "runtimeExecutable": "${workspaceRoot}/node_modules/.bin/sst"
-    }
-  ]
-}
-```
+For VS Code, you'll need to enable Auto Attach from the Command Palette. Hit `Ctrl+Shift+P` or `Cmd+Shift+P`, type in **Debug: Toggle Auto Attach** and select **Always**.
+
+:::note
+You need to start a new terminal **in VS Code** after enabling Auto Attach.
+:::
+
+Now open a new terminal in VS Code, run `sst dev`, set a breakpoint in a function, and invoke the function.

@@ -5,27 +5,23 @@ import (
 	"log/slog"
 	"reflect"
 
-	"github.com/sst/ion/cmd/sst/mosaic/bus"
+	"github.com/sst/ion/cmd/sst/mosaic/errors"
 	"github.com/sst/ion/cmd/sst/mosaic/watcher"
+	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/bus"
 	"github.com/sst/ion/pkg/project"
+	"github.com/sst/ion/pkg/server"
 )
 
 type DeployRequestedEvent struct{}
-type WatchedFilesEvent struct {
-	files []string
+type DeployFailedEvent struct {
+	Error string
 }
 
-func Start(ctx context.Context, p *project.Project) error {
+func Start(ctx context.Context, p *project.Project, server *server.Server) error {
 	defer slog.Info("deployer done")
 	watchedFiles := make(map[string]bool)
-	events := bus.Subscribe(ctx, &watcher.FileChangedEvent{}, &DeployRequestedEvent{}, &WatchedFilesEvent{})
-	out := make(chan interface{})
-	go func() {
-		for evt := range out {
-			bus.Publish(evt)
-		}
-	}()
-	defer close(out)
+	events := bus.Subscribe(ctx, &watcher.FileChangedEvent{}, &DeployRequestedEvent{}, &project.BuildSuccessEvent{})
 	for {
 		slog.Info("deployer waiting for trigger")
 		select {
@@ -33,21 +29,24 @@ func Start(ctx context.Context, p *project.Project) error {
 			return nil
 		case evt := <-events:
 			switch evt := evt.(type) {
-			case *WatchedFilesEvent:
-				for _, file := range evt.files {
+			case *project.BuildSuccessEvent:
+				for _, file := range evt.Files {
 					watchedFiles[file] = true
 				}
 			case *watcher.FileChangedEvent, *DeployRequestedEvent:
 				if evt, ok := evt.(*watcher.FileChangedEvent); !ok || watchedFiles[evt.Path] {
 					slog.Info("deployer deploying")
-					p.Run(ctx, &project.StackInput{
-						Command: "deploy",
-						Dev:     true,
-						Out:     out,
-						OnFiles: func(files []string) {
-							bus.Publish(&WatchedFilesEvent{files})
-						},
+					err := p.Run(ctx, &project.StackInput{
+						Command:    "deploy",
+						Dev:        true,
+						ServerPort: server.Port,
 					})
+					if err != nil {
+						transformed := errors.Transform(err)
+						if _, ok := transformed.(*util.ReadableError); ok {
+							bus.Publish(&DeployFailedEvent{Error: transformed.Error()})
+						}
+					}
 				}
 			}
 			continue

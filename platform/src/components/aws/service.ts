@@ -9,7 +9,7 @@ import {
   output,
   secret,
 } from "@pulumi/pulumi";
-import * as docker from "@pulumi/docker";
+import { Image, Platform } from "@pulumi/docker-build";
 import { Component, transform } from "../component";
 import { toGBs, toMBs } from "../size";
 import { toNumber } from "../cpu";
@@ -29,6 +29,7 @@ import { URL_UNAVAILABLE } from "./linkable";
 import {
   appautoscaling,
   cloudwatch,
+  ec2,
   ecr,
   ecs,
   getCallerIdentityOutput,
@@ -37,6 +38,7 @@ import {
   lb,
 } from "@pulumi/aws";
 import { Permission } from "./permission";
+import { Vpc } from "./vpc";
 
 export interface ServiceArgs extends ClusterServiceArgs {
   /**
@@ -87,7 +89,7 @@ export class Service extends Component implements Link.Linkable {
     const self = this;
 
     const cluster = output(args.cluster);
-    const vpc = output(args.vpc);
+    const vpc = normalizeVpc();
     const region = normalizeRegion();
     const architecture = normalizeArchitecture();
     const imageArgs = normalizeImage();
@@ -110,6 +112,7 @@ export class Service extends Component implements Link.Linkable {
       return;
     }
 
+    const bootstrapData = region.apply((region) => bootstrap.forRegion(region));
     const executionRole = createExecutionRole();
     const image = createImage();
     const logGroup = createLogGroup();
@@ -136,10 +139,30 @@ export class Service extends Component implements Link.Linkable {
     registerHint();
     registerReceiver();
 
+    function normalizeVpc() {
+      // "vpc" is a Vpc component
+      if (args.vpc instanceof Vpc) {
+        const result = {
+          id: args.vpc.id,
+          publicSubnets: args.vpc.publicSubnets,
+          privateSubnets: args.vpc.privateSubnets,
+          securityGroups: args.vpc.securityGroups,
+        };
+        return args.vpc.nodes.natGateways.apply((natGateways) => {
+          if (natGateways.length === 0)
+            throw new VisibleError(
+              `The VPC configured for the service does not have NAT enabled. Enable NAT by configuring "nat" on the "sst.aws.Vpc" component.`,
+            );
+          return result;
+        });
+      }
+
+      // "vpc" is object
+      return output(args.vpc);
+    }
+
     function normalizeRegion() {
-      return getRegionOutput(undefined, {
-        provider: opts?.provider,
-      }).name;
+      return getRegionOutput(undefined, { parent: self }).name;
     }
 
     function normalizeArchitecture() {
@@ -151,7 +174,10 @@ export class Service extends Component implements Link.Linkable {
         ([image, architecture]) => ({
           ...image,
           context: image.context ?? ".",
-          platform: architecture === "arm64" ? "linux/arm64" : "linux/amd64",
+          platform:
+            architecture === "arm64"
+              ? Platform.Linux_arm64
+              : Platform.Linux_amd64,
         }),
       );
     }
@@ -304,34 +330,39 @@ export class Service extends Component implements Link.Linkable {
         return imageArgs;
       });
 
-      // Get ECR repository
-      const repo = region.apply((region) =>
-        bootstrap.forRegion(region).then((d) => d.ecr),
-      );
-      const authToken = ecr.getAuthorizationTokenOutput({
-        registryId: repo.registryId,
-      });
-
       // Build image
-      return new docker.Image(
+      return new Image(
         ...transform(
           args.transform?.image,
           `${name}Image`,
           {
-            build: imageArgsNew.apply((imageArgs) => ({
-              context: path.join($cli.paths.root, imageArgs.context),
-              dockerfile: imageArgs.dockerfile
-                ? path.join($cli.paths.root, imageArgs.dockerfile)
-                : undefined,
-              args: imageArgs.args,
-              platform: imageArgs.platform,
-            })),
-            imageName: interpolate`${repo.url}:${name}`,
-            registry: authToken.apply((authToken) => ({
-              password: secret(authToken.password),
-              username: authToken.userName,
-              server: authToken.proxyEndpoint,
-            })),
+            context: {
+              location: imageArgsNew.apply((v) =>
+                path.join($cli.paths.root, v.context),
+              ),
+            },
+            dockerfile: {
+              location: imageArgsNew.apply((v) =>
+                v.dockerfile
+                  ? path.join($cli.paths.root, v.dockerfile)
+                  : path.join($cli.paths.root, v.context, "Dockerfile"),
+              ),
+            },
+            buildArgs: imageArgsNew.apply((v) => v.args ?? {}),
+            platforms: [imageArgs.platform],
+            tags: [interpolate`${bootstrapData.assetEcrUrl}:${name}`],
+            registries: [
+              ecr
+                .getAuthorizationTokenOutput({
+                  registryId: bootstrapData.assetEcrRegistryId,
+                })
+                .apply((authToken) => ({
+                  address: authToken.proxyEndpoint,
+                  password: secret(authToken.password),
+                  username: authToken.userName,
+                })),
+            ],
+            push: true,
           },
           { parent: self },
         ),
@@ -340,6 +371,33 @@ export class Service extends Component implements Link.Linkable {
 
     function createLoadBalancer() {
       if (!pub) return {};
+
+      const securityGroup = new ec2.SecurityGroup(
+        ...transform(
+          args?.transform?.loadBalancerSecurityGroup,
+          `${name}LoadBalancerSecurityGroup`,
+          {
+            vpcId: vpc.id,
+            egress: [
+              {
+                fromPort: 0,
+                toPort: 0,
+                protocol: "-1",
+                cidrBlocks: ["0.0.0.0/0"],
+              },
+            ],
+            ingress: [
+              {
+                fromPort: 0,
+                toPort: 0,
+                protocol: "-1",
+                cidrBlocks: ["0.0.0.0/0"],
+              },
+            ],
+          },
+          { parent: self },
+        ),
+      );
 
       const loadBalancer = new lb.LoadBalancer(
         ...transform(
@@ -353,7 +411,7 @@ export class Service extends Component implements Link.Linkable {
                 : "network",
             ),
             subnets: vpc.publicSubnets,
-            securityGroups: vpc.securityGroups,
+            securityGroups: [securityGroup.id],
             enableCrossZoneLoadBalancing: true,
           },
           { parent: self },
@@ -538,7 +596,7 @@ export class Service extends Component implements Link.Linkable {
             containerDefinitions: $jsonStringify([
               {
                 name,
-                image: image.repoDigest,
+                image: interpolate`${bootstrapData.assetEcrUrl}@${image.digest}`,
                 pseudoTerminal: true,
                 portMappings: pub?.ports.apply((ports) =>
                   ports
@@ -673,27 +731,15 @@ export class Service extends Component implements Link.Linkable {
       pub.domain.apply((domain) => {
         if (!domain?.dns) return;
 
-        if (domain.dns.provider === "aws") {
-          domain.dns.createAliasRecords(
-            name,
-            {
-              name: domain.name,
-              aliasName: loadBalancer!.dnsName,
-              aliasZone: loadBalancer!.zoneId,
-            },
-            { parent: self },
-          );
-        } else {
-          domain.dns.createRecord(
-            name,
-            {
-              type: "CNAME",
-              name: domain.name,
-              value: loadBalancer!.dnsName,
-            },
-            { parent: self },
-          );
-        }
+        domain.dns.createAlias(
+          name,
+          {
+            name: domain.name,
+            aliasName: loadBalancer!.dnsName,
+            aliasZone: loadBalancer!.zoneId,
+          },
+          { parent: self },
+        );
       });
     }
 
@@ -750,11 +796,15 @@ export class Service extends Component implements Link.Linkable {
    * Otherwise, it's the autogenerated load balancer URL.
    */
   public get url() {
-    return all([this._url, this.devUrl]).apply(([_url, dev]) => {
-      const url = _url ?? dev;
-      if (!url) throw new VisibleError("No public ports are exposed.");
-      return url;
-    });
+    const errorMessage =
+      "Cannot access the URL because no public ports are exposed.";
+    if ($dev) {
+      if (!this.devUrl) throw new VisibleError(errorMessage);
+      return this.devUrl;
+    }
+
+    if (!this._url) throw new VisibleError(errorMessage);
+    return this._url;
   }
 
   /**
@@ -807,9 +857,7 @@ export class Service extends Component implements Link.Linkable {
   /** @internal */
   public getSSTLink() {
     return {
-      properties: {
-        url: this.url,
-      },
+      properties: { url: $dev ? this.devUrl : this._url },
     };
   }
 }

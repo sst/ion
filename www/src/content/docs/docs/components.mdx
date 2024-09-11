@@ -103,10 +103,15 @@ const function = new sst.aws.Function("MyFunction", {
 
 There are two guidelines to follow when naming your components:
 
-1. Component names are global across your entire app.
-2. Use PascalCase for the component name. For example, `MyFunction` instead of `myFunction` or `my_function`.
+1. The names of SST's built-in components and components extended with [`Linkable.wrap`](/docs/component/linkable/#static-wrap) need to be global across your entire app.
 
-These make it possible to [link resources](/docs/linking/) together in your SST app.
+   This allows [Resource Linking](linking) to look these resources up at runtime.
+
+2. Optionally, use PascalCase for the component name.
+
+   For example, you might name your bucket, `MyBucket` and use Resource Linking to look it up with `Resource.MyBucket`.
+
+   However this is purely cosmetic. You can use kebab case. So `my-bucket`, and look it up using `Resource['my-bucket']`.
 
 ---
 
@@ -140,11 +145,9 @@ The type for these callbacks is similar. Here's what the `role` callback looks l
 RoleArgs | (args: RoleArgs, opts: pulumi.ComponentResourceOptions, name: string) => void
 ```
 
-So this takes either a `RoleArgs` object or a function that takes `RoleArgs`. Where [args, opts, and name](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#constructor-syntax) are the arguments for the role constructor passed to Pulumi.
+This takes either:
 
-This allows you to either:
-
-- Pass in your own `RoleArgs` object.
+- A `RoleArgs` object. For example:
 
   ```ts
   {
@@ -158,12 +161,20 @@ This allows you to either:
 
   This is **merged** with the original `RoleArgs` that were going to be passed to the component.
 
-- Or, pass in a callback that takes the current `RoleArgs` and mutates it.
+- A function that takes `RoleArgs`. Here's the function signature:
+
+  ```ts
+  (args: RoleArgs, opts: pulumi.ComponentResourceOptions, name: string) => void
+  ```
+
+  Where [`args`, `opts`, and `name`](https://www.pulumi.com/registry/packages/aws/api-docs/iam/role/#constructor-syntax) are the arguments for the Role constructor passed to Pulumi.
+
+  So you can pass in a callback that takes the current `RoleArgs` and mutates it.
 
   ```ts
   {
     transform: {
-      role: (args) => {
+      role: (args, opts) => {
         args.name = `${args.name}-MyRole`;
         opts.retainOnDelete = true;
       }
@@ -178,19 +189,40 @@ This allows you to either:
 Similar to the component transform, we have the global `$transform`. This allows you to transform how a component of a given type is created.
 
 :::tip
-Set global defaults for your components with `$transform`.
+Set default props across all your components with `$transform`.
 :::
 
-For example, to set a default runtime for all function components.
+For example, set a default `runtime` for your functions.
 
 ```ts title="sst.config.ts"
 $transform(sst.aws.Function, (args, opts) => {
-  args.runtime = "nodejs18.x";
-})
+  // Set the default if it's not set by the component
+  args.runtime ??= "nodejs18.x";
+});
 ```
 
-Here, `args` and `opts` are what you'd pass to the `Function` component. Recall the 
-signature of the `Function` component:
+This sets the runtime for any `Function` component that'll be **created after this call**.
+
+The reason we do the check for `args.runtime` is to allow components to override the default. We do this by only setting the default if the component isn't specifying its own `runtime`.
+
+```ts title="sst.config.ts"
+new sst.aws.Function("MyFunctionA", {
+  handler: "src/lambdaA.handler"
+});
+
+new sst.aws.Function("MyFunctionB", {
+  handler: "src/lambdaB.handler",
+  runtime: "nodejs20.x"
+});
+```
+
+So given the above transform, `MyFunctionA` will have a runtime of `nodejs18.x` and `MyFunctionB` will have a runtime of `nodejs20.x`.
+
+:::note
+The `$transform` is only applied to components that are defined after it.
+:::
+
+The `args` and `opts` in the `$transform` callback are what you'd pass to the `Function` component. Recall the signature of the `Function` component:
 
 ```ts title="sst.config.ts"
 new sst.aws.Function(name: string, args: FunctionArgs, opts?: pulumi.ComponentResourceOptions)
@@ -246,7 +278,7 @@ These are values that are not available yet and will be resolved as the deploy p
 
 This makes it so that parts of your app are not blocked and all your resources are deployed as concurrently as possible.
 
-For example, let's create a function with a url.
+For example, let's create a function with an url.
 
 ```ts title="sst.config.ts"
 const myFunction = new sst.aws.Function("MyFunction", {
@@ -301,7 +333,7 @@ To make it a little easier to work with outputs, we have the following global he
 
 #### `$concat`
 
-This let's you do.
+This lets you do.
 
 ```ts title="sst.config.ts"
 const newUrl = $concat(myFunction.url, "/foo");
@@ -319,7 +351,7 @@ Read more about [`$concat`](/docs/reference/global/#concat).
 
 #### `$interpolate`
 
-This let's you do.
+This lets you do.
 
 ```ts title="sst.config.ts"
 const newUrl = $interpolate`${myFunction.url}/foo`;
@@ -387,3 +419,49 @@ $resolve([bucket.name, worker.url]).apply(([bucketName, workerUrl]) => {
 ```
 
 Read more about [`$resolve`](/docs/reference/global/#resolve).
+
+---
+
+## Versioning
+
+SST components evolve over time, sometimes introducing breaking changes. To maintain backwards compatibility, we implement a component versioning scheme.
+
+For example, we released a new version the [`Vpc`](component/aws/vpc) that does not create a NAT Gateway by default. To roll this out the previous version of the `Vpc` component was renamed to [`Vpc.v1`](component/aws/vpc-v1).
+
+Now if you were using the original `Vpc` component, update SST, and deploy; you'll get an error during the deploy saying that there's a new version of this component.
+
+This allows you to decide what you want to do with this component.
+
+---
+
+#### Continue with the old version
+
+If you prefer to continue using the older version of a component, you can rename it. 
+
+```diff title="sst.config.ts" lang="ts"
+- const vpc = new sst.aws.Vpc("MyVpc");
++ const vpc = new sst.aws.Vpc.v1("MyVpc");
+```
+
+Now if you deploy again, SST knows that you want to stick with the old version and it won't error.
+
+---
+
+#### Update to the latest version
+
+Instead, if you wanted to update to the latest version, you'll have to rename the component.
+
+```diff title="sst.config.ts" lang="ts"
+- const vpc = new sst.aws.Vpc("MyVpc");
++ const vpc = new sst.aws.Vpc("MyNewVpc");
+```
+
+Now if you redeploy, it'll remove the previously created component and recreate it with the new name and the latest version.
+
+This is because from SST's perspective it looks like the `MyVpc` component was removed and a new component called `MyNewVpc` was added.
+
+:::caution
+Removing and recreating components may cause temporary downtime in your app.
+:::
+
+Since these are being recreated you've to be aware that there might be a period of time when that resource is not around. This might cause some downtime, depending on the resource.

@@ -17,9 +17,8 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
-	"github.com/joho/godotenv"
 	"github.com/sst/ion/cmd/sst/cli"
-	"github.com/sst/ion/cmd/sst/mosaic/server"
+	"github.com/sst/ion/cmd/sst/mosaic/errors"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
@@ -33,7 +32,8 @@ var version = "dev"
 func main() {
 	// check if node_modules/.bin/sst exists
 	nodeModulesBinPath := filepath.Join("node_modules", ".bin", "sst")
-	if _, err := os.Stat(nodeModulesBinPath); err == nil && os.Getenv("npm_config_user_agent") == "" && os.Getenv("SST_SKIP_LOCAL") != "true" && version != "dev" {
+	binary, _ := os.Executable()
+	if _, err := os.Stat(nodeModulesBinPath); err == nil && !strings.Contains(binary, "node_modules") && os.Getenv("SST_SKIP_LOCAL") != "true" && version != "dev" {
 		// forward command to node_modules/.bin/sst
 		fmt.Println(ui.TEXT_WARNING_BOLD.Render("Warning: ") + "You are using a global installation of SST but you also have a local installation specified in your package.json. The local installation will be used but you should typically run it through your package manager.")
 		cmd := exec.Command(nodeModulesBinPath, os.Args[1:]...)
@@ -54,7 +54,7 @@ func main() {
 	})
 	err := run()
 	if err != nil {
-		err := TransformError(err)
+		err := errors.Transform(err)
 		errorMessage := err.Error()
 		if len(errorMessage) > 255 {
 			errorMessage = errorMessage[:255]
@@ -70,8 +70,9 @@ func main() {
 			}
 		} else {
 			slog.Error("exited with error", "err", err)
-			ui.Error("Unexpected error occurred. Please check the logs or run with --verbose for more details.")
+			ui.Error("Unexpected error occurred. Please check the logs in .sst/log/sst.log")
 		}
+		telemetry.Close()
 		os.Exit(1)
 		return
 	}
@@ -79,7 +80,6 @@ func main() {
 }
 
 func run() error {
-	godotenv.Load()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	interruptChannel := make(chan os.Signal, 1)
@@ -109,6 +109,13 @@ func run() error {
 			return err
 		}
 	}
+	if global.NeedsUv() {
+		spin.Start()
+		err := global.InstallUv()
+		if err != nil {
+			return err
+		}
+	}
 	spin.Stop()
 	return c.Run()
 }
@@ -121,16 +128,13 @@ var root = &cli.Command{
 			"The CLI helps you manage your SST apps.",
 			"",
 			"If you are using SST as a part of your Node project, we recommend installing it locally.",
-			"```bash \"sst@ion\"",
-			"npm install sst@ion",
+			"```bash",
+			"npm install sst",
 			"```",
-			":::caution",
-			"You need the `@ion` tag to install the Ion version of SST.",
-			":::",
 			"---",
 			"If you are not using Node, you can install the CLI globally.",
 			"```bash",
-			"curl -fsSL https://ion.sst.dev/install | bash",
+			"curl -fsSL https://sst.dev/install | bash",
 			"```",
 			"",
 			":::note",
@@ -140,7 +144,7 @@ var root = &cli.Command{
 			"To install a specific version.",
 			"",
 			"```bash \"VERSION=0.0.403\"",
-			"curl -fsSL https://ion.sst.dev/install | VERSION=0.0.403 bash",
+			"curl -fsSL https://sst.dev/install | VERSION=0.0.403 bash",
 			"```",
 			"---",
 			"#### With a package manager",
@@ -227,11 +231,35 @@ var root = &cli.Command{
 				Short: "Enable verbose logging",
 				Long: strings.Join([]string{
 					"",
-					"Enables verbose logging for the CLI output.",
+					"Prints extra information to the log files in the `.sst/` directory.",
 					"",
 					"```bash",
 					"sst [command] --verbose",
 					"```",
+					"",
+					"To also view this on the screen, use the `--print-logs` flag.",
+					"",
+				}, "\n"),
+			},
+		},
+		{
+			Name: "print-logs",
+			Type: "bool",
+			Description: cli.Description{
+				Short: "Print logs to stderr",
+				Long: strings.Join([]string{
+					"",
+					"Print the logs to the screen. These are logs that are written to the `.sst/` directory.",
+					"",
+					"```bash",
+					"sst [command] --print-logs",
+					"```",
+					"It can also be set using the `SST_PRINT_LOGS` environment variable.",
+					"",
+					"```bash",
+					"SST_PRINT_LOGS=1 sst [command]",
+					"```",
+					"This is useful when running in a CI environment.",
 					"",
 				}, "\n"),
 			},
@@ -306,58 +334,75 @@ var root = &cli.Command{
 			Description: cli.Description{
 				Short: "Run in development mode",
 				Long: strings.Join([]string{
-					"Run your app in development mode.",
+					"Run your app in dev mode.",
 					"",
 					"```bash frame=\"none\"",
 					"sst dev",
 					"```",
+					"By default, this starts a multiplexer with processes that deploy your app, run your functions, and start your frontend.",
 					"",
-					"Optionally, pass in a command to start your frontend as well.",
+					"![sst dev multiplexer mode](../../../../assets/docs/cli/sst-dev-multiplexer-mode.png)",
+					"",
+					"Each process is run in a separate pane that you can click on in the sidebar. These",
+					"include processes that:",
+					"",
+					"1. Watch your `sst.config.ts` and deploy your app",
+					"2. Run your functions [Live](/docs/live/) and logs their invocations",
+					"3. Run the dev mode for components that have `dev.autostart` enabled",
+					"   - Components like `Service` and frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.",
+					"   - It starts their `dev.command` in a separate pane",
+					"   - And loads any [linked resources](/docs/linking) in the environment",
+					"",
+					"The multiplexer makes it so that you won't have to start your frontend or",
+					"your container applications separately.",
+					"",
+					":::tip",
+					"The `sst dev` CLI also starts your frontend. So you don't need to start it",
+					"separately.",
+					":::",
+					"",
+					"While `sst dev` does a deploy when it starts up, it does not deploy components like",
+					"`Service`, or the frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.",
+					"That's because these have their own dev modes that the multiplexer starts.",
+					"",
+					":::note",
+					"The `Service` component and the frontends like `Nextjs` or `StaticSite` are not",
+					"deployed by `sst dev`.",
+					":::",
+					"",
+					"Optionally, you can disable the multiplexer and run `sst dev` in basic mode.",
+					"",
+					"```bash frame=\"none\"",
+					"sst dev --mode=basic",
+					"```",
+					"",
+					"This will only deploy your app and run your functions. If you are coming from SST",
+					"v2, this is how `sst dev` used to work.",
+					"",
+					"However in `basic` mode, you'll need to start your frontend separately by running",
+					"`sst dev` in a separate terminal session by passing in the command. For example:",
 					"",
 					"```bash frame=\"none\"",
 					"sst dev next dev",
 					"```",
 					"",
-					"To pass in a flag to your command, use --",
+					"By wrapping your command, it'll load your [linked resources](/docs/linking) in the",
+					"environment.",
+					"",
+					"To pass in a flag to the command, use `--`.",
 					"",
 					"```bash frame=\"none\"",
 					"sst dev -- next dev --turbo",
 					"```",
-					"",
-					"Dev mode does a few things:",
-					"",
-					"1. Starts a local server",
-					"2. Watches your `sst.config.ts` and re-deploys changes",
-					"3. Run your functions [Live](/docs/live/)",
-					"4. Skip components that should be run locally",
-					"   - `Service`",
-					"   - Frontends like, `Nextjs`, `Remix`, `Astro`, `SvelteKit`, etc.",
-					"5. If you pass in a `command`, it'll:",
-					"   - Load your [linked resources](/docs/linking) in the environment",
-					"   - And run the command",
-					"",
-					":::note",
-					"If you run `sst dev` with a command, it will not print your function logs.",
-					":::",
-					"",
-					"If `sst dev` starts your frontend, it won't print logs from your SST app. We do this to prevent your logs from being too noisy. To view your logs, you can run `sst dev` in a separate terminal.",
-					"",
-					":::tip",
-					"You can start as many instances of `sst dev` in your app as you want.",
-					":::",
-					"",
-					"Starting multiple instances of `sst dev` in the same project only starts a single _server_. Meaning that the second instance connects to the existing one.",
-					"",
-					"This is different from SST v2, in that you needed to run `sst dev` and `sst bind` for your frontend.",
 				}, "\n"),
 			},
 			Flags: []cli.Flag{
 				{
 					Name: "mode",
-					Type: "[basic,mosaic]",
+					Type: "string",
 					Description: cli.Description{
 						Short: "Use mode=basic to turn off multiplexer",
-						Long:  "Use mode=basic to turn off multiplexer",
+						Long:  "Defaults to using the multiplexer or `mosaic` mode. Use `basic` to turn it off.",
 					},
 				},
 			},
@@ -398,6 +443,22 @@ var root = &cli.Command{
 				Long: strings.Join([]string{
 					"Deploy your application. By default, it deploys to your personal stage.",
 					"",
+					"All the resources are deployed as concurrently as possible, based on their dependencies.",
+					"For resources like your sites and functions; it first builds them and then deploys the generated assets.",
+					"",
+					"Since the build processes for some of these resources, like Next.js, take a lot of memory, the concurrency is limited by default of 4.",
+					"You can change this by setting the `SST_BUILD_CONCURRENCY` environment variable.",
+					"",
+					"```bash frame=\"none\"",
+					"SST_BUILD_CONCURRENCY=8 sst deploy",
+					"```",
+					"",
+					"You can change this based on how much memory your CI environment has.",
+					"",
+					":::tip",
+					"You can turn down the build concurrency if you are running out of memory in CI.",
+					":::",
+					"",
 					"Optionally, deploy your app to a specific stage.",
 					"",
 					"```bash frame=\"none\"",
@@ -434,7 +495,35 @@ var root = &cli.Command{
 			Name: "diff",
 			Description: cli.Description{
 				Short: "See what changes will be made",
-				Long:  strings.Join([]string{}, "\n"),
+				Long: strings.Join([]string{
+					"Builds your app to see what changes will be made when you deploy it.",
+					"",
+					"It displays a list of resources that will be created, updated, or deleted.",
+					"For each of these resources, it'll also show the properties that are changing.",
+					"",
+					":::tip",
+					"Run a `sst diff` to see what changes will be made when you deploy your app.",
+					":::",
+					"",
+					"This is useful for cases when you pull some changes from a teammate and want to",
+					"see what will be deployed; before doing the actual deploy.",
+					"",
+					"Optionall, you can diff a specific set of resources by passing in a list of their URNs.",
+					"",
+					"```bash frame=\"none\"",
+					"sst diff --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets",
+					"```",
+					"",
+					"By default, this compares to the last deploy of the given stage as it would be",
+					"deployed using `sst deploy`. But if you are working in dev mode using `sst dev`,",
+					"you can use the `--dev` flag.",
+					"",
+					"```bash frame=\"none\"",
+					"sst diff --dev",
+					"```",
+					"",
+					"This is useful because in dev mode, you app is deployed a little differently.",
+				}, "\n"),
 			},
 			Flags: []cli.Flag{
 				{
@@ -450,7 +539,7 @@ var root = &cli.Command{
 					Description: cli.Description{
 						Short: "Compare to sst dev",
 						Long: strings.Join([]string{
-							"Compare to sst dev",
+							"Compare to the dev of this stage.",
 						}, "\n"),
 					},
 				},
@@ -485,7 +574,7 @@ var root = &cli.Command{
 					"```ts title=\"sst.config.ts\"",
 					"{",
 					"  providers: {",
-					"    aws: true",
+					"    aws: \"6.27.0\"",
 					"  }",
 					"}",
 					"```",
@@ -496,21 +585,19 @@ var root = &cli.Command{
 					"Running `sst add aws` above is the same as manually adding the provider to your config and running `sst install`.",
 					":::",
 					"",
-					"By default, the latest version of the provider is installed. If you want to use a specific version, you can set it in your config.",
+					"By default, the latest version of the provider is installed. If you want to use a specific version, you can change it in your config.",
 					"",
 					"```ts title=\"sst.config.ts\"",
 					"{",
 					"  providers: {",
 					"    aws: {",
-					"      version: \"6.27.0\"",
+					"      version: \"6.26.0\"",
 					"    }",
 					"  }",
 					"}",
 					"```",
 					"",
-					":::tip",
-					"You'll need to run `sst install` after you update the `providers` in your config.",
-					":::",
+					"You'll need to run `sst install` if you update the `providers` in your config.",
 				}, "\n"),
 			},
 			Args: []cli.Argument{
@@ -551,8 +638,11 @@ var root = &cli.Command{
 						return err
 					}
 				}
-
-				err = p.Add(pkg)
+				entry, err := project.FindProvider(pkg, "latest")
+				if err != nil {
+					return util.NewReadableError(err, "Could not find provider "+pkg)
+				}
+				err = p.Add(entry.Name, entry.Version)
 				if err != nil {
 					return err
 				}
@@ -570,7 +660,7 @@ var root = &cli.Command{
 					return err
 				}
 				spin.Stop()
-				ui.Success(fmt.Sprintf("Added provider \"%s\"", pkg))
+				ui.Success(fmt.Sprintf("Added provider \"%s\". You can create resources with `new %s.SomeResource()`", entry.Alias, entry.Alias))
 				return nil
 			},
 		},
@@ -637,246 +727,28 @@ var root = &cli.Command{
 			Name: "secret",
 			Description: cli.Description{
 				Short: "Manage secrets",
-				Long:  "Manage the secrets in your app defined with `sst.Secret`.",
+				Long: strings.Join([]string{
+					"Manage the secrets in your app defined with `sst.Secret`.",
+					"",
+					"The `--fallback` flag can be used to manage the fallback values of a secret.",
+					"Applies to all the sub-commands in `sst secret`.",
+				}, "\n"),
+			},
+			Flags: []cli.Flag{
+				{
+					Name: "fallback",
+					Type: "bool",
+					Description: cli.Description{
+						Short: "Manage the fallback values of secrets",
+						Long:  "Manage the fallback values of secrets.",
+					},
+				},
 			},
 			Children: []*cli.Command{
-				{
-					Name: "set",
-					Description: cli.Description{
-						Short: "Set a secret",
-						Long: strings.Join([]string{
-							"Set the value of the secret.",
-							"",
-							"The secrets are encrypted and stored in an S3 Bucket in your AWS account. They are also stored in the package of the functions using the secret.",
-							"",
-							":::tip",
-							"If you are not running `sst dev`, you'll need to `sst deploy` to apply the secret.",
-							":::",
-							"",
-							"For example, set the `sst.Secret` called `StripeSecret` to `123456789`.",
-							"",
-							"```bash frame=\"none\"",
-							"sst secret set StripeSecret dev_123456789",
-							"```",
-							"",
-							"Optionally, set the secret in a specific stage.",
-							"",
-							"```bash frame=\"none\"",
-							"sst secret set StripeSecret prod_123456789 --stage production",
-							"```",
-							"",
-							"To set something like an RSA key, you can first save it to a file.",
-							"",
-							"```bash frame=\"none\"",
-							"cat > tmp.txt <<EOF",
-							"-----BEGIN RSA PRIVATE KEY-----",
-							"MEgCQQCo9+BpMRYQ/dL3DS2CyJxRF+j6ctbT3/Qp84+KeFhnii7NT7fELilKUSnx",
-							"S30WAvQCCo2yU1orfgqr41mM70MBAgMBAAE=",
-							"-----END RSA PRIVATE KEY-----",
-							"EOF",
-							"```",
-							"",
-							"Then set the secret from the file.",
-							"",
-							"```bash frame=\"none\"",
-							"sst secret set Key -- \"$(cat tmp.txt)\"",
-							"```",
-							"",
-							"And make sure to delete the temp file.",
-						}, "\n"),
-					},
-					Args: []cli.Argument{
-						{
-							Name:     "name",
-							Required: true,
-							Description: cli.Description{
-								Short: "The name of the secret",
-								Long:  "The name of the secret.",
-							},
-						},
-						{
-							Name:     "value",
-							Required: false,
-							Description: cli.Description{
-								Short: "The value of the secret",
-								Long:  "The value of the secret.",
-							},
-						},
-					},
-					Examples: []cli.Example{
-						{
-							Content: "sst secret set StripeSecret 123456789",
-							Description: cli.Description{
-								Short: "Set the StripeSecret to 123456789",
-							},
-						},
-						{
-							Content: "sst secret set StripeSecret < tmp.txt",
-							Description: cli.Description{
-								Short: "Set the StripeSecret to contents of tmp.txt",
-							},
-						},
-						{
-							Content: "sst secret set StripeSecret productionsecret --stage production",
-							Description: cli.Description{
-								Short: "Set the StripeSecret in production",
-							},
-						},
-					},
-					Run: CmdSecretSet,
-				},
-				{
-					Name: "load",
-					Description: cli.Description{
-						Short: "Set multiple secrets from file",
-						Long: strings.Join([]string{
-							"Load all the secrets from a file and set them.",
-							"",
-							"```bash frame=\"none\"",
-							"sst secret load ./secrets.env",
-							"```",
-							"",
-							"The file needs to be in the _dotenv_ or bash format of key-value pairs.",
-							"",
-							"```sh title=\"secrets.env\"",
-							"KEY_1=VALUE1",
-							"KEY_2=VALUE2",
-							"```",
-							"",
-							"Optionally, set the secrets in a specific stage.",
-							"",
-							"```bash frame=\"none\"",
-							"sst secret load ./prod.env --stage production",
-							"```",
-							"",
-							"",
-						}, "\n"),
-					},
-					Args: []cli.Argument{
-						{
-							Name:     "file",
-							Required: true,
-							Description: cli.Description{
-								Short: "The file to load secrets from",
-								Long:  "The file to load the secrets from.",
-							},
-						},
-					},
-					Examples: []cli.Example{
-						{
-							Content: "sst secret load ./secrets.env",
-							Description: cli.Description{
-								Short: "Loads all secrets from the file",
-							},
-						},
-						{
-							Content: "sst secret load ./prod.env --stage production",
-							Description: cli.Description{
-								Short: "Set secrets for production",
-							},
-						},
-					},
-					Run: CmdSecretLoad,
-				},
-				{
-					Name: "remove",
-					Description: cli.Description{
-						Short: "Remove a secret",
-						Long: strings.Join([]string{
-							"Remove a secret.",
-							"",
-							"For example, remove the `sst.Secret` called `StripeSecret`.",
-							"",
-							"```bash frame=\"none\" frame=\"none\"",
-							"sst secret remove StripeSecret",
-							"```",
-							"",
-							"Optionally, remove a secret in a specific stage.",
-							"",
-							"```bash frame=\"none\" frame=\"none\"",
-							"sst secret remove StripeSecret --stage production",
-							"```",
-						}, "\n"),
-					},
-					Args: []cli.Argument{
-						{
-							Name:     "name",
-							Required: true,
-							Description: cli.Description{
-								Short: "The name of the secret",
-								Long:  "The name of the secret.",
-							},
-						},
-					},
-					Examples: []cli.Example{
-						{
-							Content: "sst secret remove StripeSecret",
-							Description: cli.Description{
-								Short: "Remove the StripeSecret",
-							},
-						},
-						{
-							Content: "sst secret remove StripeSecret --stage production",
-							Description: cli.Description{
-								Short: "Remove the StripeSecret in production",
-							},
-						},
-					},
-					Run: func(c *cli.Cli) error {
-						key := c.Positional(0)
-						p, err := c.InitProject()
-						if err != nil {
-							return err
-						}
-						defer p.Cleanup()
-						backend := p.Backend()
-						secrets, err := provider.GetSecrets(backend, p.App().Name, p.App().Stage)
-						if err != nil {
-							return util.NewReadableError(err, "Could not get secrets")
-						}
-
-						// check if the secret exists
-						if _, ok := secrets[key]; !ok {
-							return util.NewReadableError(nil, fmt.Sprintf("Secret \"%s\" does not exist for stage \"%s\"", key, p.App().Stage))
-						}
-
-						delete(secrets, key)
-						err = provider.PutSecrets(backend, p.App().Name, p.App().Stage, secrets)
-						if err != nil {
-							return util.NewReadableError(err, "Could not set secret")
-						}
-						url, _ := server.Discover(p.PathConfig(), p.App().Stage)
-						if url != "" {
-							server.Deploy(c.Context, url)
-						}
-						ui.Success(fmt.Sprintf("Removed \"%s\" for stage \"%s\"", key, p.App().Stage))
-						return nil
-					},
-				},
-				{
-					Name: "list",
-					Description: cli.Description{
-						Short: "List all secrets",
-						Long: strings.Join([]string{
-							"Lists all the secrets.",
-							"",
-							"Optionally, list the secrets in a specific stage.",
-							"",
-							"```bash frame=\"none\" frame=\"none\"",
-							"sst secret list --stage production",
-							"```",
-						}, "\n"),
-					},
-					Examples: []cli.Example{
-						{
-							Content: "sst secret list --stage production",
-							Description: cli.Description{
-								Short: "List the secrets in production",
-							},
-						},
-					},
-					Run: CmdSecretList,
-				},
+				CmdSecretSet,
+				CmdSecretRemove,
+				CmdSecretLoad,
+				CmdSecretList,
 			},
 		},
 		{
@@ -887,6 +759,15 @@ var root = &cli.Command{
 					Description: cli.Description{
 						Short: "A command to run",
 						Long:  "A command to run.",
+					},
+				},
+			},
+			Flags: []cli.Flag{
+				{
+					Name: "target",
+					Description: cli.Description{
+						Short: "Target to run against",
+						Long:  "Target to run against.",
 					},
 				},
 			},
@@ -945,80 +826,7 @@ var root = &cli.Command{
 					},
 				},
 			},
-			Run: func(c *cli.Cli) error {
-				p, err := c.InitProject()
-				if err != nil {
-					return err
-				}
-				defer p.Cleanup()
-
-				backend := p.Backend()
-				links, err := provider.GetLinks(backend, p.App().Name, p.App().Stage)
-				if err != nil {
-					return err
-				}
-				var args []string
-				for _, arg := range c.Arguments() {
-					args = append(args, strings.Fields(arg)...)
-				}
-				cwd, _ := os.Getwd()
-				currentDir := cwd
-				for {
-					newPath := filepath.Join(currentDir, "node_modules", ".bin") + string(os.PathListSeparator) + os.Getenv("PATH")
-					os.Setenv("PATH", newPath)
-					parentDir := filepath.Dir(currentDir)
-					if parentDir == currentDir {
-						break
-					}
-					currentDir = parentDir
-				}
-				if len(args) == 0 {
-					args = append(args, "sh")
-				}
-				cmd := exec.Command(
-					args[0],
-					args[1:]...,
-				)
-				// Get the environment variables
-				envs := os.Environ()
-
-				// Filter the environment variables to exclude AWS_PROFILE
-				filteredEnvs := make([]string, 0, len(envs))
-				for _, val := range envs {
-					if !strings.HasPrefix(val, "AWS_PROFILE=") {
-						filteredEnvs = append(filteredEnvs, val)
-					}
-				}
-				cmd.Env = append(cmd.Env,
-					filteredEnvs...,
-				)
-				cmd.Env = append(cmd.Env,
-					fmt.Sprintf("PS1=%s/%s> ", p.App().Name, p.App().Stage),
-				)
-
-				for resource, value := range links {
-					jsonValue, err := json.Marshal(value)
-					if err != nil {
-						return err
-					}
-					envVar := fmt.Sprintf("SST_RESOURCE_%s=%s", resource, jsonValue)
-					cmd.Env = append(cmd.Env, envVar)
-				}
-				cmd.Env = append(cmd.Env, fmt.Sprintf(`SST_RESOURCE_App={"name": "%s", "stage": "%s" }`, p.App().Name, p.App().Stage))
-
-				for key, val := range p.Env() {
-					key = strings.ReplaceAll(key, "SST_", "")
-					cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, val))
-				}
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				cmd.Stdin = os.Stdin
-				err = cmd.Run()
-				if err != nil {
-					return util.NewReadableError(err, err.Error())
-				}
-				return nil
-			},
+			Run: CmdShell,
 		},
 		{
 			Name: "remove",
@@ -1088,17 +896,7 @@ var root = &cli.Command{
 				return nil
 			},
 		},
-		{
-			Name: "version",
-			Description: cli.Description{
-				Short: "Print the version of the CLI",
-				Long:  `Prints the current version of the CLI.`,
-			},
-			Run: func(cli *cli.Cli) error {
-				fmt.Println(version)
-				return nil
-			},
-		},
+		CmdVersion,
 		{
 			Name: "upgrade",
 			Description: cli.Description{
@@ -1267,5 +1065,7 @@ var root = &cli.Command{
 				},
 			},
 		},
+		CmdCert,
+		CmdDiagnostic,
 	},
 }

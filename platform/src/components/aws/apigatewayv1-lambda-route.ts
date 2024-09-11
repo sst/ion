@@ -7,39 +7,14 @@ import {
 } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Function, FunctionArgs } from "./function";
-import { ApiGatewayV1RouteArgs } from "./apigatewayv1";
 import { apigateway, lambda } from "@pulumi/aws";
+import {
+  ApiGatewayV1BaseRouteArgs,
+  createMethod,
+} from "./apigatewayv1-base-route";
+import { FunctionBuilder, functionBuilder } from "./helpers/function-builder";
 
-export interface Args extends ApiGatewayV1RouteArgs {
-  /**
-   * The API Gateway to use for the route.
-   */
-  api: Input<{
-    /**
-     * The name of the API Gateway.
-     */
-    name: Input<string>;
-    /**
-     * The ID of the API Gateway.
-     */
-    id: Input<string>;
-    /**
-     * The execution ARN of the API Gateway.
-     */
-    executionArn: Input<string>;
-  }>;
-  /**
-   * The route method.
-   */
-  method: string;
-  /**
-   * The route path.
-   */
-  path: string;
-  /**
-   * The route resource ID.
-   */
-  resourceId: Input<string>;
+export interface Args extends ApiGatewayV1BaseRouteArgs {
   /**
    * The route function.
    */
@@ -61,7 +36,7 @@ export interface Args extends ApiGatewayV1RouteArgs {
  * You'll find this component returned by the `route` method of the `ApiGatewayV1` component.
  */
 export class ApiGatewayV1LambdaRoute extends Component {
-  private readonly fn: Output<Function>;
+  private readonly fn: FunctionBuilder;
   private readonly permission: lambda.Permission;
   private readonly integration: apigateway.Integration;
 
@@ -71,7 +46,7 @@ export class ApiGatewayV1LambdaRoute extends Component {
     const self = this;
     const api = output(args.api);
 
-    const method = createMethod();
+    const method = createMethod(name, args, self);
     const fn = createFunction();
     const permission = createPermission();
     const integration = createIntegration();
@@ -80,43 +55,10 @@ export class ApiGatewayV1LambdaRoute extends Component {
     this.permission = permission;
     this.integration = integration;
 
-    function createMethod() {
-      const { method, resourceId, auth } = args;
-
-      const authArgs = output(auth).apply((auth) => {
-        if (auth?.iam) return { authorization: "AWS_IAM" };
-        else if (auth?.custom)
-          return { authorization: "CUSTOM", authorizerId: auth.custom };
-        else if (auth?.cognito)
-          return {
-            authorization: "COGNITO_USER_POOLS",
-            authorizerId: auth.cognito.authorizer,
-            authorizationScopes: auth.cognito.scopes,
-          };
-        return { authorization: "NONE" };
-      });
-
-      return authArgs.apply(
-        (authArgs) =>
-          new apigateway.Method(
-            `${name}Method`,
-            {
-              restApi: api.id,
-              resourceId: resourceId,
-              httpMethod: method,
-              authorization: authArgs.authorization,
-              authorizerId: authArgs.authorizerId,
-              authorizationScopes: authArgs.authorizationScopes,
-            },
-            { parent: self },
-          ),
-      );
-    }
-
     function createFunction() {
       const { method, path } = args;
 
-      return Function.fromDefinition(
+      return functionBuilder(
         `${name}Handler`,
         args.handler,
         {
@@ -151,7 +93,7 @@ export class ApiGatewayV1LambdaRoute extends Component {
             httpMethod: method.httpMethod,
             integrationHttpMethod: "POST",
             type: "AWS_PROXY",
-            uri: fn.nodes.function.invokeArn,
+            uri: fn.invokeArn,
           },
           { parent: self, dependsOn: [permission] },
         ),
@@ -167,7 +109,7 @@ export class ApiGatewayV1LambdaRoute extends Component {
       /**
        * The Lambda function.
        */
-      function: this.fn,
+      function: this.fn.apply((fn) => fn.getFunction()),
       /**
        * The Lambda permission.
        */

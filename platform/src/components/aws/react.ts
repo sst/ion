@@ -21,19 +21,26 @@ import { Cdn } from "./cdn.js";
 import { Bucket } from "./bucket.js";
 import { Component } from "../component.js";
 import { Link } from "../link.js";
+import { DevArgs } from "../dev.js";
 import type { Input } from "../input.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { URL_UNAVAILABLE } from "./linkable.js";
 
 export interface ReactArgs extends SsrSiteArgs {
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
+   * Configure how this component works in `sst dev`.
    *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
+   * :::note
+   * In `sst dev` your React app is run in dev mode; it's not deployed.
+   * :::
    *
-   * @default `0`
+   * Instead of deploying your React app, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   *
+   * To disable dev mode, pass in `false`.
    */
-  warm?: SsrSiteArgs["warm"];
+  dev?: false | DevArgs["dev"];
   /**
    * Permissions and the resources that the [server function](#nodes-server) in your React app needs to access. These permissions are used to create the function's IAM role.
    *
@@ -353,10 +360,12 @@ export class React extends Component implements Link.Linkable {
 
     const parent = this;
     const edge = normalizeEdge();
-    const { sitePath, partition } = prepare(args, opts);
-    if ($dev) {
+    const { sitePath, partition } = prepare(parent, args);
+    const dev = normalizeDev();
+
+    if (dev) {
       const server = createDevServer(parent, name, args);
-      this.devUrl = output(args.dev?.url ?? URL_UNAVAILABLE);
+      this.devUrl = dev.url;
       this.registerOutputs({
         _metadata: {
           mode: "placeholder",
@@ -382,20 +391,16 @@ export class React extends Component implements Link.Linkable {
             role: server.nodes.role.arn,
           },
           environment: args.environment,
-          directory: output(args.dev?.directory).apply(
-            (dir) => dir || sitePath,
-          ),
-          autostart: output(args.dev?.autostart).apply((val) => val ?? true),
-          command: output(args.dev?.command).apply(
-            (val) => val || "npm run dev",
-          ),
+          command: dev.command,
+          directory: dev.directory,
+          autostart: dev.autostart,
         },
       });
       return;
     }
 
     const { access, bucket } = createBucket(parent, name, partition, args);
-    const outputPath = buildApp(name, args, sitePath);
+    const outputPath = buildApp(parent, name, args, sitePath);
     const buildMeta = loadBuildMetadata();
     const plan = buildPlan();
     const { distribution, ssrFunctions, edgeFunctions } =
@@ -426,6 +431,19 @@ export class React extends Component implements Link.Linkable {
       },
     });
 
+    function normalizeDev() {
+      if (!$dev) return undefined;
+      if (args.dev === false) return undefined;
+
+      return {
+        ...args.dev,
+        url: output(args.dev?.url ?? URL_UNAVAILABLE),
+        command: output(args.dev?.command ?? "npm run dev"),
+        autostart: output(args.dev?.autostart ?? true),
+        directory: output(args.dev?.directory ?? sitePath),
+      };
+    }
+
     function normalizeEdge() {
       return output(args?.edge).apply((edge) => edge ?? false);
     }
@@ -444,12 +462,10 @@ export class React extends Component implements Link.Linkable {
             : undefined,
           // create 1 behaviour for each top level asset file/folder
           staticRoutes: fs
-            .readdirSync(path.join(outputPath, assetsPath))
-            .map((item) =>
-              fs.statSync(path.join(outputPath, assetsPath, item)).isDirectory()
-                ? `${item}/*`
-                : item,
-            ),
+            .readdirSync(path.join(outputPath, assetsPath), {
+              withFileTypes: true,
+            })
+            .map((item) => (item.isDirectory() ? `${item.name}/*` : item.name)),
         };
       });
     }

@@ -13,17 +13,16 @@ import (
 	"os"
 	"time"
 
+	"github.com/sst/ion/pkg/flag"
 	"golang.org/x/exp/slog"
 	"golang.org/x/sync/errgroup"
 )
 
 type Home interface {
-	Bootstrap(app, stage string) error
-
+	Bootstrap() error
 	getData(key, app, stage string) (io.Reader, error)
 	putData(key, app, stage string, data io.Reader) error
 	removeData(key, app, stage string) error
-
 	setPassphrase(app, stage string, passphrase string) error
 	getPassphrase(app, stage string) (string, error)
 }
@@ -62,6 +61,23 @@ var ErrLockExists = fmt.Errorf("Concurrent update detected, run `sst unlock` to 
 
 var passphraseCache = map[Home]map[string]string{}
 
+func Copy(from Home, to Home, app, stage string) error {
+	reader, err := from.getData("app", app, stage)
+	if err != nil {
+		return err
+	}
+	err = to.putData("app", app, stage, reader)
+	if err != nil {
+		return err
+	}
+	reader, err = from.getData("secret", app, stage)
+	if err != nil {
+		return err
+	}
+	to.putData("secret", app, stage, reader)
+	return nil
+}
+
 func Passphrase(backend Home, app, stage string) (string, error) {
 	slog.Info("getting passphrase", "app", app, "stage", stage)
 
@@ -83,12 +99,15 @@ func Passphrase(backend Home, app, stage string) (string, error) {
 
 	if passphrase == "" {
 		slog.Info("passphrase not found, setting passphrase", "app", app, "stage", stage)
-		bytes := make([]byte, 32)
-		_, err := rand.Read(bytes)
-		if err != nil {
-			return "", err
+		passphrase = flag.SST_PASSPHRASE
+		if passphrase == "" {
+			bytes := make([]byte, 32)
+			_, err := rand.Read(bytes)
+			if err != nil {
+				return "", err
+			}
+			passphrase = base64.StdEncoding.EncodeToString(bytes)
 		}
-		passphrase = base64.StdEncoding.EncodeToString(bytes)
 		err = backend.setPassphrase(app, stage, passphrase)
 		if err != nil {
 			return "", err
@@ -97,15 +116,6 @@ func Passphrase(backend Home, app, stage string) (string, error) {
 
 	existingPassphrase, ok = cache[app+stage]
 	return passphrase, nil
-}
-
-func GetLinks(backend Home, app, stage string) (map[string]interface{}, error) {
-	data := map[string]interface{}{}
-	err := getData(backend, "link", app, stage, true, &data)
-	if err != nil {
-		return nil, err
-	}
-	return data, err
 }
 
 type Summary struct {
@@ -125,14 +135,6 @@ type SummaryError struct {
 	Message string `json:"message"`
 }
 
-func PutLinks(backend Home, app, stage string, data map[string]interface{}) error {
-	slog.Info("putting links", "app", app, "stage", stage)
-	if data == nil || len(data) == 0 {
-		return nil
-	}
-	return putData(backend, "link", app, stage, true, data)
-}
-
 func PutSummary(backend Home, app, stage, updateID string, summary Summary) error {
 	slog.Info("putting summary", "app", app, "stage", stage)
 	return putData(backend, "summary", app, stage+"/"+updateID, false, summary)
@@ -140,6 +142,9 @@ func PutSummary(backend Home, app, stage, updateID string, summary Summary) erro
 }
 
 func GetSecrets(backend Home, app, stage string) (map[string]string, error) {
+	if stage == "" {
+		stage = "_fallback"
+	}
 	data := map[string]string{}
 	err := getData(backend, "secret", app, stage, true, &data)
 	if err != nil {
@@ -149,6 +154,9 @@ func GetSecrets(backend Home, app, stage string) (map[string]string, error) {
 }
 
 func PutSecrets(backend Home, app, stage string, data map[string]string) error {
+	if stage == "" {
+		stage = "_fallback"
+	}
 	slog.Info("putting secrets", "app", app, "stage", stage)
 	if data == nil {
 		return nil
@@ -166,6 +174,10 @@ func PushState(backend Home, updateID string, app, stage string, from string) er
 	fileBytes, err := io.ReadAll(file)
 	if err != nil {
 		return err
+	}
+	err = json.Unmarshal(fileBytes, &map[string]interface{}{})
+	if err != nil {
+		return fmt.Errorf("somoething has corrupted the state file - refusing to upload: %w", err)
 	}
 	group.Go(func() error {
 		return backend.putData("app", app, stage, bytes.NewReader(fileBytes))

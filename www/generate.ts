@@ -172,7 +172,7 @@ function generateCliDoc() {
           `#### Args`,
           ...cmd.args.flatMap((a) => [
             `- <p><code class="key">${renderCliArgName(a)}</code></p>`,
-            renderCliDescription(a.description),
+            `<p>${renderCliDescription(a.description)}</p>`,
           ]),
           `</Section>`
         );
@@ -188,7 +188,7 @@ function generateCliDoc() {
             `- <p><code class="key">${f.name}</code> ${renderCliFlagType(
               f.type
             )}</p>`,
-            renderCliDescription(f.description),
+            `<p>${renderCliDescription(f.description)}</p>`,
           ]),
           `</Section>`
         );
@@ -237,7 +237,7 @@ function generateCliDoc() {
               `#### Args`,
               ...subcmd.args.flatMap((a) => [
                 `- <p><code class="key">${a.name}</code></p>`,
-                renderCliDescription(a.description),
+                `<p>${renderCliDescription(a.description)}</p>`,
               ]),
               `</Section>`
             );
@@ -250,7 +250,7 @@ function generateCliDoc() {
               `#### Flags`,
               ...subcmd.flags.flatMap((f) => [
                 `- <p><code class="key">${f.name}</code></p>`,
-                renderCliDescription(f.description),
+                `<p>${renderCliDescription(f.description)}</p>`,
               ]),
               `</Section>`
             );
@@ -416,6 +416,9 @@ async function generateDnsDoc(module: TypeDoc.DeclarationReflection) {
       vercel: "Vercel",
     }[dnsProvider] || dnsProvider;
 
+  const dir = path.dirname(outputFilePath);
+  fs.mkdirSync(dir, { recursive: true });
+
   fs.writeFileSync(
     outputFilePath,
     [
@@ -440,31 +443,31 @@ async function generateDnsDoc(module: TypeDoc.DeclarationReflection) {
 
 async function generateLinkableDoc(module: TypeDoc.DeclarationReflection) {
   const name = module.name.split("/")[1];
-  console.log({ name });
-  console.log(module.name);
   const sourceFile = module.sources![0].fileName;
-  console.log({ sourceFile });
   const outputFilePath = path.join(
     "src/content/docs/docs/component",
     `${module.name.split("/").slice(1).join("/")}.mdx`
   );
   const copy = {
     "components/aws/permission": {
-      title: "AWS Permission",
+      title: "AWS",
       namespace: "sst.aws.permission",
     },
     "components/cloudflare/binding": {
-      title: "Cloudflare Binding",
+      title: "Cloudflare",
       namespace: "sst.cloudflare.binding",
     },
   }[module.name]!;
+
+  const dir = path.dirname(outputFilePath);
+  fs.mkdirSync(dir, { recursive: true });
 
   fs.writeFileSync(
     outputFilePath,
     [
       renderHeader(
-        `${copy.title} Linkable Adapter`,
-        `Reference doc for the \`${copy.namespace}\` adapter.`
+        `${copy.title} Linkable helper`,
+        `Reference doc for the \`${copy.namespace}\` helper.`
       ),
       renderSourceMessage(sourceFile),
       renderImports(outputFilePath),
@@ -488,6 +491,9 @@ async function generateComponentDoc(
   console.info(`Generating ${component.name}...`);
   const sourceFile = component.sources![0].fileName;
   const className = useClassName(component);
+  const fullClassName = `${useClassProviderNamespace(component)}.${className}`;
+  const matchRet = component.name.match(/-(v\d+)$/);
+  const version = matchRet ? `.${matchRet[1]}` : "";
 
   // Remove leading `components/`
   // module.name = "components/aws/bucket"
@@ -497,20 +503,23 @@ async function generateComponentDoc(
     `${component.name.split("/").slice(1).join("/")}.mdx`
   );
 
+  const dir = path.dirname(outputFilePath);
+  fs.mkdirSync(dir, { recursive: true });
+
   fs.writeFileSync(
     outputFilePath,
     [
       renderHeader(
-        useClassName(component),
-        `Reference doc for the \`${useClassProviderNamespace(
-          component
-        )}.${className}\` component.`
+        useClassName(component) + version,
+        `Reference doc for the \`${fullClassName + version}\` component.`
       ),
       renderSourceMessage(sourceFile),
       renderImports(outputFilePath),
       renderBodyBegin(),
       renderAbout(useClassComment(component)),
-      renderConstructor(component),
+      renderConstructor(component)
+        .join("\n")
+        .replace(`new ${className}`, `new ${className}${version}`),
       renderInterfacesAtH2Level(component, {
         filter: (c) => c.name === `${className}Args`,
       }),
@@ -753,6 +762,11 @@ function renderType(
     if (linkableProvider) {
       return `[<code class="type">${linkableProvider.namespace}</code>](/docs/component/${linkableProvider.doc})`;
     }
+    if (type.name === "FunctionArn") {
+      return [
+        `<code class="primitive">\`arn:aws:lambda:\${string}\`</code>`,
+      ].join("");
+    }
     // types in the same doc (links to the class ie. `subscribe()` return type)
     if (isModuleComponent(module) && type.name === useClassName(module)) {
       return `[<code class="type">${type.name}</code>](.)`;
@@ -766,9 +780,12 @@ function renderType(
     // types in different doc
     const externalModule = {
       ApiGatewayV1Authorizer: "apigatewayv1-authorizer",
+      ApiGatewayV1IntegrationArgs: "apigatewayv1",
+      ApiGatewayV1IntegrationRoute: "apigatewayv1-integration-route",
       ApiGatewayV1LambdaRoute: "apigatewayv1-lambda-route",
       ApiGatewayV2Authorizer: "apigatewayv2-authorizer",
       ApiGatewayV2LambdaRoute: "apigatewayv2-lambda-route",
+      ApiGatewayV2PrivateRoute: "apigatewayv2-private-route",
       ApiGatewayV2UrlRoute: "apigatewayv2-url-route",
       ApiGatewayWebSocketRoute: "apigateway-websocket-route",
       AppSyncDataSource: "app-sync-data-source",
@@ -777,8 +794,11 @@ function renderType(
       Bucket: "bucket",
       BucketArgs: "bucket",
       BucketLambdaSubscriber: "bucket-lambda-subscriber",
+      BucketQueueSubscriber: "bucket-queue-subscriber",
+      BucketTopicSubscriber: "bucket-topic-subscriber",
       Cdn: "cdn",
       CdnArgs: "cdn",
+      CognitoIdentityProvider: "cognito-identity-provider",
       CognitoUserPoolClient: "cognito-user-pool-client",
       DynamoLambdaSubscriber: "dynamo-lambda-subscriber",
       Function: "function",
@@ -1303,6 +1323,9 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
 
   // Filter out private `properties`
   const propertiesType = properties.type as TypeDoc.ReflectionType;
+  if (propertiesType.declaration === undefined) {
+    console.log(properties);
+  }
   const links = (propertiesType.declaration.children || []).filter(
     (c) => !c.comment?.modifierTags.has("@internal")
   );
@@ -1887,24 +1910,6 @@ function patchCode() {
       "\ntype AwsPermission = {};\n" +
       "\ntype CloudflareBinding = {};\n"
   );
-  // patch Cloudflare Binding
-  fs.cpSync(
-    "../platform/src/components/cloudflare/binding.ts",
-    "../platform/src/components/cloudflare/binding.ts.bk"
-  );
-  fs.writeFileSync(
-    "../platform/src/components/cloudflare/binding.ts",
-    fs
-      .readFileSync("../platform/src/components/cloudflare/binding.ts")
-      .toString()
-      .trim()
-      // replace generic <Properties>
-      .replace("type: T", "type: string")
-      .replace(
-        `properties: Extract<Binding, { type: T }>["properties"]`,
-        "properties: Record<string, any>"
-      )
-  );
 }
 
 function restoreCode() {
@@ -1919,11 +1924,6 @@ function restoreCode() {
   fs.renameSync(
     "../platform/src/components/linkable.ts.bk",
     "../platform/src/components/linkable.ts"
-  );
-  // restore Cloudflare Binding
-  fs.renameSync(
-    "../platform/src/components/cloudflare/binding.ts.bk",
-    "../platform/src/components/cloudflare/binding.ts"
   );
 }
 
@@ -1940,61 +1940,67 @@ async function buildComponents() {
       "../platform/src/config.ts",
       "../platform/src/global-config.d.ts",
       "../platform/src/components/linkable.ts",
-      //"../platform/src/components/secret.ts",
-      //"../platform/src/components/aws/apigateway-websocket.ts",
-      //"../platform/src/components/aws/apigateway-websocket-route.ts",
-      //"../platform/src/components/aws/apigatewayv1.ts",
-      //"../platform/src/components/aws/apigatewayv1-authorizer.ts",
-      //"../platform/src/components/aws/apigatewayv1-lambda-route.ts",
-      //"../platform/src/components/aws/apigatewayv2.ts",
-      //"../platform/src/components/aws/apigatewayv2-authorizer.ts",
-      //"../platform/src/components/aws/apigatewayv2-lambda-route.ts",
-      //"../platform/src/components/aws/apigatewayv2-url-route.ts",
-      //"../platform/src/components/aws/app-sync.ts",
-      //"../platform/src/components/aws/app-sync-data-source.ts",
-      //"../platform/src/components/aws/app-sync-function.ts",
-      //"../platform/src/components/aws/app-sync-resolver.ts",
-      //"../platform/src/components/aws/bucket.ts",
-      //"../platform/src/components/aws/bucket-lambda-subscriber.ts",
-      //"../platform/src/components/aws/cluster.ts",
-      //"../platform/src/components/aws/cognito-identity-pool.ts",
-      //"../platform/src/components/aws/cognito-user-pool.ts",
-      //"../platform/src/components/aws/cognito-user-pool-client.ts",
-      //"../platform/src/components/aws/cron.ts",
-      //"../platform/src/components/aws/dynamo.ts",
-      //"../platform/src/components/aws/dynamo-lambda-subscriber.ts",
-      //"../platform/src/components/aws/email.ts",
-      //"../platform/src/components/aws/function.ts",
-      //"../platform/src/components/aws/postgres.ts",
-      //"../platform/src/components/aws/vector.ts",
-      //"../platform/src/components/aws/astro.ts",
-      //"../platform/src/components/aws/nextjs.ts",
-      //"../platform/src/components/aws/nuxt.ts",
-      //"../platform/src/components/aws/realtime.ts",
-      //"../platform/src/components/aws/realtime-lambda-subscriber.ts",
-      //"../platform/src/components/aws/remix.ts",
-      //"../platform/src/components/aws/queue.ts",
-      //"../platform/src/components/aws/queue-lambda-subscriber.ts",
-      //"../platform/src/components/aws/kinesis-stream.ts",
-      //"../platform/src/components/aws/kinesis-stream-lambda-subscriber.ts",
-      //"../platform/src/components/aws/router.ts",
-      //"../platform/src/components/aws/service.ts",
-      //"../platform/src/components/aws/sns-topic.ts",
-      //"../platform/src/components/aws/sns-topic-lambda-subscriber.ts",
-      //"../platform/src/components/aws/sns-topic-queue-subscriber.ts",
-      //"../platform/src/components/aws/solid-start.ts",
-      //"../platform/src/components/aws/static-site.ts",
-      //"../platform/src/components/aws/svelte-kit.ts",
-      //"../platform/src/components/aws/vpc.ts",
-      //"../platform/src/components/cloudflare/worker.ts",
-      //"../platform/src/components/cloudflare/bucket.ts",
-      //"../platform/src/components/cloudflare/d1.ts",
-      //"../platform/src/components/cloudflare/kv.ts",
-      //// internal
-      //"../platform/src/components/aws/dns.ts",
-      //"../platform/src/components/cloudflare/dns.ts",
-      //"../platform/src/components/vercel/dns.ts",
-      //"../platform/src/components/aws/cdn.ts",
+      "../platform/src/components/secret.ts",
+      "../platform/src/components/aws/apigateway-websocket.ts",
+      "../platform/src/components/aws/apigateway-websocket-route.ts",
+      "../platform/src/components/aws/apigatewayv1.ts",
+      "../platform/src/components/aws/apigatewayv1-authorizer.ts",
+      "../platform/src/components/aws/apigatewayv1-integration-route.ts",
+      "../platform/src/components/aws/apigatewayv1-lambda-route.ts",
+      "../platform/src/components/aws/apigatewayv2.ts",
+      "../platform/src/components/aws/apigatewayv2-authorizer.ts",
+      "../platform/src/components/aws/apigatewayv2-lambda-route.ts",
+      "../platform/src/components/aws/apigatewayv2-private-route.ts",
+      "../platform/src/components/aws/apigatewayv2-url-route.ts",
+      "../platform/src/components/aws/app-sync.ts",
+      "../platform/src/components/aws/app-sync-data-source.ts",
+      "../platform/src/components/aws/app-sync-function.ts",
+      "../platform/src/components/aws/app-sync-resolver.ts",
+      "../platform/src/components/aws/bucket.ts",
+      "../platform/src/components/aws/bucket-lambda-subscriber.ts",
+      "../platform/src/components/aws/bucket-queue-subscriber.ts",
+      "../platform/src/components/aws/bucket-topic-subscriber.ts",
+      "../platform/src/components/aws/cluster.ts",
+      "../platform/src/components/aws/cognito-identity-pool.ts",
+      "../platform/src/components/aws/cognito-identity-provider.ts",
+      "../platform/src/components/aws/cognito-user-pool.ts",
+      "../platform/src/components/aws/cognito-user-pool-client.ts",
+      "../platform/src/components/aws/cron.ts",
+      "../platform/src/components/aws/dynamo.ts",
+      "../platform/src/components/aws/dynamo-lambda-subscriber.ts",
+      "../platform/src/components/aws/email.ts",
+      "../platform/src/components/aws/function.ts",
+      "../platform/src/components/aws/postgres.ts",
+      "../platform/src/components/aws/vector.ts",
+      "../platform/src/components/aws/astro.ts",
+      "../platform/src/components/aws/nextjs.ts",
+      "../platform/src/components/aws/nuxt.ts",
+      "../platform/src/components/aws/realtime.ts",
+      "../platform/src/components/aws/realtime-lambda-subscriber.ts",
+      "../platform/src/components/aws/remix.ts",
+      "../platform/src/components/aws/queue.ts",
+      "../platform/src/components/aws/queue-lambda-subscriber.ts",
+      "../platform/src/components/aws/kinesis-stream.ts",
+      "../platform/src/components/aws/kinesis-stream-lambda-subscriber.ts",
+      "../platform/src/components/aws/router.ts",
+      "../platform/src/components/aws/service.ts",
+      "../platform/src/components/aws/sns-topic.ts",
+      "../platform/src/components/aws/sns-topic-lambda-subscriber.ts",
+      "../platform/src/components/aws/sns-topic-queue-subscriber.ts",
+      "../platform/src/components/aws/solid-start.ts",
+      "../platform/src/components/aws/static-site.ts",
+      "../platform/src/components/aws/svelte-kit.ts",
+      "../platform/src/components/aws/vpc.ts",
+      "../platform/src/components/aws/vpc-v1.ts",
+      "../platform/src/components/cloudflare/worker.ts",
+      "../platform/src/components/cloudflare/bucket.ts",
+      "../platform/src/components/cloudflare/d1.ts",
+      "../platform/src/components/cloudflare/kv.ts",
+      // internal
+      "../platform/src/components/aws/dns.ts",
+      "../platform/src/components/cloudflare/dns.ts",
+      "../platform/src/components/vercel/dns.ts",
+      "../platform/src/components/aws/cdn.ts",
       "../platform/src/components/aws/permission.ts",
       "../platform/src/components/cloudflare/binding.ts",
     ],

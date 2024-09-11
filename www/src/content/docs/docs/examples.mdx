@@ -58,6 +58,59 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-apig-au
 
 
 ---
+## Bucket policy
+
+Create an S3 bucket and transform its bucket policy.
+```ts title="sst.config.ts"
+const bucket = new sst.aws.Bucket("MyBucket", {
+  transform: {
+    policy: (args) => {
+      // use $jsonParse and $jsonStringify helper functions to manipulate JSON strings
+      // containing Output values from components
+      args.policy = $jsonParse(args.policy).apply((policy) => {
+        policy.Statement.push({
+          Effect: "Allow",
+          Principal: { Service: "ses.amazonaws.com" },
+          Action: "s3:PutObject",
+          Resource: $interpolate`arn:aws:s3:::${args.bucket}/*`,
+        });
+        return $jsonStringify(policy);
+      });
+    },
+  },
+});
+
+return {
+  bucket: bucket.name,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-bucket-policy).
+
+
+---
+## Bucket queue notifications
+
+Create an S3 bucket and subscribe to its events with an SQS queue.
+```ts title="sst.config.ts"
+const queue = new sst.aws.Queue("MyQueue");
+queue.subscribe("subscriber.handler");
+
+const bucket = new sst.aws.Bucket("MyBucket");
+bucket.subscribeQueue(queue.arn, {
+  events: ["s3:ObjectCreated:*"],
+});
+
+return {
+  bucket: bucket.name,
+  queue: queue.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-bucket-queue-subscriber).
+
+
+---
 ## Bucket notifications
 
 Create an S3 bucket and subscribe to its events with a function.
@@ -73,6 +126,59 @@ return {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-bucket-subscriber).
+
+
+---
+## Bucket topic notifications
+
+Create an S3 bucket and subscribe to its events with an SNS topic.
+```ts title="sst.config.ts"
+const topic = new sst.aws.SnsTopic("MyTopic");
+topic.subscribe("subscriber.handler");
+
+const bucket = new sst.aws.Bucket("MyBucket");
+bucket.subscribeTopic(topic.arn, {
+  events: ["s3:ObjectCreated:*"],
+});
+
+return {
+  bucket: bucket.name,
+  topic: topic.name,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-bucket-topic-subscriber).
+
+
+---
+## Subscribe to queues
+
+Create an SQS queue, subscribe to it, and publish to it from a function.
+```ts title="sst.config.ts"
+// create dead letter queue
+const dlq = new sst.aws.Queue("DeadLetterQueue");
+dlq.subscribe("subscriber.dlq");
+
+// create main queue
+const queue = new sst.aws.Queue("MyQueue", {
+  dlq: dlq.arn,
+});
+queue.subscribe("subscriber.main");
+
+const app = new sst.aws.Function("MyApp", {
+  handler: "publisher.handler",
+  link: [queue],
+  url: true,
+});
+
+return {
+  app: app.url,
+  queue: queue.url,
+  dlq: dlq.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-dead-letter-queue).
 
 
 ---
@@ -114,6 +220,57 @@ return {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-dynamo).
+
+
+---
+## FFmpeg in Lambda
+
+Uses [FFmpeg](https://ffmpeg.org/) to process videos. In this example, it takes a `clip.mp4`
+and grabs a single frame from it.
+
+:::tip
+You don't need to use a Lambda layer to use FFmpeg.
+:::
+
+We use the [`ffmpeg-static`](https://www.npmjs.com/package/ffmpeg-static) package that
+contains pre-built binaries for all architectures.
+
+```ts title="index.ts"
+import ffmpeg from "ffmpeg-static";
+```
+
+We can use this to spawn a child process and run FFmpeg.
+
+```ts title="index.ts"
+spawnSync(ffmpeg, ffmpegParams, { stdio: "pipe" });
+```
+
+We don't need a layer when we deploy this because SST will use the right binary for the
+target Lambda architecture; including `arm64`.
+
+```json title="sst.config.ts"
+{
+  nodejs: { install: ["ffmpeg-static"] }
+}
+```
+
+All this is handled by [`nodejs.install`](/docs/component/aws/function#nodejs-install).
+```ts title="sst.config.ts"
+const func = new sst.aws.Function("MyFunction", {
+  url: true,
+  memory: "2 GB",
+  timeout: "15 minutes",
+  handler: "index.handler",
+  copyFiles: [{ from: "clip.mp4" }],
+  nodejs: { install: ["ffmpeg-static"] },
+});
+
+return {
+  url: func.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-ffmpeg).
 
 
 ---
@@ -190,22 +347,21 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-info).
 
 Create a Kinesis stream, and subscribe to it with a function.
 ```ts title="sst.config.ts"
-const stream = new sst.aws.Kinesis("MyStream");
-stream.subscribe("subscriber.handler");
-stream.subscribe(
-  {
-    handler: "subscriber-with-filter.handler",
-  },
-  {
-    filters: [
-      {
-        data: {
-          type: ["filter"],
-        },
+const stream = new sst.aws.KinesisStream("MyStream");
+
+// Create a function subscribing to all events
+stream.subscribe("subscriber.all");
+
+// Create a function subscribing to events of `bar` type
+stream.subscribe("subscriber.filtered", {
+  filters: [
+    {
+      data: {
+        type: ["bar"],
       },
-    ],
-  }
-);
+    },
+  ],
+});
 
 const app = new sst.aws.Function("MyApp", {
   handler: "publisher.handler",
@@ -216,125 +372,243 @@ const app = new sst.aws.Function("MyApp", {
 return {
   app: app.url,
   stream: stream.name,
-  streamArn: stream.arn,
 };
 ```
 
-View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-kinesis).
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-kinesis-stream).
 
 
 ---
-## AWS monorepo
+## AWS multi-region
 
-A full-stack TypeScript monorepo template that deploys a frontend, a database, and an API
-to AWS.
+To deploy resources to multiple AWS regions, you can create a new provider for the region
+you want to deploy to.
 
-While, [drop-in mode](/docs/#drop-in-mode) is great for simple projects, we recommend using
-this template for projects that are going to have multiple packages. 
-
-#### Project structure
-
-The app is split into the separate `packages/` and an `infra/` directory.
-
-```txt {2}
-my-sst-app
-├─ sst.config.ts
-├─ package.json
-├─ packages
-│  ├─ functions
-│  ├─ frontend
-│  ├─ scripts
-│  └─ core
-└─ infra
+```ts title="sst.config.ts"
+const provider = new aws.Provider("MyProvider", { region: "us-west-2" });
 ```
 
-The `packages/` directory includes the following:
+And then pass that in to the resource.
 
-- `core/`
-
-  This directory includes shared code that can be used by other packages. These are
-  defined as modules. For example, we have an `Example` module.
-
-  ```ts title="packages/core/src/example/index.ts"
-  export module Example {
-    export function hello() {
-      return "Hello, world!";
-    }
-  }
-  ```
-
-  We exports this using the following in the `package.json`:
-
-  ```json title="packages/core/package.json"
-  "exports": {
-    "./*": [
-      "./src/*/index.ts",
-      "./src/*.ts"
-    ]
-  }
-  ```
-
-  This will allow us to import the `Example` module by doing:
-
-  ```ts
-  import { Example } from "@aws-monorepo/core/example";
-
-  Example.hello();
-  ```
-
-- `functions/`
-
-  This directory includes our Lambda funcitons. It imports from the `core/`
-  package by using it as a local dependency.
-
-- `frontend/`
-
-  This directory includes a simple Vite app. It references environment variables
-  from our app and is started locally using.
-
-  ```json title="packages/frontend/package.json"
-  "scripts": {
-    "dev": "sst dev vite dev"
-  }
-  ```
-
-- `scripts/`
-
-  This directory includes scripts that you can run on your SST app using the `sst shell` CLI
-  and [`tsx`](https://www.npmjs.com/package/tsx). For example, to the run the example
-  `scripts/src/example.ts`, run the following from `packages/scripts/`.
-
-  ```bash
-  npm run shell src/example.ts
-  ```
-  
- #### Infrastructure
-
- The `infra/` directory allows you to logically split the infrastructure of your app into
- separate files. This can be helpful as your app grows.
-
- In the template, we have an `api.ts`, `database.ts`, and `frontend.ts`. These export
- resources that can be used in the other infrastructure files.
-
- They are also re-exported in the `infra/index.ts` file.
-
- ```ts title="infra/index.ts"
- export * from "./api";
- export * from "./database";
- export * from "./frontend";
- ```
-
- And to use them in your `sst.config.ts` we do an dynamic import. This ensures that the
- infrastructure is only created in the `run` function.
 ```ts title="sst.config.ts"
-const infra = await import("./infra");
+new sst.aws.Function("MyFunction", { handler: "index.handler" }, { provider });
+```
+
+If no provider is passed in, the default provider will be used. And if no region is
+specified, the default region from your credentials will be used.
+```ts title="sst.config.ts"
+const east = new sst.aws.Function("MyEastFunction", {
+  url: true,
+  handler: "index.handler",
+});
+
+const provider = new aws.Provider("MyWestProvider", { region: "us-west-2" });
+const west = new sst.aws.Function(
+  "MyWestFunction",
+  {
+    url: true,
+    handler: "index.handler",
+  },
+  { provider }
+);
 
 return {
-  api: infra.api.url,
+  east: east.url,
+  west: west.url,
 };
 ```
 
-View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-monorepo).
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-multi-region).
+
+
+---
+## Prisma in Lambda
+
+To use Prisma in a Lambda function you need to
+
+- Generate the Prisma Client with the right architecture
+- Copy the generated client to the function
+- Run the function inside a VPC
+
+You can set the architecture using the `binaryTargets` option in `prisma/schema.prisma`.
+
+```prisma title="prisma/schema.prisma"
+// For x86
+binaryTargets = ["native", "rhel-openssl-3.0.x"]
+// For ARM
+// binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
+```
+
+You can also switch to ARM, just make sure to also change the function architecture in your
+`sst.config.ts`.
+
+```ts title="sst.config.ts"
+{
+  // For ARM
+  architecture: "arm64"
+}
+```
+
+To generate the client, you need to run `prisma generate` when you make changes to the
+schema.
+
+Since this [needs to be done on every deploy](https://www.prisma.io/docs/orm/more/help-and-troubleshooting/help-articles/vercel-caching-issue#a-custom-postinstall-script), we add a `postinstall` script to the `package.json`.
+
+```json title="package.json"
+"scripts": {
+  "postinstall": "prisma generate"
+}
+```
+
+This runs the command when you run `npm install`.
+
+Finally we need to copy the generated client to the function when we deploy.
+
+```ts title="sst.config.ts"
+{
+  copyFiles: [{ from: "node_modules/.prisma/client/" }]
+}
+```
+
+Our function also needs to run inside a VPC, since Prisma doesn't support the Data API.
+
+```ts title="sst.config.ts"
+{
+  vpc
+}
+```
+
+#### Prisma in serverless environments
+
+Prisma unfortunately is [not great in serverless environments](https://www.prisma.io/docs/orm/prisma-client/setup-and-configuration/databases-connections#serverless-environments-faas). For a couple of reasons:
+
+1. It doesn't support Data API, so you need to manage the connection pool on your own.
+2. Without the Data API, your functions need to run inside a VPC.
+   - You cannot use `sst dev` without [connecting to the VPC](/docs/live#using-a-vpc).
+3. Due to the internal architecture of their client, it's also has slower cold starts.
+
+Instead we recommend using Drizzle. This example is here for reference for people that are
+already using Prisma.
+```ts title="sst.config.ts"
+const vpc = new sst.aws.Vpc("MyVpc", { nat: "managed" });
+const rds = new sst.aws.Postgres("MyPostgres", { vpc });
+
+const api = new sst.aws.Function("MyApi", {
+  vpc,
+  url: true,
+  link: [rds],
+  // For ARM
+  // architecture: "arm64",
+  handler: "index.handler",
+  copyFiles: [{ from: "node_modules/.prisma/client/" }],
+});
+
+return {
+  api: api.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-prisma).
+
+
+---
+## Puppeteer in Lambda
+
+To use Puppeteer in a Lambda function you need:
+
+1. [`puppeteer-core`](https://www.npmjs.com/package/puppeteer-core)
+2. Chromium
+   - In `sst dev`, we'll use a locally installed Chromium version.
+   - In `sst deploy`, we'll use the [`@sparticuz/chromium`](https://github.com/sparticuz/chromium) package. It comes with a pre-built binary for Lambda.
+
+#### Chromium version
+
+Since Puppeteer has a preferred version of Chromium, we'll need to check the version of
+Chrome that a given version of Puppeteer supports. Head over to the
+[Puppeteer's Chromium Support page](https://pptr.dev/chromium-support) and check which
+versions work together.
+
+For example, Puppeteer v23.1.1 supports Chrome for Testing 127.0.6533.119. So, we'll use the
+v127 of `@sparticuz/chromium`.
+
+```bash
+npm install puppeteer-core@23.1.1 @sparticuz/chromium@127.0.0
+```
+
+#### Install Chromium locally
+
+To use this locally, you'll need to install Chromium.
+
+```bash
+npx @puppeteer/browsers install chromium@latest --path /tmp/localChromium
+```
+
+Once installed you'll see the location of the Chromium binary, `/tmp/localChromium/chromium/mac_arm-1350406/chrome-mac/Chromium.app/Contents/MacOS/Chromium`.
+
+Update this in your Lambda function.
+
+```ts title="index.ts"
+// This is the path to the local Chromium binary
+const YOUR_LOCAL_CHROMIUM_PATH = "/tmp/localChromium/chromium/mac_arm-1350406/chrome-mac/Chromium.app/Contents/MacOS/Chromium";
+```
+
+You'll notice we are using the right binary with the `SST_DEV` environment variable.
+
+```ts title="index.ts" {4-6}
+const browser = await puppeteer.launch({
+  args: chromium.args,
+  defaultViewport: chromium.defaultViewport,
+  executablePath: process.env.SST_DEV
+    ? YOUR_LOCAL_CHROMIUM_PATH
+    : await chromium.executablePath(),
+  headless: chromium.headless,
+});
+```
+
+#### Deploy
+
+We don't need a layer to deploy this because `@sparticuz/chromium` comes with a pre-built
+binary for Lambda.
+
+:::note
+As of writing this, `arm64` is not supported by `@sparticuz/chromium`.
+:::
+
+We just need to set it in the [`nodejs.install`](/docs/component/aws/function#nodejs-install).
+
+```ts title="sst.config.ts"
+{
+  nodejs: {
+    install: ["@sparticuz/chromium"]
+  }
+}
+```
+
+And on deploy, SST will use the right binary.
+
+:::tip
+You don't need to use a Lambda layer to use Puppeteer.
+:::
+
+We are giving our function more memory and a longer timeout since running Puppeteer can
+take a while.
+```ts title="sst.config.ts"
+const api = new sst.aws.Function("MyFunction", {
+  url: true,
+  memory: "2 GB",
+  timeout: "15 minutes",
+  handler: "index.handler",
+  nodejs: {
+    install: ["@sparticuz/chromium"],
+  },
+});
+
+return {
+  url: api.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-puppeteer).
 
 
 ---
@@ -390,6 +664,53 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-router)
 
 
 ---
+## Sharp in Lambda
+
+Uses the [Sharp](https://sharp.pixelplumbing.com/) library to resize images. In this example,
+it resizes a `logo.png` local file to 100x100 pixels.
+
+```json title="sst.config.ts"
+{
+  nodejs: { install: ["sharp"] }
+}
+```
+
+We don't need a layer to deploy this because `sharp` comes with a pre-built binary for Lambda.
+This is handled by [`nodejs.install`](/docs/component/aws/function#nodejs-install).
+
+:::tip
+You don't need to use a Lambda layer to use Sharp.
+:::
+
+In dev, this uses the sharp npm package locally.
+
+```json title="package.json"
+{
+  "dependencies": {
+    "sharp": "^0.33.5"
+  }
+}
+```
+
+On deploy, SST will use the right binary from the sharp package for the target Lambda
+architecture.
+```ts title="sst.config.ts"
+const func = new sst.aws.Function("MyFunction", {
+  url: true,
+  handler: "index.handler",
+  nodejs: { install: ["sharp"] },
+  copyFiles: [{ from: "logo.png" }],
+});
+
+return {
+  url: func.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-sharp).
+
+
+---
 ## Simple static site
 
 Deploy a simple HTML file as a static site with S3 and CloudFront.
@@ -404,7 +725,7 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-static-
 
 
 ---
-## Swift on Lambda
+## Swift in Lambda
 
 Deploys a simple Swift application to Lambda using the `al2023` runtime.
 
@@ -433,6 +754,100 @@ return {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-swift).
+
+
+---
+## T3 Stack in AWS
+
+Deploy [T3 stack](https://create.t3.gg) with Drizzle and Postgres to AWS. To use this
+example run:
+
+```bash
+npm install
+npm run db:push
+npx sst dev
+```
+
+And deploy it to production with.
+
+```bash
+npx sst deploy --stage production
+```
+
+This example was created using `create-t3-app` and the following options: tRPC, Drizzle,
+no auth, Tailwind, Postgres, and the App Router
+
+Instead of a local database, we'll be using an RDS Postgres database and connect to it
+with the RDS Data API.
+
+```ts title="src/server/db/index.ts"
+import { Resource } from "sst";
+import { drizzle } from "drizzle-orm/aws-data-api/pg";
+import { RDSDataClient } from "@aws-sdk/client-rds-data";
+
+import * as schema from "./schema";
+
+const client = new RDSDataClient({});
+
+export const db = drizzle(client, {
+  schema,
+  database: Resource.MyPostgres.database,
+  secretArn: Resource.MyPostgres.secretArn,
+  resourceArn: Resource.MyPostgres.clusterArn,
+});
+```
+
+In our Next.js app we can access our Postgres database because we [link them](/docs/linking/)
+both. We don't need to use our `.env` files.
+
+```ts title="sst.config.ts" {4}
+ const rds = new sst.aws.Postgres("MyPostgres", { vpc });
+
+ new sst.aws.Nextjs("MyWeb", {
+   link: [rds]
+ });
+```
+
+For Drizzle Kit, we use the `aws-data-api` driver.
+
+```ts title="drizzle.config.ts" {5}
+import { Resource } from "sst";
+import { type Config } from "drizzle-kit";
+
+export default {
+  driver: "aws-data-api",
+  schema: "./src/server/db/schema.ts",
+  dialect: "postgresql",
+  dbCredentials: {
+    database: Resource.MyPostgres.database,
+    secretArn: Resource.MyPostgres.secretArn,
+    resourceArn: Resource.MyPostgres.clusterArn,
+  },
+  tablesFilter: ["aws-t3_*"],
+} satisfies Config;
+```
+
+And to make sure our credentials are available, we update our `package.json`
+with the [`sst shell`](/docs/reference/cli) CLI.
+
+```json title="package.json"
+"db:generate": "sst shell drizzle-kit generate",
+"db:migrate": "sst shell drizzle-kit migrate",
+"db:push": "sst shell drizzle-kit push",
+"db:studio": "sst shel drizzle-kit studio",
+```
+
+So running `npm run db:push` will run Drizzle Kit with the right credentials.
+```ts title="sst.config.ts"
+const vpc = new sst.aws.Vpc("MyVpc");
+const rds = new sst.aws.Postgres("MyPostgres", { vpc });
+
+new sst.aws.Nextjs("MyWeb", {
+  link: [rds]
+});
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-t3).
 
 
 ---

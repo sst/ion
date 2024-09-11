@@ -8,6 +8,9 @@ import { Component, transform } from "../component";
 import { Function, FunctionArgs } from "./function";
 import { QueueSubscriberArgs } from "./queue";
 import { lambda } from "@pulumi/aws";
+import { toSeconds } from "../duration";
+import { FunctionBuilder, functionBuilder } from "./helpers/function-builder";
+import { parseFunctionArn } from "./helpers/arn";
 
 export interface Args extends QueueSubscriberArgs {
   /**
@@ -36,7 +39,7 @@ export interface Args extends QueueSubscriberArgs {
  * You'll find this component returned by the `subscribe` method of the `Queue` component.
  */
 export class QueueLambdaSubscriber extends Component {
-  private readonly fn: Output<Function>;
+  private readonly fn: FunctionBuilder;
   private readonly eventSourceMapping: lambda.EventSourceMapping;
 
   constructor(name: string, args: Args, opts?: ComponentResourceOptions) {
@@ -51,7 +54,7 @@ export class QueueLambdaSubscriber extends Component {
     this.eventSourceMapping = eventSourceMapping;
 
     function createFunction() {
-      return Function.fromDefinition(
+      return functionBuilder(
         `${name}Function`,
         args.subscriber,
         {
@@ -80,8 +83,17 @@ export class QueueLambdaSubscriber extends Component {
           args.transform?.eventSourceMapping,
           `${name}EventSourceMapping`,
           {
+            functionResponseTypes: output(args.batch).apply((batch) =>
+              batch?.partialResponses ? ["ReportBatchItemFailures"] : [],
+            ),
+            batchSize: output(args.batch).apply((batch) => batch?.size ?? 10),
+            maximumBatchingWindowInSeconds: output(args.batch).apply((batch) =>
+              batch?.window ? toSeconds(batch.window) : 0,
+            ),
             eventSourceArn: queue.arn,
-            functionName: fn.name,
+            functionName: fn.arn.apply(
+              (arn) => parseFunctionArn(arn).functionName,
+            ),
             filterCriteria: args.filters && {
               filters: output(args.filters).apply((filters) =>
                 filters.map((filter) => ({
@@ -105,7 +117,7 @@ export class QueueLambdaSubscriber extends Component {
       /**
        * The Lambda function that'll be notified.
        */
-      function: this.fn,
+      function: this.fn.apply((fn) => fn.getFunction()),
       /**
        * The Lambda event source mapping.
        */

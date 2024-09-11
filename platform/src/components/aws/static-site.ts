@@ -10,23 +10,38 @@ import {
 } from "@pulumi/pulumi";
 import { Cdn, CdnArgs } from "./cdn.js";
 import { Bucket, BucketArgs } from "./bucket.js";
-import { Component, Transform, transform } from "../component.js";
+import { Component, Prettify, Transform, transform } from "../component.js";
 import { Link } from "../link.js";
 import { Input } from "../input.js";
 import { globSync } from "glob";
 import { BucketFile, BucketFiles } from "./providers/bucket-files.js";
-import { DistributionInvalidation } from "./providers/distribution-invalidation.js";
 import {
   BaseStaticSiteArgs,
+  BaseStaticSiteAssets,
   buildApp,
-  cleanup,
   prepare,
 } from "../base/base-static-site.js";
-import { cloudfront, iam } from "@pulumi/aws";
+import { cloudfront, iam, s3 } from "@pulumi/aws";
 import { URL_UNAVAILABLE } from "./linkable.js";
 import { DevArgs } from "../dev.js";
+import { OriginAccessControl } from "./providers/origin-access-control.js";
+import { physicalName } from "../naming.js";
 
-export interface StaticSiteArgs extends BaseStaticSiteArgs, DevArgs {
+export interface StaticSiteArgs extends BaseStaticSiteArgs {
+  /**
+   * Configure how this component works in `sst dev`.
+   *
+   * :::note
+   * In `sst dev` your static site is run in dev mode; it's not deployed.
+   * :::
+   *
+   * Instead of deploying your static site, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   *
+   * To disable dev mode, pass in `false`.
+   */
+  dev?: false | DevArgs["dev"];
   /**
    * Path to the directory where your static site is located. By default this assumes your static site is in the root of your SST app.
    *
@@ -51,6 +66,47 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs, DevArgs {
    * ```
    */
   path?: BaseStaticSiteArgs["path"];
+  /**
+   * Configure CloudFront Functions to customize the behavior of HTTP requests and responses at the edge locations.
+   */
+  edge?: Input<{
+    /**
+     * The ARN of the CloudFront function to use for the viewer request.
+     *
+     * The viewer request function can be used to modify incoming requests before they reach your origin server. For example, you can redirect users, rewrite URLs, or add headers.
+     *
+     * By default, a viewer request function is created to rewrite URLs to:
+     * - append `index.html` to the URL if the URL ends with a `/`.
+     * - append `.html` to the URL if the URL does not contain a file extension.
+     *
+     * @default Uses the default viewer request function.
+     * @example
+     * ```js
+     * {
+     *   edge: {
+     *     viewerRequest: "arn:aws:cloudfront::1234567890:function/MyViewRequestFunction"
+     *   }
+     * }
+     * ```
+     */
+    viewerRequest?: Input<string>;
+    /**
+     * The ARN of the CloudFront function to use for the viewer response.
+     *
+     * The viewer response function can be used to modify outgoing responses before they are sent to the client. For example, you can add security headers or change the response status code.
+     *
+     * @default No viewer response function is set.
+     * @example
+     * ```js
+     * {
+     *   edge: {
+     *     viewerResponse: "arn:aws:cloudfront::1234567890:function/MyViewResponseFunction"
+     *   }
+     * }
+     * ```
+     */
+    viewerResponse?: Input<string>;
+  }>;
   /**
    * Configure if your static site needs to be built. This is useful if you are using a static site generator.
    *
@@ -91,7 +147,58 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs, DevArgs {
    * ```
    * @default `Object`
    */
-  assets?: BaseStaticSiteArgs["assets"];
+  assets?: Prettify<
+    BaseStaticSiteAssets & {
+      /**
+       * The name of the S3 bucket to upload the assets to.
+       * @default Creates a new bucket
+       * @example
+       * ```js
+       * {
+       *   assets: {
+       *     bucket: "my-existing-bucket"
+       *   }
+       * }
+       * ```
+       *
+       * :::note
+       * The bucket must allow CloudFront to access the bucket.
+       * :::
+       *
+       * When using an existing bucket, ensure that the bucket has a policy that allows CloudFront to access the bucket.
+       * For example, the bucket policy might look like this:
+       * ```json
+       * {
+       *   "Version": "2012-10-17",
+       *   "Statement": [
+       *     {
+       *       "Effect": "Allow",
+       *       "Principal": {
+       *         "Service": "cloudfront.amazonaws.com"
+       *       },
+       *       "Action": "s3:GetObject",
+       *       "Resource": "arn:aws:s3:::my-existing-bucket/*"
+       *     }
+       *   ]
+       * }
+       * ```
+       */
+      bucket?: Input<string>;
+      /**
+       * The path into the S3 bucket where the assets should be uploaded.
+       * @default Root of the bucket
+       * @example
+       * ```js
+       * {
+       *   assets: {
+       *     path: "websites/my-website"
+       *   }
+       * }
+       * ```
+       */
+      path?: Input<string>;
+    }
+  >;
   /**
    * Set a custom domain for your static site. Supports domains hosted either on
    * [Route 53](https://aws.amazon.com/route53/) or outside AWS.
@@ -360,11 +467,13 @@ export class StaticSite extends Component implements Link.Linkable {
   ) {
     super(__pulumiType, name, args, opts);
 
+    let defaultCfFunction: cloudfront.Function;
     const parent = this;
     const { sitePath, environment, indexPage } = prepare(args);
+    const dev = normalizeDev();
 
-    if ($dev) {
-      this.devUrl = output(args.dev?.url ?? URL_UNAVAILABLE);
+    if (dev) {
+      this.devUrl = dev.url;
       this.registerOutputs({
         _metadata: {
           mode: "placeholder",
@@ -380,31 +489,41 @@ export class StaticSite extends Component implements Link.Linkable {
           }),
         ),
         _dev: {
-          environment: environment,
-          command: output(args.dev?.command).apply(
-            (val) => val || "npm run dev",
-          ),
-          directory: output(args.dev?.directory).apply(
-            (dir) => dir || sitePath,
-          ),
-          autostart: output(args.dev?.autostart).apply((val) => val ?? true),
+          environment,
+          command: dev.command,
+          directory: dev.directory,
+          autostart: dev.autostart,
         },
       });
       return;
     }
 
-    const outputPath = buildApp(name, args.build, sitePath, environment);
-    const access = createCloudFrontOriginAccessIdentity();
-    const bucket = createS3Bucket();
+    const assets = normalizeAsssets();
+    const outputPath = buildApp(
+      parent,
+      name,
+      args.build,
+      sitePath,
+      environment,
+    );
+    const access = createCloudFrontOriginAccessControl();
+    const bucket = createBucket();
+    const { bucketName, bucketDomain } = getBucketDetails();
     const bucketFile = uploadAssets();
-    const cloudfrontFunction = createCloudfrontFunction();
+    const invalidation = buildInvalidation();
     const distribution = createDistribution();
-    createDistributionInvalidation();
     this.assets = bucket;
     this.cdn = distribution;
 
     this.registerOutputs({
-      ...cleanup(sitePath, environment, this.url, args.dev),
+      _hint: this.url,
+      _receiver: all([sitePath, environment]).apply(
+        ([sitePath, environment]) => ({
+          directory: sitePath,
+          links: [],
+          environment,
+        }),
+      ),
       _metadata: {
         mode: "deployed",
         path: sitePath,
@@ -413,38 +532,41 @@ export class StaticSite extends Component implements Link.Linkable {
       },
     });
 
-    function createCloudFrontOriginAccessIdentity() {
-      return new cloudfront.OriginAccessIdentity(
-        `${name}OriginAccessIdentity`,
-        {},
+    function normalizeDev() {
+      if (!$dev) return undefined;
+      if (args.dev === false) return undefined;
+
+      return {
+        ...args.dev,
+        url: output(args.dev?.url ?? URL_UNAVAILABLE),
+        command: output(args.dev?.command ?? "npm run dev"),
+        autostart: output(args.dev?.autostart ?? true),
+        directory: output(args.dev?.directory ?? sitePath),
+      };
+    }
+
+    function normalizeAsssets() {
+      return {
+        ...args.assets,
+        path: args.assets?.path
+          ? output(args.assets?.path).apply((v) =>
+              v.replace(/^\//, "").replace(/\/$/, ""),
+            )
+          : undefined,
+      };
+    }
+
+    function createCloudFrontOriginAccessControl() {
+      return new OriginAccessControl(
+        `${name}S3AccessControl`,
+        { name: physicalName(64, name) },
         { parent },
       );
     }
 
-    function createCloudfrontFunction() {
-      return new cloudfront.Function(
-        `${name}Function`,
-        {
-          runtime: "cloudfront-js-1.0",
-          code: `
-    function handler(event) {
-        var request = event.request;
-        var uri = request.uri;
-        if (uri.endsWith('/')) {
-          request.uri += 'index.html';
-        } else if (!uri.includes('.')) {
-          request.uri += '.html';
-        }
-        return request;
-    }`,
-        },
-        {
-          parent,
-        },
-      );
-    }
+    function createBucket() {
+      if (assets.bucket) return;
 
-    function createS3Bucket() {
       return new Bucket(
         ...transform(
           args.transform?.assets,
@@ -457,12 +579,12 @@ export class StaticSite extends Component implements Link.Linkable {
                     {
                       principals: [
                         {
-                          type: "AWS",
-                          identifiers: [access.iamArn],
+                          type: "Service",
+                          identifiers: ["cloudfront.amazonaws.com"],
                         },
                       ],
                       actions: ["s3:GetObject"],
-                      resources: [interpolate`${bucket.arn}/*`],
+                      resources: [interpolate`${bucket!.arn}/*`],
                     },
                   ],
                 }).json;
@@ -483,70 +605,82 @@ export class StaticSite extends Component implements Link.Linkable {
       );
     }
 
+    function getBucketDetails() {
+      const s3Bucket = bucket
+        ? bucket.nodes.bucket
+        : s3.BucketV2.get(`${name}Assets`, assets.bucket!, undefined, {
+            parent,
+          });
+
+      return {
+        bucketName: s3Bucket.bucket,
+        bucketDomain: s3Bucket.bucketRegionalDomainName,
+      };
+    }
+
     function uploadAssets() {
-      return all([outputPath, args.assets]).apply(
-        async ([outputPath, assets]) => {
-          const bucketFiles: BucketFile[] = [];
+      return all([outputPath, assets]).apply(async ([outputPath, assets]) => {
+        const bucketFiles: BucketFile[] = [];
 
-          // Build fileOptions
-          const fileOptions = assets?.fileOptions ?? [
-            {
-              files: "**",
-              cacheControl: "max-age=0,no-cache,no-store,must-revalidate",
-            },
-            {
-              files: ["**/*.js", "**/*.css"],
-              cacheControl: "max-age=31536000,public,immutable",
-            },
-          ];
+        // Build fileOptions
+        const fileOptions = assets?.fileOptions ?? [
+          {
+            files: "**",
+            cacheControl: "max-age=0,no-cache,no-store,must-revalidate",
+          },
+          {
+            files: ["**/*.js", "**/*.css"],
+            cacheControl: "max-age=31536000,public,immutable",
+          },
+        ];
 
-          // Upload files based on fileOptions
-          const filesProcessed: string[] = [];
-          for (const fileOption of fileOptions.reverse()) {
-            const files = globSync(fileOption.files, {
-              cwd: path.resolve(outputPath),
-              nodir: true,
-              dot: true,
-              ignore: [
-                ".sst/**",
-                ...(typeof fileOption.ignore === "string"
-                  ? [fileOption.ignore]
-                  : fileOption.ignore ?? []),
-              ],
-            }).filter((file) => !filesProcessed.includes(file));
+        // Upload files based on fileOptions
+        const filesProcessed: string[] = [];
+        for (const fileOption of fileOptions.reverse()) {
+          const files = globSync(fileOption.files, {
+            cwd: path.resolve(outputPath),
+            nodir: true,
+            dot: true,
+            ignore: [
+              ".sst/**",
+              ...(typeof fileOption.ignore === "string"
+                ? [fileOption.ignore]
+                : fileOption.ignore ?? []),
+            ],
+          }).filter((file) => !filesProcessed.includes(file));
 
-            bucketFiles.push(
-              ...(await Promise.all(
-                files.map(async (file) => {
-                  const source = path.resolve(outputPath, file);
-                  const content = await fs.promises.readFile(source);
-                  const hash = crypto
-                    .createHash("sha256")
-                    .update(content)
-                    .digest("hex");
-                  return {
-                    source,
-                    key: file,
-                    hash,
-                    cacheControl: fileOption.cacheControl,
-                    contentType: getContentType(file, "UTF-8"),
-                  };
-                }),
-              )),
-            );
-            filesProcessed.push(...files);
-          }
-
-          return new BucketFiles(
-            `${name}AssetFiles`,
-            {
-              bucketName: bucket.name,
-              files: bucketFiles,
-            },
-            { parent, ignoreChanges: $dev ? ["*"] : undefined },
+          bucketFiles.push(
+            ...(await Promise.all(
+              files.map(async (file) => {
+                const source = path.resolve(outputPath, file);
+                const content = await fs.promises.readFile(source);
+                const hash = crypto
+                  .createHash("sha256")
+                  .update(content)
+                  .digest("hex");
+                return {
+                  source,
+                  key: path.posix.join(assets.path ?? "", file),
+                  hash,
+                  cacheControl: fileOption.cacheControl,
+                  contentType: getContentType(file, "UTF-8"),
+                };
+              }),
+            )),
           );
-        },
-      );
+          filesProcessed.push(...files);
+        }
+
+        return new BucketFiles(
+          `${name}AssetFiles`,
+          {
+            bucketName,
+            files: bucketFiles,
+            purge: true,
+          },
+          { parent },
+        );
+      });
     }
 
     function getContentType(filename: string, textEncoding: string) {
@@ -603,11 +737,9 @@ export class StaticSite extends Component implements Link.Linkable {
             origins: [
               {
                 originId: "s3",
-                domainName: bucket.nodes.bucket.bucketRegionalDomainName,
-                originPath: "",
-                s3OriginConfig: {
-                  originAccessIdentity: access.cloudfrontAccessIdentityPath,
-                },
+                domainName: bucketDomain,
+                originPath: assets.path ? $interpolate`/${assets.path}` : "",
+                originAccessControlId: access.id,
               },
             ],
             defaultRootObject: indexPage,
@@ -644,15 +776,24 @@ export class StaticSite extends Component implements Link.Linkable {
               compress: true,
               // CloudFront's managed CachingOptimized policy
               cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
-              functionAssociations: [
+              functionAssociations: output(args.edge).apply((edge) => [
                 {
                   eventType: "viewer-request",
-                  functionArn: cloudfrontFunction.arn,
+                  functionArn:
+                    edge?.viewerRequest ?? createCloudfrontFunction().arn,
                 },
-              ],
+                ...(edge?.viewerResponse
+                  ? [
+                      {
+                        eventType: "viewer-response",
+                        functionArn: edge.viewerResponse,
+                      },
+                    ]
+                  : []),
+              ]),
             },
             domain: args.domain,
-            wait: !$dev,
+            invalidation,
           },
           // create distribution after s3 upload finishes
           { dependsOn: bucketFile, parent },
@@ -660,11 +801,36 @@ export class StaticSite extends Component implements Link.Linkable {
       );
     }
 
-    function createDistributionInvalidation() {
-      all([outputPath, args.invalidation]).apply(
+    function createCloudfrontFunction() {
+      defaultCfFunction =
+        defaultCfFunction ??
+        new cloudfront.Function(
+          `${name}Function`,
+          {
+            runtime: "cloudfront-js-1.0",
+            code: `
+    function handler(event) {
+        var request = event.request;
+        var uri = request.uri;
+        if (uri.endsWith('/')) {
+          request.uri += 'index.html';
+        } else if (!uri.includes('.')) {
+          request.uri += '.html';
+        }
+        return request;
+    }`,
+          },
+          { parent },
+        );
+
+      return defaultCfFunction;
+    }
+
+    function buildInvalidation() {
+      return all([outputPath, args.invalidation]).apply(
         ([outputPath, invalidationRaw]) => {
           // Normalize invalidation
-          if (invalidationRaw === false) return;
+          if (invalidationRaw === false) return false;
           const invalidation = {
             wait: false,
             paths: "all" as const,
@@ -674,7 +840,7 @@ export class StaticSite extends Component implements Link.Linkable {
           // Build invalidation paths
           const invalidationPaths =
             invalidation.paths === "all" ? ["/*"] : invalidation.paths;
-          if (invalidationPaths.length === 0) return;
+          if (invalidationPaths.length === 0) return false;
 
           // Calculate a hash based on the contents of the S3 files. This will be
           // used to determine if we need to invalidate our CloudFront cache.
@@ -692,19 +858,11 @@ export class StaticSite extends Component implements Link.Linkable {
             hash.update(fs.readFileSync(path.resolve(outputPath, filePath))),
           );
 
-          new DistributionInvalidation(
-            `${name}Invalidation`,
-            {
-              distributionId: distribution.nodes.distribution.id,
-              paths: invalidationPaths,
-              version: hash.digest("hex"),
-              wait: invalidation.wait,
-            },
-            {
-              parent,
-              ignoreChanges: $dev ? ["*"] : undefined,
-            },
-          );
+          return {
+            paths: invalidationPaths,
+            token: hash.digest("hex"),
+            wait: invalidation.wait,
+          };
         },
       );
     }

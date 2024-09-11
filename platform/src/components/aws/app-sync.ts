@@ -3,8 +3,8 @@ import { ComponentResourceOptions, interpolate, output } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
-import { sanitizeToPascalCase } from "../naming";
+import { FunctionArgs, FunctionArn } from "./function";
+import { logicalName } from "../naming";
 import { VisibleError } from "../error";
 import { AppSyncDataSource } from "./app-sync-data-source";
 import { AppSyncResolver } from "./app-sync-resolver";
@@ -212,7 +212,7 @@ export interface AppSyncDataSourceArgs {
    * }
    * ```
    */
-  lambda?: Input<string | FunctionArgs>;
+  lambda?: Input<string | FunctionArgs | FunctionArn>;
   /**
    * The ARN for the DynamoDB table.
    * @example
@@ -482,6 +482,7 @@ export interface AppSyncFunctionArgs {
  */
 export class AppSync extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorOpts: ComponentResourceOptions;
   private api: appsync.GraphQLApi;
   private domainName?: appsync.DomainName;
 
@@ -503,6 +504,7 @@ export class AppSync extends Component implements Link.Linkable {
     createDnsRecords();
 
     this.constructorName = name;
+    this.constructorOpts = opts;
     this.api = api;
     this.domainName = domainName;
 
@@ -601,27 +603,15 @@ export class AppSync extends Component implements Link.Linkable {
       domain.apply((domain) => {
         if (!domain.dns) return;
 
-        if (domain.dns.provider === "aws") {
-          domain.dns.createAliasRecords(
-            name,
-            {
-              name: domain.name,
-              aliasName: domainName.appsyncDomainName,
-              aliasZone: domainName.hostedZoneId,
-            },
-            { parent },
-          );
-        } else {
-          domain.dns.createRecord(
-            name,
-            {
-              type: "CNAME",
-              name: domain.name,
-              value: domainName.appsyncDomainName,
-            },
-            { parent },
-          );
-        }
+        domain.dns.createAlias(
+          name,
+          {
+            name: domain.name,
+            aliasName: domainName.appsyncDomainName,
+            aliasZone: domainName.hostedZoneId,
+          },
+          { parent },
+        );
       });
     }
   }
@@ -682,6 +672,15 @@ export class AppSync extends Component implements Link.Linkable {
    * });
    * ```
    *
+   * Add a data source with an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * api.addDataSource({
+   *   name: "lambdaDS",
+   *   lambda: "arn:aws:lambda:us-east-1:123456789012:function:my-function"
+   * })
+   * ```
+   *
    * Add a DynamoDB table as a data source.
    *
    * ```js title="sst.config.ts"
@@ -694,13 +693,17 @@ export class AppSync extends Component implements Link.Linkable {
   public addDataSource(args: AppSyncDataSourceArgs) {
     const self = this;
     const selfName = this.constructorName;
-    const nameSuffix = sanitizeToPascalCase(args.name);
+    const nameSuffix = logicalName(args.name);
 
-    return new AppSyncDataSource(`${selfName}DataSource${nameSuffix}`, {
-      apiId: self.api.id,
-      apiComponentName: selfName,
-      ...args,
-    });
+    return new AppSyncDataSource(
+      `${selfName}DataSource${nameSuffix}`,
+      {
+        apiId: self.api.id,
+        apiComponentName: selfName,
+        ...args,
+      },
+      { provider: this.constructorOpts.provider },
+    );
   }
 
   /**
@@ -738,12 +741,16 @@ export class AppSync extends Component implements Link.Linkable {
   public addFunction(args: AppSyncFunctionArgs) {
     const self = this;
     const selfName = this.constructorName;
-    const nameSuffix = sanitizeToPascalCase(args.name);
+    const nameSuffix = logicalName(args.name);
 
-    return new AppSyncFunction(`${selfName}Function${nameSuffix}`, {
-      apiId: self.api.id,
-      ...args,
-    });
+    return new AppSyncFunction(
+      `${selfName}Function${nameSuffix}`,
+      {
+        apiId: self.api.id,
+        ...args,
+      },
+      { provider: this.constructorOpts.provider },
+    );
   }
 
   /**
@@ -806,14 +813,17 @@ export class AppSync extends Component implements Link.Linkable {
       throw new VisibleError(`Invalid resolver ${operation}`);
     const [type, field] = parts;
 
-    const nameSuffix =
-      `${sanitizeToPascalCase(type)}` + `${sanitizeToPascalCase(field)}`;
-    return new AppSyncResolver(`${selfName}Resolver${nameSuffix}`, {
-      apiId: self.api.id,
-      type,
-      field,
-      ...args,
-    });
+    const nameSuffix = `${logicalName(type)}` + `${logicalName(field)}`;
+    return new AppSyncResolver(
+      `${selfName}Resolver${nameSuffix}`,
+      {
+        apiId: self.api.id,
+        type,
+        field,
+        ...args,
+      },
+      { provider: this.constructorOpts.provider },
+    );
   }
 
   /** @internal */

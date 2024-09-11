@@ -4,8 +4,8 @@ import { ComponentResourceOptions, all, output } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component.js";
 import { Input } from "../input.js";
 import { Link } from "../link.js";
-import { hashStringToPrettyString, sanitizeToPascalCase } from "../naming.js";
-import { FunctionArgs } from "./function.js";
+import { hashStringToPrettyString, logicalName } from "../naming.js";
+import { FunctionArgs, FunctionArn } from "./function.js";
 import { KinesisStreamLambdaSubscriber } from "./kinesis-stream-lambda-subscriber.js";
 import { parseKinesisStreamArn } from "./helpers/arn.js";
 import { permission } from "./permission.js";
@@ -119,12 +119,13 @@ export interface KinesisStreamLambdaSubscriberArgs {
  */
 export class KinesisStream extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorOpts: ComponentResourceOptions;
   private stream: aws.kinesis.Stream;
 
   constructor(
     name: string,
-    args?: KinesisStreamArgs,
-    opts?: $util.ComponentResourceOptions,
+    args: KinesisStreamArgs = {},
+    opts: $util.ComponentResourceOptions = {},
   ) {
     super(__pulumiType, name, args, opts);
 
@@ -132,6 +133,7 @@ export class KinesisStream extends Component implements Link.Linkable {
     const stream = createStream();
     this.stream = stream;
     this.constructorName = name;
+    this.constructorOpts = opts;
 
     function createStream() {
       return new aws.kinesis.Stream(
@@ -185,9 +187,15 @@ export class KinesisStream extends Component implements Link.Linkable {
    *   timeout: "60 seconds"
    * });
    * ```
+   *
+   * Subscribe with an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * stream.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: KinesisStreamLambdaSubscriberArgs,
   ) {
     return KinesisStream._subscribe(
@@ -195,6 +203,7 @@ export class KinesisStream extends Component implements Link.Linkable {
       this.nodes.stream.arn,
       subscriber,
       args,
+      { provider: this.constructorOpts.provider },
     );
   }
 
@@ -246,25 +255,28 @@ export class KinesisStream extends Component implements Link.Linkable {
    */
   public static subscribe(
     streamArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: KinesisStreamLambdaSubscriberArgs,
   ) {
-    const streamName = output(streamArn).apply(
-      (streamArn) => parseKinesisStreamArn(streamArn).streamName,
+    return output(streamArn).apply((streamArn) =>
+      this._subscribe(
+        logicalName(parseKinesisStreamArn(streamArn).streamName),
+        streamArn,
+        subscriber,
+        args,
+      ),
     );
-    return this._subscribe(streamName, streamArn, subscriber, args);
   }
 
   private static _subscribe(
-    name: Input<string>,
+    name: string,
     streamArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args: KinesisStreamLambdaSubscriberArgs = {},
-    opts?: ComponentResourceOptions,
+    opts: ComponentResourceOptions = {},
   ) {
-    return all([name, streamArn, args]).apply(([name, streamArn, args]) => {
-      const prefix = sanitizeToPascalCase(name);
-      const suffix = sanitizeToPascalCase(
+    return all([streamArn, args]).apply(([streamArn, args]) => {
+      const suffix = logicalName(
         hashStringToPrettyString(
           [
             streamArn,
@@ -275,7 +287,7 @@ export class KinesisStream extends Component implements Link.Linkable {
         ),
       );
       return new KinesisStreamLambdaSubscriber(
-        `${prefix}Subscriber${suffix}`,
+        `${name}Subscriber${suffix}`,
         {
           stream: { arn: streamArn },
           subscriber,

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -17,12 +18,16 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	"github.com/sst/ion/cmd/sst/mosaic/aws"
 	"github.com/sst/ion/cmd/sst/mosaic/cloudflare"
+	"github.com/sst/ion/cmd/sst/mosaic/deployer"
+	"github.com/sst/ion/cmd/sst/mosaic/ui/common"
 	"github.com/sst/ion/pkg/project"
 
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 type ProgressMode string
+
+var IGNORED_RESOURCES = []string{"sst:sst:Version", "sst:sst:LinkRef", "pulumi:pulumi:Stack"}
 
 const (
 	ProgressModeDeploy  ProgressMode = "deploy"
@@ -129,6 +134,9 @@ func (u *UI) Event(unknown interface{}) {
 	}
 	switch evt := unknown.(type) {
 
+	case *common.StdoutEvent:
+		u.println(evt.Line)
+
 	case *aws.FunctionInvokedEvent:
 		u.workerTime[evt.WorkerID] = time.Now()
 		u.printEvent(u.getColor(evt.WorkerID), TEXT_NORMAL_BOLD.Render(fmt.Sprintf("%-11s", "Invoke")), u.functionName(evt.FunctionID))
@@ -167,9 +175,13 @@ func (u *UI) Event(unknown interface{}) {
 		u.reset()
 		u.printEvent(TEXT_DANGER, "Locked", "A concurrent update was detected on the app. Run `sst unlock` to remove the lock and try again.")
 
+	case *deployer.DeployFailedEvent:
+		u.reset()
+		u.printEvent(TEXT_DANGER, "Error", evt.Error)
+
 	case *project.StackCommandEvent:
 		u.reset()
-		u.header("", evt.App, evt.Stage)
+		u.header(evt.Version, evt.App, evt.Stage)
 		u.blank()
 		if evt.Command == "deploy" {
 			u.mode = ProgressModeDeploy
@@ -202,11 +214,12 @@ func (u *UI) Event(unknown interface{}) {
 		u.blank()
 
 	case *project.BuildFailedEvent:
+		u.reset()
 		u.printEvent(TEXT_DANGER, "Error", evt.Error)
 
 	case *apitype.ResourcePreEvent:
 		u.timing[evt.Metadata.URN] = time.Now()
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" {
+		if slices.Contains(IGNORED_RESOURCES, evt.Metadata.Type) {
 			return
 		}
 
@@ -226,7 +239,7 @@ func (u *UI) Event(unknown interface{}) {
 		break
 
 	case *apitype.ResOutputsEvent:
-		if evt.Metadata.Type == "pulumi:pulumi:Stack" {
+		if slices.Contains(IGNORED_RESOURCES, evt.Metadata.Type) {
 			return
 		}
 
@@ -300,20 +313,12 @@ func (u *UI) Event(unknown interface{}) {
 
 		if evt.Severity == "info" {
 			for _, line := range strings.Split(strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace), "\n") {
-				u.printEvent(
-					TEXT_DIM,
-					"Log",
-					line,
-				)
+				u.println(TEXT_DIM.Render(line))
 			}
 		}
 
 		if evt.Severity == "info#err" {
-			u.printEvent(
-				TEXT_DIM,
-				"Log",
-				strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace),
-			)
+			u.println(strings.TrimRightFunc(ansi.Strip(evt.Message), unicode.IsSpace))
 		}
 
 	case *project.ProviderDownloadEvent:
@@ -327,7 +332,7 @@ func (u *UI) Event(unknown interface{}) {
 		u.complete = evt
 		u.blank()
 		if len(evt.Errors) == 0 && evt.Finished {
-			u.print(TEXT_SUCCESS_BOLD.Render("+"))
+			u.print(TEXT_SUCCESS_BOLD.Render(IconCheck))
 			if len(u.timing) == 0 {
 				if u.mode == ProgressModeRemove {
 					u.print(TEXT_NORMAL_BOLD.Render("  No resources to remove"))
@@ -396,10 +401,10 @@ func (u *UI) Event(unknown interface{}) {
 				if ok {
 					isSSTComponent := strings.Contains(status.URN, "::sst")
 					if isSSTComponent {
-						u.println(TEXT_NORMAL.Render(". Set the following values: "))
+						u.println(TEXT_NORMAL.Render("\n\nSet the following in your transform:"))
 					}
 					if !isSSTComponent {
-						u.println(TEXT_NORMAL.Render(". Set the following values in transform: "))
+						u.println(TEXT_NORMAL.Render("\n\nSet the following:"))
 					}
 					for _, diff := range importDiffs {
 						value, _ := json.Marshal(diff.Old)
@@ -408,10 +413,10 @@ func (u *UI) Event(unknown interface{}) {
 						}
 						u.print(TEXT_NORMAL.Render("   - "))
 						if isSSTComponent {
-							u.print(TEXT_INFO.Render("`args." + string(diff.Input) + " = " + string(value) + "`;"))
+							u.print(TEXT_INFO.Render("`args." + string(diff.Input) + " = " + string(value) + ";`"))
 						}
 						if !isSSTComponent {
-							u.print(TEXT_INFO.Render("`" + string(diff.Input) + ": " + string(value) + "`;"))
+							u.print(TEXT_INFO.Render("`" + string(diff.Input) + ": " + string(value) + ",`"))
 						}
 						u.println()
 					}
@@ -525,7 +530,7 @@ func (u *UI) header(version, app, stage string) {
 		return
 	}
 	u.println(
-		TEXT_HIGHLIGHT_BOLD.Render("SST ❍ ion "+version),
+		TEXT_HIGHLIGHT_BOLD.Render("SST "+version),
 		TEXT_DIM.Render("  ready!"),
 	)
 	u.blank()
@@ -569,7 +574,7 @@ func (u *UI) FormatURN(urn string) string {
 		if parent == "" {
 			break
 		}
-		if parent.Type().DisplayName() == "pulumi:pulumi:Stack" {
+		if slices.Contains(IGNORED_RESOURCES, parent.Type().DisplayName()) {
 			break
 		}
 		child = parent

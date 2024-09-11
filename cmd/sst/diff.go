@@ -9,7 +9,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 	"github.com/sst/ion/cmd/sst/cli"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
+	"github.com/sst/ion/pkg/bus"
 	"github.com/sst/ion/pkg/project"
+	"github.com/sst/ion/pkg/server"
 	"github.com/yalp/jsonpath"
 	"golang.org/x/sync/errgroup"
 )
@@ -29,28 +31,37 @@ func CmdDiff(c *cli.Cli) error {
 	var wg errgroup.Group
 	defer wg.Wait()
 	outputs := []*apitype.ResOutputsEvent{}
-	out := make(chan interface{})
 	u := ui.New(c.Context)
+	s, err := server.New()
+	if err != nil {
+		return err
+	}
 	wg.Go(func() error {
-		for evt := range out {
+		defer c.Cancel()
+		return s.Start(c.Context, p)
+	})
+
+	events := bus.SubscribeAll()
+	defer close(events)
+	wg.Go(func() error {
+		for evt := range events {
 			u.Event(evt)
 			switch evt := evt.(type) {
 			case *apitype.ResOutputsEvent:
-				if len(evt.Metadata.DetailedDiff) > 0 {
-					outputs = append(outputs, evt)
-				}
+				outputs = append(outputs, evt)
 			}
 		}
 		return nil
 	})
 	defer u.Destroy()
+	defer c.Cancel()
 	err = p.Run(c.Context, &project.StackInput{
-		Command: "diff",
-		Dev:     c.Bool("dev"),
-		Out:     out,
-		Target:  target,
+		Command:    "diff",
+		ServerPort: s.Port,
+		Dev:        c.Bool("dev"),
+		Target:     target,
+		Verbose:    c.Bool("verbose"),
 	})
-	close(out)
 	if err != nil {
 		return err
 	}
@@ -90,9 +101,6 @@ func CmdDiff(c *cli.Cli) error {
 		}
 		sort.Strings(sorted)
 		for _, path := range sorted {
-			if path == "__provider" {
-				continue
-			}
 			diff := output.Metadata.DetailedDiff[path]
 			label := ""
 			if diff.Kind == apitype.DiffUpdate {
@@ -115,6 +123,9 @@ func CmdDiff(c *cli.Cli) error {
 			}
 			fmt.Print("   ", label+" ", strings.TrimSpace(path))
 			value, _ := jsonpath.Read(output.Metadata.New.Outputs, "$."+path)
+			if path == "__provider" {
+				value = "code changed"
+			}
 			if value != nil {
 				formatted := ""
 				switch value.(type) {

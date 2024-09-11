@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -16,8 +15,13 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/sst/ion/internal/fs"
 	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/flag"
 	"github.com/sst/ion/pkg/js"
 	"github.com/sst/ion/pkg/project/provider"
+	"github.com/sst/ion/pkg/runtime"
+	"github.com/sst/ion/pkg/runtime/node"
+	"github.com/sst/ion/pkg/runtime/python"
+	"github.com/sst/ion/pkg/runtime/worker"
 )
 
 type App struct {
@@ -42,6 +46,7 @@ type Project struct {
 	home            provider.Home
 	env             map[string]string
 	loadedProviders map[string]provider.Provider
+	Runtime         *runtime.Collection
 }
 
 func Discover() (string, error) {
@@ -61,11 +66,15 @@ func Discover() (string, error) {
 }
 
 func ResolveWorkingDir(cfgPath string) string {
-	return path.Join(filepath.Dir(cfgPath), ".sst")
+	return filepath.Join(filepath.Dir(cfgPath), ".sst")
 }
 
 func ResolvePlatformDir(cfgPath string) string {
-	return path.Join(ResolveWorkingDir(cfgPath), "platform")
+	return filepath.Join(ResolveWorkingDir(cfgPath), "platform")
+}
+
+func ResolveLogDir(cfgPath string) string {
+	return filepath.Join(ResolveWorkingDir(cfgPath), "log")
 }
 
 type ProjectConfig struct {
@@ -96,6 +105,12 @@ func New(input *ProjectConfig) (*Project, error) {
 		root:    rootPath,
 		config:  input.Config,
 		env:     map[string]string{},
+		Runtime: runtime.NewCollection(
+			input.Config,
+			node.New(),
+			worker.New(),
+			python.New(),
+		),
 	}
 	tmp := proj.PathWorkingDir()
 
@@ -167,6 +182,12 @@ console.log("~j" + JSON.stringify(mod.app({
 				if argsBool, ok := args.(bool); ok && argsBool {
 					proj.app.Providers[name] = make(map[string]interface{})
 				}
+
+				if argsString, ok := args.(string); ok {
+					proj.app.Providers[name] = map[string]interface{}{
+						"version": argsString,
+					}
+				}
 			}
 
 			if proj.app.Name == "" {
@@ -181,7 +202,7 @@ console.log("~j" + JSON.stringify(mod.app({
 				return nil, util.NewReadableError(nil, `You must specify a "home" provider in the project configuration file.`)
 			}
 
-			if _, ok := proj.app.Providers[proj.app.Home]; !ok {
+			if _, ok := proj.app.Providers[proj.app.Home]; !ok && proj.app.Home != "local" {
 				proj.app.Providers[proj.app.Home] = map[string]interface{}{}
 			}
 
@@ -228,6 +249,7 @@ console.log("~j" + JSON.stringify(mod.app({
 func (proj *Project) LoadHome() error {
 	slog.Info("loading home")
 	loadedProviders := make(map[string]provider.Provider)
+
 	for key, args := range proj.app.Providers {
 		var match provider.Provider
 		switch key {
@@ -253,15 +275,20 @@ func (proj *Project) LoadHome() error {
 		loadedProviders[key] = match
 	}
 
-	p, ok := loadedProviders[proj.app.Home]
-	if !ok {
+	var home provider.Home
+
+	switch proj.app.Home {
+	case "local":
+		home = provider.NewLocalHome()
+	case "aws":
+		home = provider.NewAwsHome(loadedProviders["aws"].(*provider.AwsProvider))
+	case "cloudflare":
+		home = provider.NewCloudflareHome(loadedProviders["cloudflare"].(*provider.CloudflareProvider))
+	default:
 		return fmt.Errorf("Home provider %s is invalid", proj.app.Home)
 	}
-	home, ok := p.(provider.Home)
-	if !ok {
-		return fmt.Errorf("Home provider %s is invalid", proj.app.Home)
-	}
-	err := home.Bootstrap(proj.app.Name, proj.app.Stage)
+
+	err := home.Bootstrap()
 	if err != nil {
 		return fmt.Errorf("Error initializing %s:\n   %w", proj.app.Home, err)
 	}
@@ -313,7 +340,7 @@ func (p *Project) Provider(name string) (provider.Provider, bool) {
 }
 
 func (p *Project) Cleanup() error {
-	if os.Getenv("SST_NO_ARTIFACT_CLEANUP") != "" {
+	if !flag.SST_NO_CLEANUP {
 		return nil
 	}
 	return os.RemoveAll(
@@ -322,5 +349,8 @@ func (p *Project) Cleanup() error {
 }
 
 func (p *Project) PathLog(name string) string {
+	if name == "" {
+		return filepath.Join(p.PathWorkingDir(), "log")
+	}
 	return filepath.Join(p.PathWorkingDir(), "log", name+".log")
 }

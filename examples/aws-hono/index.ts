@@ -13,13 +13,15 @@ import { handle } from "hono/aws-lambda";
 const s3 = new S3Client({});
 
 const app = new Hono()
+  .put("/test", async (c) => {
+    const body = await c.req.text();
+    return new Response(body.length.toString());
+  })
   .get("/", async (c) => {
-    console.log(Resource.App);
     const command = new PutObjectCommand({
       Key: crypto.randomUUID(),
       Bucket: Resource.MyBucket.name,
     });
-
     return c.text(await getSignedUrl(s3, command));
   })
   .get("/latest", async (c) => {

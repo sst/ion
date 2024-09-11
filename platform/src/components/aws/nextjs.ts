@@ -19,6 +19,7 @@ import { Cdn } from "./cdn.js";
 import { Bucket } from "./bucket.js";
 import { Component } from "../component.js";
 import { Link } from "../link.js";
+import { DevArgs } from "../dev.js";
 import { VisibleError } from "../error.js";
 import type { Input } from "../input.js";
 import { Queue } from "./queue.js";
@@ -91,13 +92,19 @@ interface OpenNextOutput {
 
 export interface NextjsArgs extends SsrSiteArgs {
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
+   * Configure how this component works in `sst dev`.
    *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
+   * :::note
+   * In `sst dev` your Next.js app is run in dev mode; it's not deployed.
+   * :::
    *
-   * @default `0`
+   * Instead of deploying your Next.js app, this starts it in dev mode. It's run
+   * as a separate process in the `sst dev` multiplexer. Read more about
+   * [`sst dev`](/docs/reference/cli/#dev).
+   *
+   * To disable dev mode, pass in `false`.
    */
-  warm?: SsrSiteArgs["warm"];
+  dev?: false | DevArgs["dev"];
   /**
    * Permissions and the resources that the [server function](#nodes-server) in your Next.js app needs to access. These permissions are used to create the function's IAM role.
    *
@@ -224,7 +231,7 @@ export interface NextjsArgs extends SsrSiteArgs {
    * Set [environment variables](https://nextjs.org/docs/pages/building-your-application/configuring/environment-variables) in your Next.js app. These are made available:
    *
    * 1. In `next build`, they are loaded into `process.env`.
-   * 2. Locally while running `sst dev next dev`.
+   * 2. Locally while running `next dev` through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your Next.js app and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
@@ -496,10 +503,12 @@ export class Nextjs extends Component implements Link.Linkable {
 
     const parent = this;
     const buildCommand = normalizeBuildCommand();
-    const { sitePath, partition, region } = prepare(args, opts);
-    if ($dev) {
+    const { sitePath, partition, region } = prepare(parent, args);
+    const dev = normalizeDev();
+
+    if (dev) {
       const server = createDevServer(parent, name, args);
-      this.devUrl = output(args.dev?.url ?? URL_UNAVAILABLE);
+      this.devUrl = dev.url;
       this.registerOutputs({
         _metadata: {
           mode: "placeholder",
@@ -524,20 +533,16 @@ export class Nextjs extends Component implements Link.Linkable {
             role: server.nodes.role.arn,
           },
           environment: args.environment,
-          directory: output(args.dev?.directory).apply(
-            (dir) => dir || sitePath,
-          ),
-          autostart: output(args.dev?.autostart).apply((val) => val ?? true),
-          command: output(args.dev?.command).apply(
-            (val) => val || "npm run dev",
-          ),
+          command: dev.command,
+          directory: dev.directory,
+          autostart: dev.autostart,
         },
       });
       return;
     }
 
     const { access, bucket } = createBucket(parent, name, partition, args);
-    const outputPath = buildApp(name, args, sitePath, buildCommand);
+    const outputPath = buildApp(parent, name, args, sitePath, buildCommand);
     const {
       openNextOutput,
       buildId,
@@ -580,6 +585,19 @@ export class Nextjs extends Component implements Link.Linkable {
         server: serverFunction.arn,
       },
     });
+
+    function normalizeDev() {
+      if (!$dev) return undefined;
+      if (args.dev === false) return undefined;
+
+      return {
+        ...args.dev,
+        url: output(args.dev?.url ?? URL_UNAVAILABLE),
+        command: output(args.dev?.command ?? "npm run dev"),
+        autostart: output(args.dev?.autostart ?? true),
+        directory: output(args.dev?.directory ?? sitePath),
+      };
+    }
 
     function normalizeBuildCommand() {
       return all([args?.buildCommand, args?.openNextVersion]).apply(
@@ -772,8 +790,12 @@ export class Nextjs extends Component implements Link.Linkable {
             permissions: [
               // access to the cache data
               {
-                actions: ["s3:GetObject", "s3:PutObject"],
+                actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
                 resources: [`${bucketArn}/*`],
+              },
+              {
+                actions: ["s3:ListBucket"],
+                resources: [bucketArn],
               },
               ...(revalidationQueueArn
                 ? [
@@ -956,7 +978,7 @@ export class Nextjs extends Component implements Link.Linkable {
                   resources: [queue.arn],
                 },
               ],
-              live: false,
+              dev: false,
               _skipMetadata: true,
             },
             {
@@ -1056,7 +1078,7 @@ export class Nextjs extends Component implements Link.Linkable {
               environment: {
                 CACHE_DYNAMO_TABLE: revalidationTable!.name,
               },
-              live: false,
+              dev: false,
               _skipMetadata: true,
             },
             { parent },

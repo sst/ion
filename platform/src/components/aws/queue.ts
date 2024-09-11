@@ -7,13 +7,13 @@ import {
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
+import { FunctionArgs, FunctionArn } from "./function";
 import { VisibleError } from "../error";
-import { hashStringToPrettyString, sanitizeToPascalCase } from "../naming";
+import { hashStringToPrettyString, logicalName } from "../naming";
 import { parseQueueArn } from "./helpers/arn";
 import { QueueLambdaSubscriber } from "./queue-lambda-subscriber";
 import { lambda, sqs } from "@pulumi/aws";
-import { DurationHours, toSeconds } from "../duration";
+import { DurationHours, DurationMinutes, toSeconds } from "../duration";
 import { permission } from "./permission.js";
 
 export interface QueueArgs {
@@ -157,6 +157,93 @@ export interface QueueSubscriberArgs {
    */
   filters?: Input<Input<Record<string, any>>[]>;
   /**
+   * Configure batch processing options for the consumer function.
+   * @default `{size: 10, window: "20 seconds", partialResponses: false}`
+   */
+  batch?: Input<{
+    /**
+     * The maximum number of events that will be processed together in a single invocation
+     * of the consumer function.
+     *
+     * Value must be between 1 and 10000.
+     *
+     * :::note
+     * When `size` is set to a value greater than 10, `window` must be set to at least `1 second`.
+     * :::
+     *
+     * @default `10`
+     * @example
+     * Set batch size to 1. This will process events individually.
+     * ```js
+     * {
+     *   batch: {
+     *     size: 1
+     *   }
+     * }
+     * ```
+     */
+    size?: Input<number>;
+    /**
+     * The maximum amount of time to wait for collecting events before sending the batch to
+     * the consumer function, even if the batch size hasn't been reached.
+     *
+     * Value must be between 0 seconds and 5 minutes (300 seconds).
+     * @default `"0 seconds"`
+     * @example
+     * ```js
+     * {
+     *   batch: {
+     *     window: "20 seconds"
+     *   }
+     * }
+     * ```
+     */
+    window?: Input<DurationMinutes>;
+    /**
+     * Whether to return partial successful responses for a batch.
+     *
+     * Enables reporting of individual message failures in a batch. When enabled, only failed
+     * messages become visible in the queue again, preventing unnecessary reprocessing of
+     * successful messages.
+     *
+     * The handler function must return a response with failed message IDs.
+     *
+     * :::note
+     * Ensure your Lambda function is updated to handle `batchItemFailures` responses when
+     * enabling this option.
+     * :::
+     *
+     * Read more about [partial batch responses](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html#services-sqs-batchfailurereporting).
+     * @default `false`
+     * @example
+     * Enable partial responses.
+     * ```js
+     * {
+     *   batch: {
+     *     partialResponses: true
+     *   }
+     * }
+     * ```
+     *
+     * For a batch of messages (id1, id2, id3, id4, id5), if id2 and id4 fail:
+     * ```json
+     * {
+     *   "batchItemFailures": [
+     *         {
+     *             "itemIdentifier": "id2"
+     *         },
+     *         {
+     *             "itemIdentifier": "id4"
+     *         }
+     *     ]
+     * }
+     * ```
+     *
+     * This makes only id2 and id4 visible again in the queue.
+     */
+    partialResponses?: Input<boolean>;
+  }>;
+  /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
    */
@@ -221,10 +308,15 @@ export interface QueueSubscriberArgs {
  */
 export class Queue extends Component implements Link.Linkable {
   private constructorName: string;
+  private constructorOpts: ComponentResourceOptions;
   private queue: sqs.Queue;
   private isSubscribed: boolean = false;
 
-  constructor(name: string, args?: QueueArgs, opts?: ComponentResourceOptions) {
+  constructor(
+    name: string,
+    args: QueueArgs = {},
+    opts: ComponentResourceOptions = {},
+  ) {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
@@ -235,6 +327,7 @@ export class Queue extends Component implements Link.Linkable {
     const queue = createQueue();
 
     this.constructorName = name;
+    this.constructorOpts = opts;
     this.queue = queue;
 
     function normalizeFifo() {
@@ -336,9 +429,15 @@ export class Queue extends Component implements Link.Linkable {
    *   timeout: "60 seconds"
    * });
    * ```
+   *
+   * Subscribe with an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * queue.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: QueueSubscriberArgs,
     opts?: ComponentResourceOptions,
   ) {
@@ -353,7 +452,7 @@ export class Queue extends Component implements Link.Linkable {
       this.arn,
       subscriber,
       args,
-      opts,
+      { ...opts, provider: this.constructorOpts.provider },
     );
   }
 
@@ -403,31 +502,33 @@ export class Queue extends Component implements Link.Linkable {
    */
   public static subscribe(
     queueArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: QueueSubscriberArgs,
     opts?: ComponentResourceOptions,
   ) {
-    const queueName = output(queueArn).apply(
-      (queueArn) => parseQueueArn(queueArn).queueName,
+    return output(queueArn).apply((queueArn) =>
+      this._subscribeFunction(
+        logicalName(parseQueueArn(queueArn).queueName),
+        queueArn,
+        subscriber,
+        args,
+        opts,
+      ),
     );
-    return this._subscribeFunction(queueName, queueArn, subscriber, args, opts);
   }
 
   private static _subscribeFunction(
-    name: Input<string>,
+    name: string,
     queueArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args: QueueSubscriberArgs = {},
     opts?: ComponentResourceOptions,
   ) {
-    return all([name, queueArn]).apply(([name, queueArn]) => {
-      const prefix = sanitizeToPascalCase(name);
-      const suffix = sanitizeToPascalCase(
-        hashStringToPrettyString(queueArn, 6),
-      );
+    return output(queueArn).apply((queueArn) => {
+      const suffix = logicalName(hashStringToPrettyString(queueArn, 6));
 
       return new QueueLambdaSubscriber(
-        `${prefix}Subscriber${suffix}`,
+        `${name}Subscriber${suffix}`,
         {
           queue: { arn: queueArn },
           subscriber,

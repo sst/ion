@@ -9,7 +9,7 @@ We are going to create an Astro site, add an S3 Bucket for file uploads, and dep
 You can [view the source](https://github.com/sst/ion/tree/dev/examples/aws-astro) of this example in our repo.
 :::
 
-Before you get started, make sure to [configure your AWS credentials](https://docs.sst.dev/advanced/iam-credentials#loading-from-a-file).
+Before you get started, make sure to [configure your AWS credentials](/docs/iam-credentials#credentials).
 
 ---
 
@@ -28,10 +28,10 @@ We are picking all the default options.
 
 #### Init SST
 
-Now let's initialize SST in our app. Make sure to add the `@ion` part.
+Now let's initialize SST in our app.
 
-```bash "sst@ion"
-npx sst@ion init
+```bash
+npx sst@latest init
 npm install
 ```
 
@@ -43,7 +43,7 @@ It'll also ask you to update your `astro.config.mjs` with something like this.
 + import aws from "astro-sst";
 
 export default defineConfig({
-+  output: "server",
++  output: "dist",
 +  adapter: aws()
 });
 ```
@@ -71,6 +71,8 @@ const bucket = new sst.aws.Bucket("MyBucket", {
   public: true
 });
 ```
+
+Add this above the `Astro` component.
 
 #### Link the bucket
 

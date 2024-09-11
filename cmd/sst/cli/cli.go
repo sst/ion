@@ -3,10 +3,13 @@ package cli
 import (
 	"context"
 	"fmt"
-	flag "github.com/spf13/pflag"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strings"
+
+	flag "github.com/spf13/pflag"
+	"golang.org/x/term"
 
 	"github.com/charmbracelet/huh"
 	"github.com/fatih/color"
@@ -22,9 +25,12 @@ type Cli struct {
 	path      CommandPath
 	Context   context.Context
 	cancel    context.CancelFunc
+	env       []string
 }
 
 func New(ctx context.Context, cancel context.CancelFunc, root *Command, version string) (*Cli, error) {
+	env := os.Environ()
+	godotenv.Load()
 	parsedFlags := map[string]interface{}{}
 	root.init(parsedFlags)
 	flag.CommandLine.Init("sst", flag.ContinueOnError)
@@ -59,6 +65,7 @@ func New(ctx context.Context, cancel context.CancelFunc, root *Command, version 
 		path:      cmds,
 		Context:   ctx,
 		cancel:    cancel,
+		env:       env,
 	}
 	cli.configureLog()
 	if cliParseError != nil {
@@ -119,6 +126,10 @@ func (c *Cli) Positional(index int) string {
 		return ""
 	}
 	return c.arguments[index]
+}
+
+func (c *Cli) Env() []string {
+	return c.env
 }
 
 type Command struct {
@@ -286,7 +297,7 @@ func (c CommandPath) PrintHelp() error {
 	}
 
 	fmt.Println()
-	fmt.Printf("Learn more at %s\n", color.MagentaString("https://ion.sst.dev"))
+	fmt.Printf("Learn more at %s\n", color.MagentaString("https://sst.dev"))
 
 	return ErrHelp
 }
@@ -300,6 +311,9 @@ func (c *Cli) Stage(cfgPath string) (string, error) {
 			if stage == "" {
 				stage = guessStage()
 				if stage == "" {
+					if !term.IsTerminal(int(os.Stdout.Fd())) {
+						return "", util.NewReadableError(nil, "No stage specified. Pass it in with --stage or set the SST_STAGE environment variable. If this is a personal stage it can be set in `.sst/stage`.")
+					}
 					err := huh.NewForm(
 						huh.NewGroup(
 							huh.NewInput().Title(" Enter name for your personal stage").Prompt(" > ").Value(&stage).Validate(func(v string) error {
@@ -321,7 +335,7 @@ func (c *Cli) Stage(cfgPath string) (string, error) {
 			}
 		}
 	}
-	godotenv.Load(fmt.Sprintf(".env.%s", stage))
+	godotenv.Load(filepath.Join(filepath.Dir(cfgPath), ".env."+stage))
 	return stage, nil
 }
 
