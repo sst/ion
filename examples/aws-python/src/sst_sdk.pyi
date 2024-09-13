@@ -7,3 +7,4 @@ class Resource:
         name: str
         type: str
         url: str
+
