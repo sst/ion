@@ -437,7 +437,7 @@ export class Queue extends Component implements Link.Linkable {
    * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args?: QueueSubscriberArgs,
     opts?: ComponentResourceOptions,
   ) {
@@ -502,7 +502,7 @@ export class Queue extends Component implements Link.Linkable {
    */
   public static subscribe(
     queueArn: Input<string>,
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args?: QueueSubscriberArgs,
     opts?: ComponentResourceOptions,
   ) {
@@ -520,7 +520,7 @@ export class Queue extends Component implements Link.Linkable {
   private static _subscribeFunction(
     name: string,
     queueArn: Input<string>,
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args: QueueSubscriberArgs = {},
     opts?: ComponentResourceOptions,
   ) {

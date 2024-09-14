@@ -295,7 +295,7 @@ export class Realtime extends Component implements Link.Linkable {
    * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args: RealtimeSubscriberArgs,
   ) {
     return all([subscriber, args.filter]).apply(([subscriber, filter]) => {
