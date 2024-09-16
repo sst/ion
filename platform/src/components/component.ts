@@ -121,6 +121,7 @@ export class Component extends ComponentResource {
               "aws:cognito/identityPoolRoleAttachment:IdentityPoolRoleAttachment",
               "aws:cognito/identityProvider:IdentityProvider",
               "aws:cognito/userPoolClient:UserPoolClient",
+              "aws:elasticache/replicationGroup:ReplicationGroup",
               "aws:lambda/eventSourceMapping:EventSourceMapping",
               "aws:lambda/functionUrl:FunctionUrl",
               "aws:lambda/invocation:Invocation",
@@ -225,7 +226,10 @@ export class Component extends ComponentResource {
               cb: () => physicalName(255, args.name),
             },
             {
-              types: ["aws:rds/subnetGroup:SubnetGroup"],
+              types: [
+                "aws:elasticache/subnetGroup:SubnetGroup",
+                "aws:rds/subnetGroup:SubnetGroup",
+              ],
               field: "name",
               cb: () => physicalName(255, args.name).toLowerCase(),
             },
