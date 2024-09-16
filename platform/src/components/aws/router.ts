@@ -605,7 +605,7 @@ export class Router extends Component implements Link.Linkable {
           runtime: "cloudfront-js-2.0",
           keyValueStoreAssociations: config?.kvStores ?? [],
           code: `
-function handler(event) {
+async function handler(event) {
   ${
     injectHostHeader
       ? `event.request.headers["x-forwarded-host"] = event.request.headers.host;`
@@ -639,7 +639,7 @@ event.request.uri = event.request.uri.replace(re, "${rewrite.to}");`
           runtime: "cloudfront-js-2.0",
           keyValueStoreAssociations: config!.kvStores ?? [],
           code: `
-function handler(event) {
+async function handler(event) {
   ${config.injection ?? ""}
   return event.response;
 }`,
