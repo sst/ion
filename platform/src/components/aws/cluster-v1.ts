@@ -1,15 +1,12 @@
 import { ComponentResourceOptions } from "@pulumi/pulumi";
-import { Component, Transform, transform } from "../component";
-import { Input } from "../input";
-import { Dns } from "../dns";
-import { FunctionArgs } from "./function";
-import { Service } from "./service";
+import { Component, Transform, transform } from "../component.js";
+import { Input } from "../input.js";
+import { Dns } from "../dns.js";
+import { FunctionArgs } from "./function.js";
+import { Service } from "./service-v1.js";
 import { RETENTION } from "./logging.js";
 import { cloudwatch, ec2, ecs, iam, lb } from "@pulumi/aws";
 import { ImageArgs } from "@pulumi/docker-build";
-import { Cluster as ClusterV1 } from "./cluster-v1";
-import { Vpc } from "./vpc";
-export type { ClusterArgs as ClusterV1Args } from "./cluster-v1";
 
 export const supportedCpus = {
   "0.25 vCPU": 256,
@@ -144,34 +141,26 @@ export interface ClusterArgs {
    * }
    * ```
    */
-  vpc:
-    | Vpc
-    | Input<{
-        /**
-         * The ID of the VPC.
-         */
-        id: Input<string>;
-        /**
-         * A list of subnet IDs in the VPC to place the load balancer in.
-         */
-        loadBalancerSubnets: Input<Input<string>[]>;
-        /**
-         * A list of private subnet IDs in the VPC to place the containers in.
-         */
-        containerSubnets: Input<Input<string>[]>;
-        /**
-         * A list of VPC security group IDs for the service.
-         */
-        securityGroups: Input<Input<string>[]>;
-        /**
-         * The ID of the Cloud Map namespace to use for the service.
-         */
-        cloudmapNamespaceId: Input<string>;
-        /**
-         * The name of the Cloud Map namespace to use for the service.
-         */
-        cloudmapNamespaceName: Input<string>;
-      }>;
+  vpc: Input<{
+    /**
+     * The ID of the VPC.
+     */
+    id: Input<string>;
+    /**
+     * A list of public subnet IDs in the VPC. If a service has public ports configured,
+     * its load balancer will be placed in the public subnets.
+     */
+    publicSubnets: Input<Input<string>[]>;
+    /**
+     * A list of private subnet IDs in the VPC. The service will be placed in the private
+     * subnets.
+     */
+    privateSubnets: Input<Input<string>[]>;
+    /**
+     * A list of VPC security group IDs for the service.
+     */
+    securityGroups: Input<Input<string>[]>;
+  }>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -848,15 +837,13 @@ export interface ClusterServiceArgs {
 export class Cluster extends Component {
   private args: ClusterArgs;
   private cluster: ecs.Cluster;
-  public static v1 = ClusterV1;
 
   constructor(
     name: string,
     args: ClusterArgs,
     opts?: ComponentResourceOptions,
   ) {
-    const _version = 2;
-    super(__pulumiType, name, args, opts, _version);
+    super(__pulumiType, name, args, opts);
 
     const parent = this;
 

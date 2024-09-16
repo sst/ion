@@ -82,12 +82,14 @@ export class Component extends ComponentResource {
               "aws:appsync/dataSource:DataSource",
               "aws:appsync/function:Function",
               "aws:appsync/resolver:Resolver",
+              "aws:cloudwatch/eventBus:EventBus",
               "aws:cognito/identityPool:IdentityPool",
               "aws:ecs/service:Service",
               "aws:ecs/taskDefinition:TaskDefinition",
               "aws:lb/targetGroup:TargetGroup",
               "aws:s3/bucketV2:BucketV2",
-              "aws:cloudwatch/eventBus:EventBus",
+              "aws:servicediscovery/privateDnsNamespace:PrivateDnsNamespace",
+              "aws:servicediscovery/service:Service",
             ].includes(args.type) ||
             // resources not prefixed
             [

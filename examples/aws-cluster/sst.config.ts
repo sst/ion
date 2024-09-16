@@ -13,11 +13,10 @@ export default $config({
       public: true,
     });
 
-    const vpc = new sst.aws.Vpc("MyVpc", { nat: "managed" });
+    const vpc = new sst.aws.Vpc("MyVpc", { bastion: true });
 
     const cluster = new sst.aws.Cluster("MyCluster", { vpc });
-
-    cluster.addService("MyService", {
+    const service = cluster.addService("MyService", {
       public: {
         ports: [{ listen: "80/http" }],
       },
@@ -26,5 +25,11 @@ export default $config({
       },
       link: [bucket],
     });
+
+    return {
+      service: service.service,
+      bastionCommand: $interpolate`aws ssm start-session --target ${vpc.bastion}`,
+      ecsExecCommand: $interpolate`aws ecs execute-command --cluster ${cluster.nodes.cluster.name} --task $TASK_ID --container MyService --interactive --command "/bin/sh"`,
+    };
   },
 });
