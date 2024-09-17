@@ -37,7 +37,7 @@ import {
 import { Permission, permission } from "./permission.js";
 import { Vpc } from "./vpc.js";
 import { buildPython, buildPythonContainer } from "../../runtime/python.js";
-import { Image } from "@pulumi/docker-build";
+import { Image, Platform } from "@pulumi/docker-build";
 import { rpc } from "../rpc/rpc.js";
 
 /**
@@ -1620,6 +1620,12 @@ export class Function extends Component implements Link.Linkable {
               registryId: bootstrapData.assetEcrRegistryId,
             });
 
+            const archPlatformMap: Record<string, Platform> = {
+              "arm64": "linux/arm64",
+              "x86_64": "linux/amd64"
+            }
+
+            const platforms = architectures.apply((architectures) => architectures.map((arch) => archPlatformMap[arch]))
             // build image
             //aws-python-container::sst:aws:Function::MyPythonFunction
             return new Image(
@@ -1658,7 +1664,7 @@ export class Function extends Component implements Link.Linkable {
                     inline: {},
                   },
                 ],
-                /// TODO: walln - enable arm64 builds by using architecture args
+                platforms,
                 push: true,
                 registries: [
                   authToken.apply((authToken) => ({
