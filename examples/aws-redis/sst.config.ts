@@ -11,6 +11,20 @@ export default $config({
   async run() {
     const vpc = new sst.aws.Vpc("MyVpc", { nat: "managed" });
     const redis = new sst.aws.Redis("MyRedis", { vpc });
-    return { vpc: vpc.id, redis: redis.host, port: redis.port };
+    const app = new sst.aws.Function("MyApp", {
+      handler: "index.handler",
+      url: true,
+      vpc,
+      timeout: "10 seconds",
+      link: [redis],
+    });
+    return {
+      vpc: vpc.id,
+      app: app.url,
+      host: redis.host,
+      port: redis.port,
+      username: redis.username,
+      password: redis.password,
+    };
   },
 });

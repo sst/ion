@@ -156,9 +156,9 @@ export interface ClusterArgs {
          */
         loadBalancerSubnets: Input<Input<string>[]>;
         /**
-         * A list of private subnet IDs in the VPC to place the containers in.
+         * A list of private subnet IDs in the VPC to place the services in.
          */
-        containerSubnets: Input<Input<string>[]>;
+        serviceSubnets: Input<Input<string>[]>;
         /**
          * A list of VPC security group IDs for the service.
          */

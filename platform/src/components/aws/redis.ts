@@ -78,7 +78,7 @@ export interface RedisArgs {
    */
   transform?: {
     /**
-     * Transform the RDS subnet group.
+     * Transform the Redis subnet group.
      */
     subnetGroup?: Transform<elasticache.SubnetGroupArgs>;
     /**
@@ -103,7 +103,7 @@ interface RedisRef {
  *
  * ```js title="sst.config.ts"
  * const vpc = new sst.aws.Vpc("MyVpc");
- * const cache = new sst.aws.Redis("MyCache", { vpc });
+ * const cache = new sst.aws.Redis("MyRedis", { vpc });
  * ```
  *
  * #### Link to a resource
@@ -121,14 +121,25 @@ interface RedisRef {
  *
  * ```ts title="app/page.tsx" {1,6,7,8}
  * import { Resource } from "sst";
- * import { drizzle } from "drizzle-orm/aws-data-api/pg";
- * import { RDSDataClient } from "@aws-sdk/client-rds-data";
+ * import { Cluster } from "ioredis"
  *
- * drizzle(new RDSDataClient({}), {
- *   database: Resource.MyDatabase.database,
- *   secretArn: Resource.MyDatabase.secretArn,
- *   resourceArn: Resource.MyDatabase.clusterArn
- * });
+ * const client = new Cluster(
+ *   [
+ *     {
+ *       host: Resource.MyRedis.host,
+ *       port: Resource.MyRedis.port,
+ *     },
+ *   ],
+ *   {
+ *     redisOptions: {
+ *       tls: {
+ *         checkServerIdentity: () => undefined,
+ *       },
+ *       username: Resource.MyRedis.username,
+ *       password: Resource.MyRedis.password,
+ *     },
+ *   }
+ * );
  * ```
  */
 export class Redis extends Component implements Link.Linkable {
@@ -233,41 +244,45 @@ export class Redis extends Component implements Link.Linkable {
   }
 
   /**
-   * The ID of the RDS Cluster.
+   * The ID of the Redis Cluster.
    */
   public get clusterID() {
     return this.cluster.id;
   }
 
   /**
-   * The ARN of the RDS Cluster.
+   * The ARN of the Redis Cluster.
    */
   public get clusterArn() {
     return this.cluster.arn;
   }
 
-  /** The username used to authenticate to the cache. */
+  /**
+   * The username to connect to the Redis cache.
+   */
   public get username() {
     return "default";
   }
 
-  /** The password used to authenticate to the cache. */
+  /**
+   * The password to connect to the Redis cache.
+   */
   public get password() {
     return this.cluster.authToken;
   }
 
   /**
-   * The port of the cache cluster.
-   */
-  public get port() {
-    return this.cluster.port;
-  }
-
-  /**
-   * The host of the cache cluster.
+   * The host to connect to the Redis cache.
    */
   public get host() {
     return this.cluster.configurationEndpointAddress;
+  }
+
+  /**
+   * The port to connect to the Redis cache.
+   */
+  public get port() {
+    return this.cluster.port;
   }
 
   public get nodes() {
@@ -281,10 +296,10 @@ export class Redis extends Component implements Link.Linkable {
     return {
       properties: {
         clusterArn: this.clusterArn,
+        host: this.host,
+        port: this.port,
         username: this.username,
         password: this.password,
-        port: this.port,
-        host: this.host,
       },
     };
   }
@@ -307,11 +322,11 @@ export class Redis extends Component implements Link.Linkable {
    *
    * ```ts title="sst.config.ts"
    * const cache = $app.stage === "frank"
-   *   ? sst.aws.Redis.get("MyCache", "app-dev-mycache")
-   *   : new sst.aws.Redis("MyCache");
+   *   ? sst.aws.Redis.get("MyRedis", "app-dev-myredis")
+   *   : new sst.aws.Redis("MyRedis");
    * ```
    *
-   * Here `app-dev-mycache` is the ID of the cluster created in the `dev` stage.
+   * Here `app-dev-myredis` is the ID of the cluster created in the `dev` stage.
    * You can find this by outputting the cluster ID in the `dev` stage.
    *
    * ```ts title="sst.config.ts"

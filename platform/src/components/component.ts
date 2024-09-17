@@ -77,6 +77,7 @@ export class Component extends ComponentResource {
             args.type.startsWith("sst:") ||
             args.type === "pulumi-nodejs:dynamic:Resource" ||
             args.type === "random:index/randomId:RandomId" ||
+            args.type === "random:index/randomPassword:RandomPassword" ||
             // resources manually named
             [
               "aws:appsync/dataSource:DataSource",

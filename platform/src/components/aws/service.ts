@@ -152,7 +152,7 @@ export class Service extends Component implements Link.Linkable {
         return {
           id: args.vpc.id,
           loadBalancerSubnets: args.vpc.publicSubnets,
-          containerSubnets: args.vpc.publicSubnets,
+          serviceSubnets: args.vpc.publicSubnets,
           securityGroups: args.vpc.securityGroups,
           cloudmapNamespaceId: args.vpc.nodes.cloudmapNamespace.id,
           cloudmapNamespaceName: args.vpc.nodes.cloudmapNamespace.name,
@@ -677,7 +677,7 @@ export class Service extends Component implements Link.Linkable {
             launchType: "FARGATE",
             networkConfiguration: {
               assignPublicIp: true,
-              subnets: vpc.containerSubnets,
+              subnets: vpc.serviceSubnets,
               securityGroups: vpc.securityGroups,
             },
             deploymentCircuitBreaker: {
