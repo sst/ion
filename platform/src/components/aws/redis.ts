@@ -20,17 +20,29 @@ export interface RedisArgs {
    */
   version?: Input<string>;
   /**
-   * The node type to use for the Redis cluster.  Check out the [supported node types](https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/CacheNodes.SupportedTypes.html).
+   * The node instance type to use for the Redis cluster.  Check out the [supported instance types](https://docs.aws.amazon.com/AmazonElastiCache/latest/red-ug/CacheNodes.SupportedTypes.html).
    *
    * @default `"t4g.micro"`
    * @example
    * ```js
    * {
-   *   node: "m7g.xlarge"
+   *   instance: "m7g.xlarge"
    * }
    * ```
    */
-  node?: Input<string>;
+  instance?: Input<string>;
+  /**
+   * The number of nodes to use for the Redis cluster.
+   *
+   * @default `1`
+   * @example
+   * ```js
+   * {
+   *   nodes: 2
+   * }
+   * ```
+   */
+  nodes?: Input<number>;
   /**
    * The VPC to use for the Redis cluster.
    *
@@ -155,8 +167,9 @@ export class Redis extends Component implements Link.Linkable {
     }
 
     const parent = this;
-    const version = normalizeVersion();
-    const nodeType = normalizeNodeType();
+    const version = output(args.version).apply((v) => v ?? "7.1");
+    const instance = output(args.instance).apply((v) => v ?? "t4g.micro");
+    const nodes = output(args.nodes).apply((v) => v ?? 1);
     const vpc = normalizeVpc();
 
     const authToken = createAuthToken();
@@ -164,14 +177,6 @@ export class Redis extends Component implements Link.Linkable {
     const cluster = createCluster();
 
     this.cluster = cluster;
-
-    function normalizeVersion() {
-      return output(args.version).apply((v) => v ?? "7.1");
-    }
-
-    function normalizeNodeType() {
-      return output(args.node).apply((v) => v ?? "t4g.micro");
-    }
 
     function normalizeVpc() {
       // "vpc" is a Vpc component
@@ -222,12 +227,12 @@ export class Redis extends Component implements Link.Linkable {
             description: "Managed by SST",
             engine: "redis",
             engineVersion: version,
-            nodeType: interpolate`cache.${nodeType}`,
-            dataTieringEnabled: nodeType.apply((v) => v.startsWith("r6gd.")),
+            nodeType: interpolate`cache.${instance}`,
+            dataTieringEnabled: instance.apply((v) => v.startsWith("r6gd.")),
             port: 6379,
             automaticFailoverEnabled: true,
             clusterMode: "enabled",
-            numNodeGroups: 1,
+            numNodeGroups: nodes,
             replicasPerNodeGroup: 0,
             multiAzEnabled: false,
             atRestEncryptionEnabled: true,
