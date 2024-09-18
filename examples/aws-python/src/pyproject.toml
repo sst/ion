@@ -12,7 +12,10 @@ dependencies = [
 
 # It is recommended to specify your python version to match your Lambda runtime otherwise you may
 # encounter issues with dependencies.
-requires-python = "3.11"
+requires-python = ">=3.11,<3.12"
 
 [tool.uv.sources]
 sst-sdk = { git = "https://github.com/sst/ion.git", subdirectory = "sdk/python" }
+
+[tool.setuptools]
+py-modules = []
