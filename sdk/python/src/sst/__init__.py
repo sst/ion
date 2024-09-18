@@ -1,7 +1,8 @@
 import json
 import os
+import sys
 from typing import Dict, Any, Type, Union
-import inspect
+from pathlib import Path
 
 
 # Define a base class for dynamic resource objects
@@ -43,35 +44,22 @@ class ResourceProxy:
 
     def _find_resources_file(self, filename: str) -> str:
         """
-        Traverse up the directory tree from the caller's directory to find the resources.json file.
+        Search for the resources.json file relative to the main module of the application.
         """
-        # Use inspect to get the caller's frame
-        frame = inspect.currentframe()
-        try:
-            # Go back two frames: current frame -> __init__ -> caller
-            caller_frame = frame.f_back.f_back
-            caller_file = caller_frame.f_code.co_filename
-            caller_dir = os.path.dirname(os.path.abspath(caller_file))
-        except Exception:
-            # Fallback to current working directory
-            caller_dir = os.getcwd()
-        finally:
-            del frame  # Avoid reference cycles
+        main_module = sys.modules.get("__main__")
+        if main_module and hasattr(main_module, "__file__"):
+            main_path = Path(main_module.__file__).parent
+        else:
+            # Fallback to current working directory if __file__ is not available
+            main_path = Path.cwd()
 
-        current_dir = caller_dir
-        root_dir = os.path.abspath(os.sep)
-
-        while True:
-            potential_path = os.path.join(current_dir, filename)
-            if os.path.isfile(potential_path):
-                return potential_path
-            if current_dir == root_dir:
-                break
-            # Move one directory up
-            current_dir = os.path.dirname(current_dir)
+        for parent in [main_path] + list(main_path.parents):
+            potential_path = parent / filename
+            if potential_path.is_file():
+                return str(potential_path)
 
         raise FileNotFoundError(
-            f"Configuration file '{filename}' not found in '{caller_dir}' or any parent directories."
+            f"Configuration file '{filename}' not found in '{main_path}' or any parent directories."
         )
 
     def _load_resources_from_path(self, path: str):

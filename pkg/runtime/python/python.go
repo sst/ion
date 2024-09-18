@@ -158,6 +158,7 @@ type Source struct {
 	URL          string  `toml:"url,omitempty"`
 	Git          string  `toml:"git,omitempty"`
 	Subdirectory *string `toml:"subdirectory,omitempty"`
+	Branch       string  `toml:"branch,omitempty"`
 }
 
 type PyProject struct {
@@ -199,6 +200,7 @@ func (r *PythonRuntime) Run(ctx context.Context, input *runtime.RunInput) (runti
 
 	args := []string{
 		"run",
+		"--no-project",
 		"--with",
 		"requests",
 	}
@@ -233,6 +235,9 @@ func (r *PythonRuntime) Run(ctx context.Context, input *runtime.RunInput) (runti
 				args = append(args, "--find-links", source.URL)
 			} else if source.Git != "" {
 				repo_url := "git+" + source.Git
+				if source.Branch != "" {
+					repo_url = repo_url + "@" + source.Branch
+				}
 				if source.Subdirectory != nil {
 					repo_url = repo_url + "#subdirectory=" + *source.Subdirectory
 				}
