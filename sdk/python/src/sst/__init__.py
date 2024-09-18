@@ -1,4 +1,3 @@
-# sst/resource_proxy.py
 import json
 import os
 from typing import Dict, Any, Type, Union
@@ -20,8 +19,6 @@ class DynamicResource:
 
 
 def create_resource_class(attributes: Dict[str, Type]) -> Type[DynamicResource]:
-    # Currently, attributes aren't used for type checking,
-    # but you can extend this function to enforce type constraints if needed.
     return DynamicResource
 
 

@@ -1,6 +1,4 @@
-from sst_sdk import Resource
-
-from .sst import Resource as SSTResource
+from sst import Resource
 
 
 def handler(event, context):
@@ -8,5 +6,5 @@ def handler(event, context):
 
     return {
         "statusCode": 200,
-        "body": f"{SSTResource.MyLinkableValue.foo} from Python!",
+        "body": f"{Resource.MyLinkableValue.foo} from Python!",
     }
