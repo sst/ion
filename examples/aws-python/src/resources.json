@@ -1,0 +1,6 @@
+{
+  "MyLinkableValue": {
+    "foo": "Hello World",
+    "type": "sst:sst:Linkable"
+  }
+}
