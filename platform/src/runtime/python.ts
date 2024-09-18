@@ -68,11 +68,12 @@ export async function buildPythonContainer(
         ],
       };
     }
+    const relativePyProjectFile = path.relative($cli.paths.root, pyProjectFile);
 
     // Copy pyproject.toml to the output directory
     await fs.copyFile(
       path.join(pyProjectFile, "pyproject.toml"),
-      path.join(out, path.join(pyProjectFile, "pyproject.toml")),
+      path.join(out, path.join(relativePyProjectFile, "pyproject.toml")),
     );
 
     // Check for uv.lock and copy it if it exists
@@ -171,23 +172,24 @@ export async function buildPython(
         ],
       };
     }
+    const relativePyProjectFile = path.relative($cli.paths.root, pyProjectFile);
 
     // Copy pyproject.toml to the output directory
     await fs.copyFile(
       path.join(pyProjectFile, "pyproject.toml"),
-      path.join(out, path.join(pyProjectFile, "pyproject.toml")),
+      path.join(out, path.join(relativePyProjectFile, "pyproject.toml")),
     );
 
     // Install Python dependencies
     // in the output directory we run uv sync to create a virtual environment
     // first make the output directory the working directory
     // also need to use sst uv path because it is not guaranteed to be in the path
-    const installCmd = `cd ${path.join(out, pyProjectFile)} && uv sync`;
+    const installCmd = `cd ${path.join(out, relativePyProjectFile)} && uv sync`;
 
     // Once the packages are synced, we need to convert the virtual environment to site-packages so that lambda can find the packages
     const sitePackagesCmd = `cp -r ${path.join(
       out,
-      pyProjectFile,
+      relativePyProjectFile,
       ".venv",
       "lib",
       "python3.*",
@@ -198,7 +200,7 @@ export async function buildPython(
     // Now remove the virtual environment because it does not need to be included in the zip
     const removeVirtualEnvCmd = `rm -rf ${path.join(
       out,
-      pyProjectFile,
+      relativePyProjectFile,
       ".venv",
     )}`;
 
