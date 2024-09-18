@@ -17,6 +17,7 @@ const sidebar = [
     label: "Get Started",
     items: [
       { label: "API", slug: "docs/start/aws/api" },
+      { label: "Nuxt", slug: "docs/start/aws/nuxt" },
       { label: "Solid", slug: "docs/start/aws/solid" },
       { label: "tRPC", slug: "docs/start/aws/trpc" },
       { label: "Hono", slug: "docs/start/aws/hono" },
@@ -61,6 +62,7 @@ const sidebar = [
       { label: "Set up a Monorepo", slug: "docs/set-up-a-monorepo" },
       { label: "Share Across Stages", slug: "docs/share-across-stages" },
       { label: "Reference Resources", slug: "docs/reference-resources" },
+      { label: "Environment Variables", slug: "docs/environment-variables" },
     ],
   },
   {
@@ -70,6 +72,7 @@ const sidebar = [
       "docs/component/aws/cron",
       "docs/component/aws/nuxt",
       "docs/component/aws/astro",
+      "docs/component/aws/redis",
       "docs/component/aws/email",
       "docs/component/aws/remix",
       "docs/component/aws/nextjs",
@@ -160,7 +163,10 @@ const sidebar = [
   {
     label: "Deprecated",
     collapsed: true,
-    items: [{ label: "Vpc.v1", slug: "docs/component/aws/vpc-v1" }],
+    items: [
+      { label: "Vpc.v1", slug: "docs/component/aws/vpc-v1" },
+      { label: "Cluster.v1", slug: "docs/component/aws/cluster-v1" },
+    ],
   },
 ];
 

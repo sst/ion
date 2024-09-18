@@ -21,6 +21,8 @@ var PULUMI_VERSION = "v" + sdk.Version.String()
 
 const BUN_VERSION = "1.1.24"
 
+const UV_VERSION = "0.3.2"
+
 var configDir = (func() string {
 	home, err := os.UserConfigDir()
 	if err != nil {

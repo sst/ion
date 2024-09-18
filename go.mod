@@ -5,6 +5,7 @@ go 1.21.3
 require (
 	github.com/Masterminds/semver/v3 v3.2.1
 	github.com/aws/aws-cdk-go/awscdk/v2 v2.151.0
+	github.com/aws/aws-sdk-go v1.44.298
 	github.com/aws/aws-sdk-go-v2 v1.30.3
 	github.com/aws/aws-sdk-go-v2/config v1.26.6
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.38.4
@@ -56,6 +57,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
+	github.com/BurntSushi/toml v1.4.0
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/ProtonMail/go-crypto v1.0.0 // indirect
 	github.com/aead/chacha20 v0.0.0-20180709150244-8b13a72661da // indirect

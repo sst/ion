@@ -37,14 +37,6 @@ export interface RemixArgs extends SsrSiteArgs {
    */
   dev?: false | DevArgs["dev"];
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
-   *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
-   *
-   * @default `0`
-   */
-  warm?: SsrSiteArgs["warm"];
-  /**
    * Permissions and the resources that the [server function](#nodes-server) in your Remix app needs to access. These permissions are used to create the function's IAM role.
    *
    * :::tip
@@ -148,7 +140,7 @@ export interface RemixArgs extends SsrSiteArgs {
    * Set [environment variables](https://remix.run/docs/en/main/guides/envvars) in your Remix app. These are made available:
    *
    * 1. In `remix build`, they are loaded into `process.env`.
-   * 2. Locally while running `sst dev remix dev`.
+   * 2. Locally while running through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your Remix app and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
@@ -566,7 +558,7 @@ export class Remix extends Component implements Link.Linkable {
                 injections: [
                   // Note: When using libraries like remix-flat-routes the file can
                   // contains special characters like "+". It needs to be encoded.
-                  `request.uri = request.uri.split('/').map(encodeURIComponent).join('/');`,
+                  `event.request.uri = event.request.uri.split('/').map(encodeURIComponent).join('/');`,
                 ],
               },
             },

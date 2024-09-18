@@ -106,14 +106,6 @@ export interface NextjsArgs extends SsrSiteArgs {
    */
   dev?: false | DevArgs["dev"];
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
-   *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
-   *
-   * @default `0`
-   */
-  warm?: SsrSiteArgs["warm"];
-  /**
    * Permissions and the resources that the [server function](#nodes-server) in your Next.js app needs to access. These permissions are used to create the function's IAM role.
    *
    * :::tip
@@ -239,7 +231,7 @@ export interface NextjsArgs extends SsrSiteArgs {
    * Set [environment variables](https://nextjs.org/docs/pages/building-your-application/configuring/environment-variables) in your Next.js app. These are made available:
    *
    * 1. In `next build`, they are loaded into `process.env`.
-   * 2. Locally while running `sst dev next dev`.
+   * 2. Locally while running through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your Next.js app and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
@@ -807,39 +799,39 @@ export class Nextjs extends Component implements Link.Linkable {
               },
               ...(revalidationQueueArn
                 ? [
-                    {
-                      actions: [
-                        "sqs:SendMessage",
-                        "sqs:GetQueueAttributes",
-                        "sqs:GetQueueUrl",
-                      ],
-                      resources: [revalidationQueueArn],
-                    },
-                  ]
+                  {
+                    actions: [
+                      "sqs:SendMessage",
+                      "sqs:GetQueueAttributes",
+                      "sqs:GetQueueUrl",
+                    ],
+                    resources: [revalidationQueueArn],
+                  },
+                ]
                 : []),
               ...(revalidationTableArn
                 ? [
-                    {
-                      actions: [
-                        "dynamodb:BatchGetItem",
-                        "dynamodb:GetRecords",
-                        "dynamodb:GetShardIterator",
-                        "dynamodb:Query",
-                        "dynamodb:GetItem",
-                        "dynamodb:Scan",
-                        "dynamodb:ConditionCheckItem",
-                        "dynamodb:BatchWriteItem",
-                        "dynamodb:PutItem",
-                        "dynamodb:UpdateItem",
-                        "dynamodb:DeleteItem",
-                        "dynamodb:DescribeTable",
-                      ],
-                      resources: [
-                        revalidationTableArn,
-                        `${revalidationTableArn}/*`,
-                      ],
-                    },
-                  ]
+                  {
+                    actions: [
+                      "dynamodb:BatchGetItem",
+                      "dynamodb:GetRecords",
+                      "dynamodb:GetShardIterator",
+                      "dynamodb:Query",
+                      "dynamodb:GetItem",
+                      "dynamodb:Scan",
+                      "dynamodb:ConditionCheckItem",
+                      "dynamodb:BatchWriteItem",
+                      "dynamodb:PutItem",
+                      "dynamodb:UpdateItem",
+                      "dynamodb:DeleteItem",
+                      "dynamodb:DescribeTable",
+                    ],
+                    resources: [
+                      revalidationTableArn,
+                      `${revalidationTableArn}/*`,
+                    ],
+                  },
+                ]
                 : []),
             ],
           };
@@ -1287,7 +1279,7 @@ export class Nextjs extends Component implements Link.Linkable {
       // accept header, and this header is not useful for the rest of the query
       return `
 function getHeader(key) {
-  var header = request.headers[key];
+  var header = event.request.headers[key];
   if (header) {
     if (header.multiValue) {
       return header.multiValue.map((header) => header.value).join(",");
@@ -1299,7 +1291,7 @@ function getHeader(key) {
   return "";
 }
 var cacheKey = "";
-if (request.uri.startsWith("/_next/image")) {
+if (event.request.uri.startsWith("/_next/image")) {
   cacheKey = getHeader("accept");
 } else {
   cacheKey =
@@ -1309,15 +1301,15 @@ if (request.uri.startsWith("/_next/image")) {
     getHeader("next-url") +
     getHeader("x-prerender-revalidate");
 }
-if (request.cookies["__prerender_bypass"]) {
-  cacheKey += request.cookies["__prerender_bypass"]
-    ? request.cookies["__prerender_bypass"].value
+if (event.request.cookies["__prerender_bypass"]) {
+  cacheKey += event.request.cookies["__prerender_bypass"]
+    ? event.request.cookies["__prerender_bypass"].value
     : "";
 }
 var crypto = require("crypto");
 
 var hashedKey = crypto.createHash("md5").update(cacheKey).digest("hex");
-request.headers["x-open-next-cache-key"] = { value: hashedKey };
+event.request.headers["x-open-next-cache-key"] = { value: hashedKey };
 `;
     }
 
@@ -1325,20 +1317,20 @@ request.headers["x-open-next-cache-key"] = { value: hashedKey };
       // Inject the CloudFront viewer country, region, latitude, and longitude headers into the request headers
       // for OpenNext to use them
       return `
-if(request.headers["cloudfront-viewer-city"]) {
-  request.headers["x-open-next-city"] = request.headers["cloudfront-viewer-city"];
+if(event.request.headers["cloudfront-viewer-city"]) {
+  event.request.headers["x-open-next-city"] = event.request.headers["cloudfront-viewer-city"];
 }
-if(request.headers["cloudfront-viewer-country"]) {
-  request.headers["x-open-next-country"] = request.headers["cloudfront-viewer-country"];
+if(event.request.headers["cloudfront-viewer-country"]) {
+  event.request.headers["x-open-next-country"] = event.request.headers["cloudfront-viewer-country"];
 }
-if(request.headers["cloudfront-viewer-region"]) {
-  request.headers["x-open-next-region"] = request.headers["cloudfront-viewer-region"];
+if(event.request.headers["cloudfront-viewer-region"]) {
+  event.request.headers["x-open-next-region"] = event.request.headers["cloudfront-viewer-region"];
 }
-if(request.headers["cloudfront-viewer-latitude"]) {
-  request.headers["x-open-next-latitude"] = request.headers["cloudfront-viewer-latitude"];
+if(event.request.headers["cloudfront-viewer-latitude"]) {
+  event.request.headers["x-open-next-latitude"] = event.request.headers["cloudfront-viewer-latitude"];
 }
-if(request.headers["cloudfront-viewer-longitude"]) {
-  request.headers["x-open-next-longitude"] = request.headers["cloudfront-viewer-longitude"];
+if(event.request.headers["cloudfront-viewer-longitude"]) {
+  event.request.headers["x-open-next-longitude"] = event.request.headers["cloudfront-viewer-longitude"];
 }
     `;
     }

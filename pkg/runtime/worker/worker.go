@@ -1,4 +1,4 @@
-package runtime
+package worker
 
 import (
 	"context"
@@ -11,36 +11,39 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	esbuild "github.com/evanw/esbuild/pkg/api"
+	"github.com/sst/ion/pkg/project/path"
+	"github.com/sst/ion/pkg/runtime"
+	"github.com/sst/ion/pkg/runtime/node"
 )
 
-type WorkerRuntime struct {
+type Runtime struct {
 	contexts map[string]esbuild.BuildContext
 	results  map[string]esbuild.BuildResult
 }
 
-type WorkerProperties struct {
-	AccountID  string         `json:"accountID"`
-	ScriptName string         `json:"scriptName"`
-	Build      NodeProperties `json:"build"`
+type Properties struct {
+	AccountID  string              `json:"accountID"`
+	ScriptName string              `json:"scriptName"`
+	Build      node.NodeProperties `json:"build"`
 }
 
-func newWorkerRuntime() *WorkerRuntime {
-	return &WorkerRuntime{
+func New() *Runtime {
+	return &Runtime{
 		contexts: map[string]esbuild.BuildContext{},
 		results:  map[string]esbuild.BuildResult{},
 	}
 }
 
-func (w *WorkerRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOutput, error) {
-	var properties WorkerProperties
-	json.Unmarshal(input.Warp.Properties, &properties)
+func (w *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtime.BuildOutput, error) {
+	var properties Properties
+	json.Unmarshal(input.Properties, &properties)
 	build := properties.Build
 
-	abs, err := filepath.Abs(input.Warp.Handler)
+	abs, err := filepath.Abs(input.Handler)
 	if err != nil {
 		return nil, err
 	}
-	target := filepath.Join(input.Out(), input.Warp.Handler)
+	target := filepath.Join(input.Out(), input.Handler)
 
 	slog.Info("loader info", "loader", build.Loader)
 
@@ -112,15 +115,15 @@ func (w *WorkerRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOut
 		MainFields:        []string{"module", "main"},
 	}
 
-	buildContext, ok := w.contexts[input.Warp.FunctionID]
+	buildContext, ok := w.contexts[input.FunctionID]
 	if !ok {
 		buildContext, _ = esbuild.Context(options)
-		w.contexts[input.Warp.FunctionID] = buildContext
+		w.contexts[input.FunctionID] = buildContext
 	}
 
 	result := buildContext.Rebuild()
 	if len(result.Errors) == 0 {
-		w.results[input.Warp.FunctionID] = result
+		w.results[input.FunctionID] = result
 	}
 	errors := []string{}
 	for _, error := range result.Errors {
@@ -134,21 +137,21 @@ func (w *WorkerRuntime) Build(ctx context.Context, input *BuildInput) (*BuildOut
 		slog.Error("esbuild error", "error", warning)
 	}
 
-	return &BuildOutput{
-		Handler: input.Warp.Handler,
+	return &runtime.BuildOutput{
+		Handler: input.Handler,
 		Errors:  errors,
 	}, nil
 }
 
-func (w *WorkerRuntime) Match(runtime string) bool {
+func (w *Runtime) Match(runtime string) bool {
 	return runtime == "worker"
 }
 
-func (w *WorkerRuntime) getFile(input *BuildInput) (string, bool) {
-	dir := filepath.Dir(input.Warp.Handler)
-	base := strings.Split(filepath.Base(input.Warp.Handler), ".")[0]
-	for _, ext := range NODE_EXTENSIONS {
-		file := filepath.Join(input.Project.PathRoot(), dir, base+ext)
+func (w *Runtime) getFile(input *runtime.BuildInput) (string, bool) {
+	dir := filepath.Dir(input.Handler)
+	base := strings.Split(filepath.Base(input.Handler), ".")[0]
+	for _, ext := range node.NODE_EXTENSIONS {
+		file := filepath.Join(path.ResolveRootDir(input.CfgPath), dir, base+ext)
 		if _, err := os.Stat(file); err == nil {
 			return file, true
 		}
@@ -156,7 +159,7 @@ func (w *WorkerRuntime) getFile(input *BuildInput) (string, bool) {
 	return "", false
 }
 
-func (r *WorkerRuntime) ShouldRebuild(functionID string, file string) bool {
+func (r *Runtime) ShouldRebuild(functionID string, file string) bool {
 	result, ok := r.results[functionID]
 	if !ok {
 		return false
@@ -180,7 +183,7 @@ func (r *WorkerRuntime) ShouldRebuild(functionID string, file string) bool {
 	return false
 }
 
-func (r *WorkerRuntime) Run(ctx context.Context, input *RunInput) (Worker, error) {
+func (r *Runtime) Run(ctx context.Context, input *runtime.RunInput) (runtime.Worker, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 

@@ -9,23 +9,23 @@ import {
   output,
   secret,
 } from "@pulumi/pulumi";
-import * as docker from "@pulumi/docker";
-import { Component, transform } from "../component";
-import { toGBs, toMBs } from "../size";
-import { toNumber } from "../cpu";
+import { Image, Platform } from "@pulumi/docker-build";
+import { Component, transform } from "../component.js";
+import { toGBs, toMBs } from "../size.js";
+import { toNumber } from "../cpu.js";
 import { dns as awsDns } from "./dns.js";
-import { VisibleError } from "../error";
-import { DnsValidatedCertificate } from "./dns-validated-certificate";
+import { VisibleError } from "../error.js";
+import { DnsValidatedCertificate } from "./dns-validated-certificate.js";
 import { Link } from "../link.js";
-import { bootstrap } from "./helpers/bootstrap";
+import { bootstrap } from "./helpers/bootstrap.js";
 import {
   ClusterArgs,
   ClusterServiceArgs,
   supportedCpus,
   supportedMemories,
-} from "./cluster";
+} from "./cluster.js";
 import { RETENTION } from "./logging.js";
-import { URL_UNAVAILABLE } from "./linkable";
+import { URL_UNAVAILABLE } from "./linkable.js";
 import {
   appautoscaling,
   cloudwatch,
@@ -36,9 +36,11 @@ import {
   getRegionOutput,
   iam,
   lb,
+  servicediscovery,
 } from "@pulumi/aws";
-import { Permission } from "./permission";
-import { Vpc } from "./vpc";
+import { Permission } from "./permission.js";
+import { Vpc } from "./vpc.js";
+import { Vpc as VpcV1 } from "./vpc-v1";
 
 export interface ServiceArgs extends ClusterServiceArgs {
   /**
@@ -71,7 +73,9 @@ export interface ServiceArgs extends ClusterServiceArgs {
  * This component is returned by the `addService` method of the `Cluster` component.
  */
 export class Service extends Component implements Link.Linkable {
-  private readonly service?: ecs.Service;
+  private readonly _service?: ecs.Service;
+  private readonly cloudmapNamespace?: Output<string>;
+  private readonly cloudmapService?: servicediscovery.Service;
   private readonly taskRole: iam.Role;
   private readonly taskDefinition?: ecs.TaskDefinition;
   private readonly loadBalancer?: lb.LoadBalancer;
@@ -104,6 +108,8 @@ export class Service extends Component implements Link.Linkable {
     const linkPermissions = buildLinkPermissions();
 
     const taskRole = createTaskRole();
+
+    this.cloudmapNamespace = vpc.cloudmapNamespaceName;
     this.taskRole = taskRole;
 
     if ($dev) {
@@ -112,17 +118,20 @@ export class Service extends Component implements Link.Linkable {
       return;
     }
 
+    const bootstrapData = region.apply((region) => bootstrap.forRegion(region));
     const executionRole = createExecutionRole();
     const image = createImage();
     const logGroup = createLogGroup();
     const taskDefinition = createTaskDefinition();
     const certificateArn = createSsl();
     const { loadBalancer, targets } = createLoadBalancer();
+    const cloudmapService = createCloudmapService();
     const service = createService();
     createAutoScaling();
     createDnsRecords();
 
-    this.service = service;
+    this._service = service;
+    this.cloudmapService = cloudmapService;
     this.taskDefinition = taskDefinition;
     this.loadBalancer = loadBalancer;
     this.domain = pub?.domain
@@ -139,21 +148,23 @@ export class Service extends Component implements Link.Linkable {
     registerReceiver();
 
     function normalizeVpc() {
+      // "vpc" is a Vpc.v1 component
+      if (args.vpc instanceof VpcV1) {
+        throw new VisibleError(
+          `You are using the "Vpc.v1" component. Please migrate to the latest "Vpc" component.`,
+        );
+      }
+
       // "vpc" is a Vpc component
       if (args.vpc instanceof Vpc) {
-        const result = {
+        return {
           id: args.vpc.id,
-          publicSubnets: args.vpc.publicSubnets,
-          privateSubnets: args.vpc.privateSubnets,
+          loadBalancerSubnets: args.vpc.publicSubnets,
+          serviceSubnets: args.vpc.publicSubnets,
           securityGroups: args.vpc.securityGroups,
+          cloudmapNamespaceId: args.vpc.nodes.cloudmapNamespace.id,
+          cloudmapNamespaceName: args.vpc.nodes.cloudmapNamespace.name,
         };
-        return args.vpc.nodes.natGateways.apply((natGateways) => {
-          if (natGateways.length === 0)
-            throw new VisibleError(
-              `The VPC configured for the service does not have NAT enabled. Enable NAT by configuring "nat" on the "sst.aws.Vpc" component.`,
-            );
-          return result;
-        });
       }
 
       // "vpc" is object
@@ -173,7 +184,10 @@ export class Service extends Component implements Link.Linkable {
         ([image, architecture]) => ({
           ...image,
           context: image.context ?? ".",
-          platform: architecture === "arm64" ? "linux/arm64" : "linux/amd64",
+          platform:
+            architecture === "arm64"
+              ? Platform.Linux_arm64
+              : Platform.Linux_amd64,
         }),
       );
     }
@@ -326,34 +340,39 @@ export class Service extends Component implements Link.Linkable {
         return imageArgs;
       });
 
-      // Get ECR repository
-      const bootstrapData = region.apply((region) =>
-        bootstrap.forRegion(region),
-      );
-      const authToken = ecr.getAuthorizationTokenOutput({
-        registryId: bootstrapData.assetEcrRegistryId,
-      });
-
       // Build image
-      return new docker.Image(
+      return new Image(
         ...transform(
           args.transform?.image,
           `${name}Image`,
           {
-            build: imageArgsNew.apply((imageArgs) => ({
-              context: path.join($cli.paths.root, imageArgs.context),
-              dockerfile: imageArgs.dockerfile
-                ? path.join($cli.paths.root, imageArgs.dockerfile)
-                : undefined,
-              args: imageArgs.args,
-              platform: imageArgs.platform,
-            })),
-            imageName: interpolate`${bootstrapData.assetEcrUrl}:${name}`,
-            registry: authToken.apply((authToken) => ({
-              password: secret(authToken.password),
-              username: authToken.userName,
-              server: authToken.proxyEndpoint,
-            })),
+            context: {
+              location: imageArgsNew.apply((v) =>
+                path.join($cli.paths.root, v.context),
+              ),
+            },
+            dockerfile: {
+              location: imageArgsNew.apply((v) =>
+                v.dockerfile
+                  ? path.join($cli.paths.root, v.dockerfile)
+                  : path.join($cli.paths.root, v.context, "Dockerfile"),
+              ),
+            },
+            buildArgs: imageArgsNew.apply((v) => v.args ?? {}),
+            platforms: [imageArgs.platform],
+            tags: [interpolate`${bootstrapData.assetEcrUrl}:${name}`],
+            registries: [
+              ecr
+                .getAuthorizationTokenOutput({
+                  registryId: bootstrapData.assetEcrRegistryId,
+                })
+                .apply((authToken) => ({
+                  address: authToken.proxyEndpoint,
+                  password: secret(authToken.password),
+                  username: authToken.userName,
+                })),
+            ],
+            push: true,
           },
           { parent: self },
         ),
@@ -401,7 +420,7 @@ export class Service extends Component implements Link.Linkable {
                 ? "application"
                 : "network",
             ),
-            subnets: vpc.publicSubnets,
+            subnets: vpc.loadBalancerSubnets,
             securityGroups: [securityGroup.id],
             enableCrossZoneLoadBalancing: true,
           },
@@ -521,6 +540,15 @@ export class Service extends Component implements Link.Linkable {
                 actions: item.actions,
                 resources: item.resources,
               })),
+              {
+                actions: [
+                  "ssmmessages:CreateControlChannel",
+                  "ssmmessages:CreateDataChannel",
+                  "ssmmessages:OpenControlChannel",
+                  "ssmmessages:OpenDataChannel",
+                ],
+                resources: ["*"],
+              },
             ],
           }),
       );
@@ -587,17 +615,9 @@ export class Service extends Component implements Link.Linkable {
             containerDefinitions: $jsonStringify([
               {
                 name,
-                image: image.repoDigest,
+                image: interpolate`${bootstrapData.assetEcrUrl}@${image.digest}`,
                 pseudoTerminal: true,
-                portMappings: pub?.ports.apply((ports) =>
-                  ports
-                    .map((port) => port.forwardPort)
-                    // ensure unique ports
-                    .filter(
-                      (value, index, self) => self.indexOf(value) === index,
-                    )
-                    .map((value) => ({ containerPort: value })),
-                ),
+                portMappings: [{ containerPortRange: "1-65535" }],
                 logConfiguration: {
                   logDriver: "awslogs",
                   options: {
@@ -625,11 +645,30 @@ export class Service extends Component implements Link.Linkable {
                     },
                   ],
                 ),
+                linuxParameters: {
+                  initProcessEnabled: true,
+                },
               },
             ]),
           },
           { parent: self },
         ),
+      );
+    }
+
+    function createCloudmapService() {
+      return new servicediscovery.Service(
+        `${name}CloudmapService`,
+        {
+          name: `${name}.${$app.stage}.${$app.name}`,
+          namespaceId: vpc.cloudmapNamespaceId,
+          forceDestroy: true,
+          dnsConfig: {
+            namespaceId: vpc.cloudmapNamespaceId,
+            dnsRecords: [{ ttl: 60, type: "A" }],
+          },
+        },
+        { parent: self },
       );
     }
 
@@ -645,8 +684,8 @@ export class Service extends Component implements Link.Linkable {
             desiredCount: scaling.min,
             launchType: "FARGATE",
             networkConfiguration: {
-              assignPublicIp: false,
-              subnets: vpc.privateSubnets,
+              assignPublicIp: true,
+              subnets: vpc.serviceSubnets,
               securityGroups: vpc.securityGroups,
             },
             deploymentCircuitBreaker: {
@@ -662,6 +701,11 @@ export class Service extends Component implements Link.Linkable {
                   containerPort: target.port.apply((port) => port!),
                 })),
               ),
+            enableExecuteCommand: true,
+            serviceRegistries: {
+              registryArn: cloudmapService.arn,
+              containerName: name,
+            },
           },
           { parent: self },
         ),
@@ -799,6 +843,14 @@ export class Service extends Component implements Link.Linkable {
   }
 
   /**
+   * The name of the Cloud Map service.
+   */
+  public get service() {
+    if ($dev) return interpolate`dev.${this.cloudmapNamespace}`;
+    return interpolate`${this.cloudmapService!.name}.${this.cloudmapNamespace}`;
+  }
+
+  /**
    * The underlying [resources](/docs/components/#nodes) this component creates.
    */
   public get nodes() {
@@ -848,7 +900,10 @@ export class Service extends Component implements Link.Linkable {
   /** @internal */
   public getSSTLink() {
     return {
-      properties: { url: $dev ? this.devUrl : this._url },
+      properties: {
+        url: $dev ? this.devUrl : this._url,
+        service: this.service,
+      },
     };
   }
 }

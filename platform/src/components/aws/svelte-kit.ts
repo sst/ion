@@ -36,14 +36,6 @@ export interface SvelteKitArgs extends SsrSiteArgs {
    */
   dev?: false | DevArgs["dev"];
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
-   *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
-   *
-   * @default `0`
-   */
-  warm?: SsrSiteArgs["warm"];
-  /**
    * Permissions and the resources that the [server function](#nodes-server) in your SvelteKit app needs to access. These permissions are used to create the function's IAM role.
    *
    * :::tip
@@ -147,7 +139,7 @@ export interface SvelteKitArgs extends SsrSiteArgs {
    * Set [environment variables](https://vitejs.dev/guide/env-and-mode.html#env-files) in your SvelteKit app. These are made available:
    *
    * 1. In `vite build`, they are loaded into `process.env`.
-   * 2. Locally while running `sst dev vite dev`.
+   * 2. Locally while running through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your SvelteKit app and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
@@ -641,10 +633,10 @@ function useCloudFrontFormActionInjection() {
   //       ie. POST request with query string "?/action"
   //       CloudFront does not allow query string with "/". It needs to be encoded.
   return `
-for (var key in request.querystring) {
+for (var key in event.request.querystring) {
   if (key.includes("/")) {
-    request.querystring[encodeURIComponent(key)] = request.querystring[key];
-    delete request.querystring[key];
+    event.request.querystring[encodeURIComponent(key)] = event.request.querystring[key];
+    delete event.request.querystring[key];
   }
 }`;
 }

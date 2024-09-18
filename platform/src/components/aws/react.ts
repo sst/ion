@@ -42,14 +42,6 @@ export interface ReactArgs extends SsrSiteArgs {
    */
   dev?: false | DevArgs["dev"];
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
-   *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
-   *
-   * @default `0`
-   */
-  warm?: SsrSiteArgs["warm"];
-  /**
    * Permissions and the resources that the [server function](#nodes-server) in your React app needs to access. These permissions are used to create the function's IAM role.
    *
    * :::tip
@@ -496,7 +488,7 @@ export class React extends Component implements Link.Linkable {
                 injections: [
                   // Note: When using libraries like remix-flat-routes the file can
                   // contains special characters like "+". It needs to be encoded.
-                  `request.uri = request.uri.split('/').map(encodeURIComponent).join('/');`,
+                  `event.request.uri = event.request.uri.split('/').map(encodeURIComponent).join('/');`,
                 ],
               },
             },

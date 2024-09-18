@@ -37,14 +37,6 @@ export interface AstroArgs extends SsrSiteArgs {
    */
   dev?: false | DevArgs["dev"];
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
-   *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
-   *
-   * @default `0`
-   */
-  warm?: SsrSiteArgs["warm"];
-  /**
    * Permissions and the resources that the [server function](#nodes-server) in your Astro site needs to access. These permissions are used to create the function's IAM role.
    *
    * :::tip
@@ -148,7 +140,7 @@ export interface AstroArgs extends SsrSiteArgs {
    * Set [environment variables](https://docs.astro.build/en/guides/environment-variables/) in your Astro site. These are made available:
    *
    * 1. In `astro build`, they are loaded into `import.meta.env`.
-   * 2. Locally while running `sst dev astro dev`.
+   * 2. Locally while running `astro dev` through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your Astro site and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
@@ -690,17 +682,17 @@ function useCloudFrontRoutingInjection(buildMetadata: BuildMetaConfig) {
     var routeData = ${stringifiedTree};
     var findFirstMatch = (matches) => Array.isArray(matches[0]) ? findFirstMatch(matches[0]) : matches;
     var findMatches = (path, routeData) => routeData.map((route) => route[0].test(path) ? Array.isArray(route[1]) ? findMatches(path, route[1]) : route : null).filter(route => route !== null && route.length > 0);
-    var matchedRoute = findFirstMatch(findMatches(request.uri, routeData));
+    var matchedRoute = findFirstMatch(findMatches(event.request.uri, routeData));
     if (matchedRoute[0]) {
-      if (!matchedRoute[1] && !/^.*\\.[^\\/]+$/.test(request.uri)) {
+      if (!matchedRoute[1] && !/^.*\\.[^\\/]+$/.test(event.request.uri)) {
         ${
           buildMetadata.pageResolution === "file"
-            ? `request.uri = request.uri === "/" ? "/index.html" : request.uri.replace(/\\/?$/, ".html");`
-            : `request.uri = request.uri.replace(/\\/?$/, "/index.html");`
+            ? `event.request.uri = event.request.uri === "/" ? "/index.html" : event.request.uri.replace(/\\/?$/, ".html");`
+            : `event.request.uri = event.request.uri.replace(/\\/?$/, "/index.html");`
         }
       } else if (matchedRoute[1] === 2) {
         var redirectPath = matchedRoute[2];
-        matchedRoute[0].exec(request.uri).forEach((match, index) => {
+        matchedRoute[0].exec(event.request.uri).forEach((match, index) => {
           redirectPath = redirectPath.replace(\`\\\${\${index}}\`, match);
         });
         return {
