@@ -1,5 +1,6 @@
 import json
 import os
+import inspect
 import sys
 from typing import Dict, Any, Type, Union
 from pathlib import Path
@@ -44,22 +45,45 @@ class ResourceProxy:
 
     def _find_resources_file(self, filename: str) -> str:
         """
-        Search for the resources.json file relative to the main module of the application.
+        Search for the resources.json file relative to the module that imports ResourceProxy.
         """
-        main_module = sys.modules.get("__main__")
-        if main_module and hasattr(main_module, "__file__"):
-            main_path = Path(main_module.__file__).parent
-        else:
-            # Fallback to current working directory if __file__ is not available
-            main_path = Path.cwd()
+        stack = inspect.stack()
+        current_file = Path(__file__).resolve()
 
-        for parent in [main_path] + list(main_path.parents):
+        # Iterate through the call stack to find the first frame outside this module
+        for frame_info in stack[1:]:  # Skip the current frame
+            frame_path = Path(frame_info.filename).resolve()
+
+            # Skip frames that are part of this module/package
+            if frame_path == current_file:
+                continue
+
+            # Optionally, skip other internal frames if your package has multiple modules
+            # For example, if your package is named 'your_package', skip frames from it
+            # Uncomment and modify the following lines if necessary:
+            # if 'your_package' in frame_info.filename:
+            #     continue
+
+            # Use this frame's directory as the base path
+            base_path = frame_path.parent
+
+            # Traverse up from the base path to find the config file
+            for parent in [base_path] + list(base_path.parents):
+                potential_path = parent / filename
+                if potential_path.is_file():
+                    return str(potential_path)
+
+            # If not found in this frame's hierarchy, continue to the next frame
+
+        # Fallback to current working directory if not found in any frame
+        cwd = Path.cwd()
+        for parent in [cwd] + list(cwd.parents):
             potential_path = parent / filename
             if potential_path.is_file():
                 return str(potential_path)
 
         raise FileNotFoundError(
-            f"Configuration file '{filename}' not found in '{main_path}' or any parent directories."
+            f"Configuration file '{filename}' not found relative to the importing module or in the current working directory."
         )
 
     def _load_resources_from_path(self, path: str):
