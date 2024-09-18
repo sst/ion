@@ -183,7 +183,7 @@ export async function buildPython(
 		}
 
 		// At the same level as the pyproject.toml create resources.json
-		const resourcesFile = path.join(pyProjectFile, "resources.json");
+		const resourcesFile = path.join(out, pyProjectFile, "resources.json");
 		await writeResourcesFile(resourcesFile, input.links || []);
 
 		// Copy all Python files to the target directory, preserving structure
@@ -260,17 +260,11 @@ async function getPythonFiles(
 	filePath: string,
 ): Promise<{ pythonFiles: string[]; rootDir: string }> {
 	try {
-		console.log(`Getting Python files from ${filePath}`);
-
 		// Get the absolute path of the file
 		const absPath = path.resolve(filePath);
 
-		console.log(`Absolute path: ${absPath}`);
-
 		// Get the directory of the file
 		const dir = path.dirname(absPath);
-
-		console.log(`Directory: ${dir}`);
 
 		const pythonFiles: string[] = [];
 
@@ -286,9 +280,6 @@ async function getPythonFiles(
 				entries = await fs.readdir(currentPath, { withFileTypes: true });
 			} catch (err) {
 				// If there's an error accessing the path, skip it
-				console.warn(
-					`Warning: Unable to access ${currentPath}. Skipping. Error: ${(err as Error).message}`,
-				);
 				return;
 			}
 
@@ -336,13 +327,9 @@ async function copyFilesPreservingStructure(
 	baseDir?: string,
 ): Promise<void> {
 	try {
-		console.log(`Source root: ${sourceRoot}`);
-		console.log(`Destination root: ${destinationRoot}`);
-
 		const dest = baseDir
 			? destinationRoot.slice(0, -baseDir.length)
 			: destinationRoot;
-		console.log(`Destination root: ${dest}`);
 
 		for (const filePath of pythonFiles) {
 			// Determine the relative path from the source root
@@ -357,8 +344,6 @@ async function copyFilesPreservingStructure(
 
 			// Copy the file
 			await fs.copyFile(filePath, destPath);
-
-			// console.log(`Copied: ${filePath} -> ${destPath}`);
 		}
 	} catch (error) {
 		throw new Error(
@@ -374,13 +359,6 @@ async function writeResourcesFile(
 		properties: any;
 	}[],
 ): Promise<void> {
-	// {
-	// 	"MyLinkableValue": {
-	// 		"foo": "Hello World",
-	// 		"type": "sst:sst:Linkable"
-	// 	}
-	// }
-
 	// Convert the links array to a map
 	const linksMap = new Map<string, any>();
 	for (const link of links) {
