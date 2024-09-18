@@ -1,5 +1,6 @@
+ARG PYTHON_VERSION=3.11
 # Use an official AWS Lambda base image for Python
-FROM public.ecr.aws/lambda/python:3.9
+FROM public.ecr.aws/lambda/python:${PYTHON_VERSION}
 
 # Install UV to manage your python runtime
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv

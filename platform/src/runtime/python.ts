@@ -86,22 +86,8 @@ export async function buildPythonContainer(
 		if (fsSync.existsSync(dockerFile)) {
 			await fs.copyFile(dockerFile, path.join(out, "Dockerfile"));
 		} else {
-			const dockerfiles: Record<string, string> = {
-				// Not supporting 3.8 it will be deprecated on 10/14/2024
-				"python3.9": "python39.Dockerfile",
-				"python3.10": "python310.Dockerfile",
-				"python3.11": "python311.Dockerfile",
-				"python3.12": "python312.Dockerfile",
-			};
-			const dockerFile = dockerfiles[input.runtime || ""];
-			if (!dockerFile) {
-				return {
-					type: "error",
-					errors: [`Could not find Dockerfile for runtime "${input.runtime}"`],
-				};
-			}
 			await fs.copyFile(
-				path.join($cli.paths.platform, "functions", "docker", dockerFile),
+				path.join($cli.paths.platform, "functions", "docker", "python.Dockerfile"),
 				path.join(out, "Dockerfile"),
 			);
 		}
@@ -186,6 +172,12 @@ export async function buildPython(
 			path.join(pyProjectFile, "pyproject.toml"),
 			path.join(out, path.join(pyProjectFile, "pyproject.toml")),
 		);
+
+    // If uv.lock exists, copy it to the output directory
+    const uvLockFile = path.join(pyProjectFile, "uv.lock");
+    if (fsSync.existsSync(uvLockFile)) {
+      await fs.copyFile(uvLockFile, path.join(out, uvLockFile));
+    }
 
 		// Install Python dependencies
 		// in the output directory we run uv sync to create a virtual environment

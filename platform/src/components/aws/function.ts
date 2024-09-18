@@ -1360,7 +1360,7 @@ export class Function extends Component implements Link.Linkable {
 					};
 				}
 
-				if (runtime === "python3.11") {
+				if (runtime.startsWith("python")) {
 					const buildResult = all([args, pythonContainerMode, linkData]).apply(
 						async ([args, pythonContainerMode, linkData]) => {
 							if (pythonContainerMode) {
@@ -1445,7 +1445,7 @@ export class Function extends Component implements Link.Linkable {
 					runtime,
 				]) => {
 					if (dev) return { handler };
-					if (runtime === "python3.11") {
+					if (runtime.startsWith("python")) {
 						return { handler };
 					}
 
@@ -1611,8 +1611,8 @@ export class Function extends Component implements Link.Linkable {
 			// is always needed so the FunctionCodeUpdater can track the contents of the
 			// image. This is convoluted, but I did not want to change too much of the function
 			// internals.
-			return all([bundle, wrapper, copyFiles, containerDeployment, dev]).apply(
-				async ([bundle, wrapper, copyFiles, containerDeployment, dev]) => {
+			return all([bundle, wrapper, copyFiles, containerDeployment, dev, runtime]).apply(
+				async ([bundle, wrapper, copyFiles, containerDeployment, dev, runtime]) => {
 					function createImage() {
 						if (!containerDeployment) return undefined;
 						if (dev) return undefined;
@@ -1642,6 +1642,10 @@ export class Function extends Component implements Link.Linkable {
 										`${name}-src`,
 									),
 								},
+                buildArgs: {
+                  ...(runtime.startsWith("python") && { PYTHON_VERSION: runtime.slice(6) }),
+                },
+                
 								// Use the pushed image as a cache source.
 								cacheFrom: [
 									{
@@ -1851,7 +1855,7 @@ export class Function extends Component implements Link.Linkable {
 							transformed[0],
 							{
 								...transformed[1],
-								// if the runtime is python3.11 and we are in container mode, deploy image
+								// if the runtime is python and we are in container mode, deploy image
 								packageType: "Image",
 								imageUri: image?.ref.apply((ref) =>
 									ref?.replace(":latest", ""),
