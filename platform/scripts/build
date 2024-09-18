@@ -15,4 +15,7 @@ mkdir -p ./dist/python-runtime/
 cp ./functions/python-runtime/index.py ./dist/python-runtime/index.py
 
 mkdir -p ./dist/dockerfiles/
-cp ./functions/docker/python.Dockerfile ./dist/dockerfiles/python.Dockerfile
+cp ./functions/docker/python39.Dockerfile ./dist/dockerfiles/python39.Dockerfile
+cp ./functions/docker/python310.Dockerfile ./dist/dockerfiles/python310.Dockerfile
+cp ./functions/docker/python311.Dockerfile ./dist/dockerfiles/python311.Dockerfile
+cp ./functions/docker/python312.Dockerfile ./dist/dockerfiles/python312.Dockerfile

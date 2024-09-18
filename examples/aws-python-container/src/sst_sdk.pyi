@@ -3,9 +3,6 @@
 from typing import Any
 
 class Resource:
-    class MyLinkableValue:
-        foo: str
-        type: str
     class MyPythonFunction:
         name: str
         type: str
