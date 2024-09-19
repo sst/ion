@@ -261,13 +261,14 @@ export interface FunctionArgs {
    * ```
    */
   runtime?: Input<
-    | "nodejs18.x"
-    | "nodejs20.x"
-    | "provided.al2023"
-    | "python3.9"
-    | "python3.10"
-    | "python3.11"
-    | "python3.12"
+  | "nodejs18.x"
+  | "nodejs20.x"
+  | "provided.al2023"
+  | "provided.al2"
+  | "python3.9"
+  | "python3.10"
+  | "python3.11"
+  | "python3.12"
   >;
   /**
    * Path to the source code directory for the function. By default, the handler is
