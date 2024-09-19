@@ -278,18 +278,18 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
        */
       path?: Input<string>;
       /**
-       * Configure if existing files in the bucket should be kept or removed after the upload.
-       * @default `false`
+       * Configure if files from previous deployments should be purged from the bucket.
+       * @default `true`
        * @example
        * ```js
        * {
        *   assets: {
-       *    keepOldFiles: true
+       *     purge: false
        *   }
        * }
        * ```
        */
-      keepOldFiles?: Input<boolean>;
+      purge?: Input<boolean>;
     }
   >;
   /**
@@ -645,6 +645,7 @@ export class StaticSite extends Component implements Link.Linkable {
               v.replace(/^\//, "").replace(/\/$/, ""),
             )
           : undefined,
+        purge: args.assets?.purge ?? true,
       };
     }
 
@@ -740,7 +741,7 @@ export class StaticSite extends Component implements Link.Linkable {
           {
             bucketName,
             files: bucketFiles,
-            purge: !assets.keepOldFiles,
+            purge: assets.purge,
           },
           { parent },
         );
