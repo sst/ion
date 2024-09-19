@@ -140,6 +140,98 @@ func (r *PythonRuntime) Build(ctx context.Context, input *runtime.BuildInput) (*
 		return nil, err
 	}
 
+	// We need to check if a deployment instead of dev
+	rpcBuildEnabled := false
+	if !input.Dev && rpcBuildEnabled{
+		// Handle zip and containers differently
+		// TODO: walln - handle container flag (not sure how the RPC call is shaped from component?)
+
+		containerDeployment := false
+		if containerDeployment {
+			// Copy the Dockerfile to the output directory if it exists
+			dockerFile := filepath.Join(filepath.Dir(pyProjectFile), "Dockerfile")
+			if _, err := os.Stat(dockerFile); err == nil {
+				if err := copyFile(dockerFile, filepath.Join(targetDir, "Dockerfile")); err != nil {
+					return nil, err
+				}
+			} else {
+				// Copy the default Dockerfile
+				defaultDockefilePath := filepath.Join(path.ResolvePlatformDir(input.CfgPath), "functions", "docker", "python.Dockerfile")
+				if err := copyFile(defaultDockefilePath, filepath.Join(targetDir, "Dockerfile")); err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			// In a zip deployment we have to manage the dependency packing without uv's virtualenv since
+			// uv is not available in the lambda environment
+
+			// 1. Install python dependencies locally with the correct versions
+			// TOOD: walln - when uv supports specifying the platform that would be a good idea
+			// but its not there yet
+			uvSyncCmd := exec.CommandContext(
+				ctx,
+				"uv",
+				"sync")
+
+			util.SetProcessGroupID(uvSyncCmd)
+			uvSyncCmd.Cancel = func() error {
+				return util.TerminateProcess(uvSyncCmd.Process.Pid)
+			}
+
+			// use the output pyproject.toml directory as the working directory
+			workDir := filepath.Dir(filepath.Join(targetDir, filepath.Base(pyProjectFile)))
+
+			slog.Info("starting build uv sync", "env", uvSyncCmd.Env, "args", uvSyncCmd.Args)
+			uvSyncCmd.Dir = workDir
+
+			err := uvSyncCmd.Run()
+			if err != nil {
+				return nil, fmt.Errorf("failed to run uv sync: %v", err)
+			}
+
+			// 2. Convert the virtualenv to site-packages so that lambda can find the packages
+			sitePackagesCmd := exec.CommandContext(
+				ctx,
+				"cp",
+				"-r",
+				filepath.Join(workDir, ".venv", "lib", "python3.*", "site-packages", "*"),
+				filepath.Join(targetDir))
+			util.SetProcessGroupID(sitePackagesCmd)
+			sitePackagesCmd.Cancel = func() error {
+				return util.TerminateProcess(sitePackagesCmd.Process.Pid)
+			}
+
+			slog.Info("starting build site packages", "env", sitePackagesCmd.Env, "args", sitePackagesCmd.Args)
+			sitePackagesCmd.Dir = workDir
+
+			err = sitePackagesCmd.Run()
+			if err != nil {
+				return nil, fmt.Errorf("failed to run site packages: %v", err)
+			}
+
+			// 3. Remove the virtualenv because it does not need to be included in the zip
+			removeVirtualEnvCmd := exec.CommandContext(
+				ctx,
+				"rm",
+				"-rf",
+				filepath.Join(workDir, ".venv"))
+			
+			util.SetProcessGroupID(removeVirtualEnvCmd)
+			removeVirtualEnvCmd.Cancel = func() error {
+				return util.TerminateProcess(removeVirtualEnvCmd.Process.Pid)
+			}
+
+			slog.Info("starting build remove virtual env", "env", removeVirtualEnvCmd.Env, "args", removeVirtualEnvCmd.Args)
+			removeVirtualEnvCmd.Dir = workDir
+
+			err = removeVirtualEnvCmd.Run()
+			if err != nil {
+				return nil, fmt.Errorf("failed to run remove virtual env: %v", err)
+			}
+		}
+
+	}
+
 	r.lastBuiltHandler[input.FunctionID] = file
 
 	errors := []string{}
