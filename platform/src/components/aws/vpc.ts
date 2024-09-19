@@ -1,7 +1,18 @@
-import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
+import {
+  ComponentResourceOptions,
+  Output,
+  all,
+  interpolate,
+  output,
+} from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
-import { ec2, getAvailabilityZonesOutput, iam } from "@pulumi/aws";
+import {
+  ec2,
+  getAvailabilityZonesOutput,
+  iam,
+  servicediscovery,
+} from "@pulumi/aws";
 import { Vpc as VpcV1 } from "./vpc-v1";
 import { Link } from "../link";
 export type { VpcArgs as VpcV1Args } from "./vpc-v1";
@@ -106,6 +117,7 @@ interface VpcRef {
   natGateways: Output<ec2.NatGateway[]>;
   elasticIps: Output<ec2.Eip[]>;
   bastionInstance: Output<ec2.Instance | undefined>;
+  cloudmapNamespace: servicediscovery.PrivateDnsNamespace;
 }
 
 /**
@@ -164,11 +176,12 @@ export class Vpc extends Component implements Link.Linkable {
   private publicRouteTables: Output<ec2.RouteTable[]>;
   private privateRouteTables: Output<ec2.RouteTable[]>;
   private bastionInstance: Output<ec2.Instance | undefined>;
+  private cloudmapNamespace: servicediscovery.PrivateDnsNamespace;
   public static v1 = VpcV1;
 
   constructor(name: string, args?: VpcArgs, opts?: ComponentResourceOptions) {
     const _version = 2;
-    super(__pulumiType, name, args, opts, _version);
+    super(__pulumiType, name, args, opts, { _version });
 
     if (args && "ref" in args) {
       const ref = args as VpcRef;
@@ -182,6 +195,7 @@ export class Vpc extends Component implements Link.Linkable {
       this.natGateways = output(ref.natGateways);
       this.elasticIps = ref.elasticIps;
       this.bastionInstance = ref.bastionInstance;
+      this.cloudmapNamespace = ref.cloudmapNamespace;
       return;
     }
     const parent = this;
@@ -196,6 +210,7 @@ export class Vpc extends Component implements Link.Linkable {
     const { elasticIps, natGateways } = createNatGateways();
     const { privateSubnets, privateRouteTables } = createPrivateSubnets();
     const bastionInstance = createBastion();
+    const cloudmapNamespace = createCloudmapNamespace();
 
     this.vpc = vpc;
     this.internetGateway = internetGateway;
@@ -207,6 +222,7 @@ export class Vpc extends Component implements Link.Linkable {
     this.publicRouteTables = publicRouteTables;
     this.privateRouteTables = privateRouteTables;
     this.bastionInstance = output(bastionInstance);
+    this.cloudmapNamespace = cloudmapNamespace;
 
     function normalizeAz() {
       const zones = getAvailabilityZonesOutput({
@@ -507,6 +523,17 @@ export class Vpc extends Component implements Link.Linkable {
         ),
       );
     }
+
+    function createCloudmapNamespace() {
+      return new servicediscovery.PrivateDnsNamespace(
+        `${name}CloudmapNamespace`,
+        {
+          name: "sst",
+          vpc: vpc.id,
+        },
+        { parent },
+      );
+    }
   }
 
   /**
@@ -596,6 +623,10 @@ export class Vpc extends Component implements Link.Linkable {
        * The Amazon EC2 bastion instance.
        */
       bastionInstance: this.bastionInstance,
+      /**
+       * The AWS Cloudmap namespace.
+       */
+      cloudmapNamespace: this.cloudmapNamespace,
     };
   }
 
@@ -693,7 +724,10 @@ export class Vpc extends Component implements Link.Linkable {
       const natGatewayIds = subnets.map((subnet, i) =>
         ec2
           .getNatGatewaysOutput({
-            filters: [{ name: "subnet-id", values: [subnet.id] }],
+            filters: [
+              { name: "subnet-id", values: [subnet.id] },
+              { name: "state", values: ["available"] },
+            ],
           })
           .ids.apply((ids) => ids[0]),
       );
@@ -724,6 +758,16 @@ export class Vpc extends Component implements Link.Linkable {
           : undefined,
       );
 
+    const namespaceId = servicediscovery.getDnsNamespaceOutput({
+      name: "sst",
+      type: "DNS_PRIVATE",
+    }).id;
+    const cloudmapNamespace = servicediscovery.PrivateDnsNamespace.get(
+      `${name}CloudmapNamespace`,
+      namespaceId,
+      { vpc: vpcID },
+    );
+
     return new Vpc(name, {
       ref: true,
       vpc,
@@ -736,6 +780,7 @@ export class Vpc extends Component implements Link.Linkable {
       natGateways,
       elasticIps,
       bastionInstance,
+      cloudmapNamespace,
     } satisfies VpcRef as VpcArgs);
   }
 

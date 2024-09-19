@@ -4,10 +4,13 @@ import {
   Inputs,
   runtime,
   output,
+  asset as pulumiAsset,
 } from "@pulumi/pulumi";
 import { physicalName } from "./naming.js";
 import { VisibleError } from "./error.js";
 import { getRegionOutput } from "@pulumi/aws";
+import path from "path";
+import { statSync } from "fs";
 
 /**
  * Helper type to inline nested types
@@ -43,7 +46,10 @@ export class Component extends ComponentResource {
     name: string,
     args?: Inputs,
     opts?: ComponentResourceOptions,
-    _version: number = 1,
+    _versionInfo: {
+      _version: number;
+      _breakingChange?: string;
+    } = { _version: 1 },
   ) {
     const transforms = ComponentTransforms.get(type) ?? [];
     for (const transform of transforms) {
@@ -77,17 +83,20 @@ export class Component extends ComponentResource {
             args.type.startsWith("sst:") ||
             args.type === "pulumi-nodejs:dynamic:Resource" ||
             args.type === "random:index/randomId:RandomId" ||
+            args.type === "random:index/randomPassword:RandomPassword" ||
             // resources manually named
             [
               "aws:appsync/dataSource:DataSource",
               "aws:appsync/function:Function",
               "aws:appsync/resolver:Resolver",
+              "aws:cloudwatch/eventBus:EventBus",
               "aws:cognito/identityPool:IdentityPool",
               "aws:ecs/service:Service",
               "aws:ecs/taskDefinition:TaskDefinition",
               "aws:lb/targetGroup:TargetGroup",
               "aws:s3/bucketV2:BucketV2",
-              "aws:cloudwatch/eventBus:EventBus",
+              "aws:servicediscovery/privateDnsNamespace:PrivateDnsNamespace",
+              "aws:servicediscovery/service:Service",
             ].includes(args.type) ||
             // resources not prefixed
             [
@@ -121,6 +130,7 @@ export class Component extends ComponentResource {
               "aws:cognito/identityPoolRoleAttachment:IdentityPoolRoleAttachment",
               "aws:cognito/identityProvider:IdentityProvider",
               "aws:cognito/userPoolClient:UserPoolClient",
+              "aws:elasticache/replicationGroup:ReplicationGroup",
               "aws:lambda/eventSourceMapping:EventSourceMapping",
               "aws:lambda/functionUrl:FunctionUrl",
               "aws:lambda/invocation:Invocation",
@@ -225,7 +235,10 @@ export class Component extends ComponentResource {
               cb: () => physicalName(255, args.name),
             },
             {
-              types: ["aws:rds/subnetGroup:SubnetGroup"],
+              types: [
+                "aws:elasticache/subnetGroup:SubnetGroup",
+                "aws:rds/subnetGroup:SubnetGroup",
+              ],
               field: "name",
               cb: () => physicalName(255, args.name).toLowerCase(),
             },
@@ -321,13 +334,16 @@ export class Component extends ComponentResource {
 
     // Check component version
     const oldVersion = $cli.state.version[name];
-    const newVersion = _version;
+    const newVersion = _versionInfo._version;
     if (oldVersion) {
       const className = type.replaceAll(":", ".");
       if (oldVersion < newVersion) {
         throw new VisibleError(
           [
             `There is a new version of "${className}" that has breaking changes.`,
+            ...(_versionInfo._breakingChange
+              ? [_versionInfo._breakingChange]
+              : []),
             `To continue using the previous version, rename "${className}" to "${className}.v${oldVersion}".`,
             `Or recreate this component to update - https://ion.sst.dev/docs/components/#versioning`,
           ].join(" "),
@@ -372,6 +388,20 @@ export function $transform<T, Args, Options>(
     cb(input.props as any, input.opts as any);
     return input;
   });
+}
+
+export function $asset(assetPath: string) {
+  const fullPath = path.isAbsolute(assetPath)
+    ? assetPath
+    : path.join($cli.paths.root, assetPath);
+
+  try {
+    return statSync(fullPath).isDirectory()
+      ? new pulumiAsset.FileArchive(fullPath)
+      : new pulumiAsset.FileAsset(fullPath);
+  } catch (e) {
+    throw new VisibleError(`Asset not found: ${fullPath}`);
+  }
 }
 
 export function $lazy<T>(fn: () => T) {

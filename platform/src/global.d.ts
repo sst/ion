@@ -240,6 +240,51 @@ declare global {
   export const $transform: typeof import("./components/component").$transform;
 
   /**
+   * Packages a file or directory into a Pulumi asset. This can be used for Pulumi resources that
+   * take an asset as input.
+   *
+   * When the given path is a file, it returns a
+   * [`FileAsset`](https://www.pulumi.com/docs/iac/concepts/assets-archives/#assets). If the
+   * path is a directory, it returns a
+   * [`FileArchive`](https://www.pulumi.com/docs/iac/concepts/assets-archives/#assets) with the
+   * zipped contents of the directory.
+   *
+   * :::tip
+   * This automatically resolves paths relative to the root of the app.
+   * :::
+   *
+   * Relative paths are resolved relative to the root of the app. While, absolute paths are used as is.
+   *
+   * @example
+   *
+   * If you have a file inside the `images` directory at the root of your app, you can upload it
+   * to S3 on deploy.
+   *
+   * ```ts title="sst.config.ts" {7}
+   * const bucket = new aws.s3.Bucket("MyBucket");
+   *
+   * new aws.s3.BucketObjectv2("MyImage", {
+   *   bucket: bucket.name,
+   *   key: "public/spongebob.svg",
+   *   contentType: "image/svg+xml",
+   *   source: $asset("images/spongebob.svg"),
+   * });
+   * ```
+   *
+   * You can also use this to zip up the files in the `files/` directory and upload it to S3.
+   *
+   * ```ts title="sst.config.ts" {5}
+   * new aws.s3.BucketObjectv2("MyZip", {
+   *   bucket: bucket.name,
+   *   key: "public/spongebob.zip",
+   *   contentType: "application/zip",
+   *   source: $asset("files"),
+   * });
+   * ```
+   */
+  export const $asset: typeof import("./components/component").$asset;
+
+  /**
    * Returns `true` if the app is running in `sst dev`.
    */
   export const $dev: boolean;

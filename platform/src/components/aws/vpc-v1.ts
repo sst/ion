@@ -2,7 +2,6 @@ import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
 import { ec2, getAvailabilityZonesOutput } from "@pulumi/aws";
-import { InternetGateway } from "@pulumi/aws/ec2";
 
 export interface VpcArgs {
   /**
@@ -78,7 +77,7 @@ interface VpcRef {
  * The `Vpc` component lets you add a VPC to your app, but it has been deprecated because
  * it does not support modifying the number of Availability Zones (AZs) after VPC creation.
  *
- * For existig usage, rename `sst.aws.Vpc` to `sst.aws.Vpc.v1`. For new VPCs, use
+ * For existing usage, rename `sst.aws.Vpc` to `sst.aws.Vpc.v1`. For new VPCs, use
  * the latest [`Vpc`](/docs/component/aws/vpc) component instead.
  *
  * :::caution
