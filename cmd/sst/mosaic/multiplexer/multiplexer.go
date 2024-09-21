@@ -76,7 +76,7 @@ func (s *Multiplexer) resize(width int, height int) {
 func (s *Multiplexer) Start() {
 	defer func() {
 		for _, p := range s.processes {
-			p.vt.Close()
+			p.Kill()
 		}
 		s.screen.Fini()
 	}()
@@ -156,7 +156,24 @@ func (s *Multiplexer) Start() {
 					}
 					if evt.Buttons()&tcell.ButtonPrimary != 0 {
 						x, y := evt.Position()
-						if x < SIDEBAR_WIDTH && y < len(s.processes) && !s.dragging {
+						if x < SIDEBAR_WIDTH && !s.dragging {
+							alive := 0
+							for _, p := range s.processes {
+								if !p.dead {
+									alive++
+								}
+							}
+							if alive != len(s.processes) {
+								if y == alive {
+									return
+								}
+								if y > alive {
+									y--
+								}
+							}
+							if y >= len(s.processes) {
+								return
+							}
 							s.selected = y
 							s.blur()
 							return
@@ -233,7 +250,7 @@ func (s *Multiplexer) Start() {
 							}
 						case 'x':
 							if selected.killable && !selected.dead && !s.focused {
-								selected.vt.Close()
+								selected.Kill()
 							}
 						}
 					case tcell.KeyUp:

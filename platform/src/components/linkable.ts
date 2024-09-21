@@ -117,7 +117,7 @@ export interface Definition<
  * You can also wrap any Pulumi Resource class to make it linkable.
  *
  * ```ts title="sst.config.ts"
- * Linkable.wrap(aws.dynamodb.Table, (table) => ({
+ * sst.Linkable.wrap(aws.dynamodb.Table, (table) => ({
  *   properties: { tableName: table.name },
  *   include: [
  *     sst.aws.permission({
@@ -261,7 +261,7 @@ export class Linkable<T extends Record<string, any>>
    * This overrides the built-in link and lets you create your own.
    *
    * :::tip
-   * You can modfiy the permissions granted by a linked resource.
+   * You can modify the permissions granted by a linked resource.
    * :::
    *
    * In the above example, we're modifying the permissions to access a linked `sst.aws.Bucket`

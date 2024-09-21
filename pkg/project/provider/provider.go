@@ -61,6 +61,23 @@ var ErrLockExists = fmt.Errorf("Concurrent update detected, run `sst unlock` to 
 
 var passphraseCache = map[Home]map[string]string{}
 
+func Copy(from Home, to Home, app, stage string) error {
+	reader, err := from.getData("app", app, stage)
+	if err != nil {
+		return err
+	}
+	err = to.putData("app", app, stage, reader)
+	if err != nil {
+		return err
+	}
+	reader, err = from.getData("secret", app, stage)
+	if err != nil {
+		return err
+	}
+	to.putData("secret", app, stage, reader)
+	return nil
+}
+
 func Passphrase(backend Home, app, stage string) (string, error) {
 	slog.Info("getting passphrase", "app", app, "stage", stage)
 
@@ -101,15 +118,6 @@ func Passphrase(backend Home, app, stage string) (string, error) {
 	return passphrase, nil
 }
 
-func GetLinks(backend Home, app, stage string) (map[string]interface{}, error) {
-	data := map[string]interface{}{}
-	err := getData(backend, "link", app, stage, true, &data)
-	if err != nil {
-		return nil, err
-	}
-	return data, err
-}
-
 type Summary struct {
 	Version         string         `json:"version"`
 	UpdateID        string         `json:"updateID"`
@@ -125,14 +133,6 @@ type Summary struct {
 type SummaryError struct {
 	URN     string `json:"urn"`
 	Message string `json:"message"`
-}
-
-func PutLinks(backend Home, app, stage string, data map[string]interface{}) error {
-	slog.Info("putting links", "app", app, "stage", stage)
-	if data == nil || len(data) == 0 {
-		return nil
-	}
-	return putData(backend, "link", app, stage, true, data)
 }
 
 func PutSummary(backend Home, app, stage, updateID string, summary Summary) error {

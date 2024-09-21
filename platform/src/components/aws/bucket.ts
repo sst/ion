@@ -15,7 +15,7 @@ import {
 import { Component, Prettify, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
+import { FunctionArgs, FunctionArn } from "./function";
 import { Duration, toSeconds } from "../duration";
 import { VisibleError } from "../error";
 import { parseBucketArn } from "./helpers/arn";
@@ -111,6 +111,7 @@ export interface BucketArgs {
    * :::
    *
    * Should only be turned on if you want to host public files directly from the bucket.
+   * @deprecated Use `access` instead.
    * @default `false`
    * @example
    * ```js
@@ -120,6 +121,26 @@ export interface BucketArgs {
    * ```
    */
   public?: Input<boolean>;
+  /**
+   * Enable public read access for all the files in the bucket. By default, no access is
+   * granted.
+   *
+   * :::tip
+   * If you are using the `Router` to serve files from this bucket, you need to allow
+   * `cloudfront` access the bucket.
+   * :::
+   *
+   * This adds a statement to the bucket policy that either allows `public` access or just
+   * `cloudfront` access.
+   *
+   * @example
+   * ```js
+   * {
+   *   access: "public"
+   * }
+   * ```
+   */
+  access?: Input<"public" | "cloudfront">;
   /**
    * The CORS configuration for the bucket. Defaults to `true`, which is the same as:
    *
@@ -263,7 +284,7 @@ interface BucketRef {
  *
  * ```ts title="sst.config.ts"
  * new sst.aws.Bucket("MyBucket", {
- *   public: true
+ *   access: "public"
  * });
  * ```
  *
@@ -319,7 +340,7 @@ export class Bucket extends Component implements Link.Linkable {
     }
 
     const parent = this;
-    const publicAccess = normalizePublicAccess();
+    const access = normalizeAccess();
 
     const bucket = createBucket();
     const publicAccessBlock = createPublicAccess();
@@ -332,8 +353,10 @@ export class Bucket extends Component implements Link.Linkable {
     // another policy is created after this one.
     this.bucket = policy.apply(() => bucket);
 
-    function normalizePublicAccess() {
-      return output(args.public).apply((v) => v ?? false);
+    function normalizeAccess() {
+      return all([args.public, args.access]).apply(([pub, access]) =>
+        pub === true ? "public" : access,
+      );
     }
 
     function createBucket() {
@@ -374,9 +397,9 @@ export class Bucket extends Component implements Link.Linkable {
           {
             bucket: bucket.bucket,
             blockPublicAcls: true,
-            blockPublicPolicy: publicAccess.apply((v) => !v),
+            blockPublicPolicy: access.apply((v) => v !== "public"),
             ignorePublicAcls: true,
-            restrictPublicBuckets: publicAccess.apply((v) => !v),
+            restrictPublicBuckets: access.apply((v) => v !== "public"),
           },
           { parent },
         ),
@@ -384,11 +407,18 @@ export class Bucket extends Component implements Link.Linkable {
     }
 
     function createBucketPolicy() {
-      return publicAccess.apply((publicAccess) => {
+      return access.apply((access) => {
         const statements = [];
-        if (publicAccess) {
+        if (access) {
           statements.push({
-            principals: [{ type: "*", identifiers: ["*"] }],
+            principals: [
+              access === "public"
+                ? { type: "*", identifiers: ["*"] }
+                : {
+                  type: "Service",
+                  identifiers: ["cloudfront.amazonaws.com"],
+                },
+            ],
             actions: ["s3:GetObject"],
             resources: [interpolate`${bucket.arn}/*`],
           });
@@ -568,9 +598,15 @@ export class Bucket extends Component implements Link.Linkable {
    *   timeout: "60 seconds",
    * });
    * ```
+   *
+   * Or pass in the ARN of an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * bucket.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: BucketSubscriberArgs,
   ) {
     this.ensureNotSubscribed();
@@ -633,7 +669,7 @@ export class Bucket extends Component implements Link.Linkable {
    */
   public static subscribe(
     bucketArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: BucketSubscriberArgs,
   ) {
     return output(bucketArn).apply((bucketArn) => {
@@ -652,7 +688,7 @@ export class Bucket extends Component implements Link.Linkable {
     name: string,
     bucketName: Input<string>,
     bucketArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args: BucketSubscriberArgs = {},
     opts: ComponentResourceOptions = {},
   ) {

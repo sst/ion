@@ -4,10 +4,14 @@ import {
   Inputs,
   runtime,
   output,
+  asset as pulumiAsset,
+  Input,
 } from "@pulumi/pulumi";
 import { physicalName } from "./naming.js";
 import { VisibleError } from "./error.js";
 import { getRegionOutput } from "@pulumi/aws";
+import path from "path";
+import { statSync } from "fs";
 
 /**
  * Helper type to inline nested types
@@ -19,6 +23,7 @@ export type Prettify<T> = {
 export type Transform<T> =
   | Partial<T>
   | ((args: T, opts: $util.CustomResourceOptions, name: string) => undefined);
+
 export function transform<T extends object>(
   transform: Transform<T> | undefined,
   name: string,
@@ -42,7 +47,11 @@ export class Component extends ComponentResource {
     name: string,
     args?: Inputs,
     opts?: ComponentResourceOptions,
-    _version: number = 1,
+    _versionInfo: {
+      _version: number;
+      _message?: string;
+      _forceUpgrade?: `v${number}`;
+    } = { _version: 1 },
   ) {
     const transforms = ComponentTransforms.get(type) ?? [];
     for (const transform of transforms) {
@@ -59,7 +68,12 @@ export class Component extends ComponentResource {
             !args.name.startsWith(args.opts.parent!.__name)
           ) {
             throw new Error(
-              `In "${name}" component, the logical name of "${args.name}" (${args.type}) is not prefixed with parent's name`,
+              `In "${name}" component, the logical name of "${args.name}" (${
+                args.type
+              }) is not prefixed with parent's name ${
+                // @ts-expect-error
+                args.opts.parent!.__name
+              }`,
             );
           }
 
@@ -71,17 +85,20 @@ export class Component extends ComponentResource {
             args.type.startsWith("sst:") ||
             args.type === "pulumi-nodejs:dynamic:Resource" ||
             args.type === "random:index/randomId:RandomId" ||
+            args.type === "random:index/randomPassword:RandomPassword" ||
             // resources manually named
             [
               "aws:appsync/dataSource:DataSource",
               "aws:appsync/function:Function",
               "aws:appsync/resolver:Resolver",
+              "aws:cloudwatch/eventBus:EventBus",
               "aws:cognito/identityPool:IdentityPool",
               "aws:ecs/service:Service",
               "aws:ecs/taskDefinition:TaskDefinition",
               "aws:lb/targetGroup:TargetGroup",
               "aws:s3/bucketV2:BucketV2",
-              "aws:cloudwatch/eventBus:EventBus",
+              "aws:servicediscovery/privateDnsNamespace:PrivateDnsNamespace",
+              "aws:servicediscovery/service:Service",
             ].includes(args.type) ||
             // resources not prefixed
             [
@@ -104,6 +121,7 @@ export class Component extends ComponentResource {
               "aws:appsync/domainNameApiAssociation:DomainNameApiAssociation",
               "aws:ec2/routeTableAssociation:RouteTableAssociation",
               "aws:iam/accessKey:AccessKey",
+              "aws:iam/instanceProfile:InstanceProfile",
               "aws:iam/policy:Policy",
               "aws:iam/userPolicy:UserPolicy",
               "aws:cloudfront/cachePolicy:CachePolicy",
@@ -114,10 +132,12 @@ export class Component extends ComponentResource {
               "aws:cognito/identityPoolRoleAttachment:IdentityPoolRoleAttachment",
               "aws:cognito/identityProvider:IdentityProvider",
               "aws:cognito/userPoolClient:UserPoolClient",
+              "aws:elasticache/replicationGroup:ReplicationGroup",
               "aws:lambda/eventSourceMapping:EventSourceMapping",
               "aws:lambda/functionUrl:FunctionUrl",
               "aws:lambda/invocation:Invocation",
               "aws:lambda/permission:Permission",
+              "aws:lambda/provisionedConcurrencyConfig:ProvisionedConcurrencyConfig",
               "aws:lb/listener:Listener",
               "aws:route53/record:Record",
               "aws:s3/bucketCorsConfigurationV2:BucketCorsConfigurationV2",
@@ -132,7 +152,7 @@ export class Component extends ComponentResource {
               "aws:sns/topicSubscription:TopicSubscription",
               "cloudflare:index/record:Record",
               "cloudflare:index/workerDomain:WorkerDomain",
-              "docker:index/image:Image",
+              "docker-build:index:Image",
               "vercel:index/dnsRecord:DnsRecord",
             ].includes(args.type)
           )
@@ -218,13 +238,17 @@ export class Component extends ComponentResource {
               cb: () => physicalName(255, args.name),
             },
             {
-              types: ["aws:rds/subnetGroup:SubnetGroup"],
+              types: [
+                "aws:elasticache/subnetGroup:SubnetGroup",
+                "aws:rds/subnetGroup:SubnetGroup",
+              ],
               field: "name",
               cb: () => physicalName(255, args.name).toLowerCase(),
             },
             {
               types: [
                 "aws:ec2/eip:Eip",
+                "aws:ec2/instance:Instance",
                 "aws:ec2/internetGateway:InternetGateway",
                 "aws:ec2/natGateway:NatGateway",
                 "aws:ec2/routeTable:RouteTable",
@@ -313,27 +337,42 @@ export class Component extends ComponentResource {
 
     // Check component version
     const oldVersion = $cli.state.version[name];
-    const newVersion = _version;
+    const newVersion = _versionInfo._version;
     if (oldVersion) {
       const className = type.replaceAll(":", ".");
-      if (oldVersion < newVersion) {
+      // Invalid forceUpgrade value
+      if (
+        _versionInfo._forceUpgrade &&
+        _versionInfo._forceUpgrade !== `v${newVersion}`
+      ) {
+        throw new VisibleError(
+          [
+            `The value of "forceUpgrade" does not match the version of "${className}" component.`,
+            `Set "forceUpgrade" to "v${newVersion}" to upgrade to the new version.`,
+          ].join("\n"),
+        );
+      }
+      // Version upgraded without forceUpgrade
+      if (oldVersion < newVersion && !_versionInfo._forceUpgrade) {
         throw new VisibleError(
           [
             `There is a new version of "${className}" that has breaking changes.`,
-            `To continue using the previous version, rename "${className}" to "${className}.v${oldVersion}".`,
-            `Or recreate this component to update - https://ion.sst.dev/docs/components/#versioning`,
-          ].join(" "),
+            ...(_versionInfo._message ? [_versionInfo._message] : []),
+          ].join("\n"),
         );
       }
+      // Version downgraded
       if (oldVersion > newVersion) {
         throw new VisibleError(
           [
             `It seems you are trying to use an older version of "${className}".`,
             `You need to recreate this component to rollback - https://ion.sst.dev/docs/components/#versioning`,
-          ].join(" "),
+          ].join("\n"),
         );
       }
     }
+
+    // Set version
     if (newVersion > 1) {
       new Version(name, newVersion, { parent: this });
     }
@@ -364,6 +403,30 @@ export function $transform<T, Args, Options>(
     cb(input.props as any, input.opts as any);
     return input;
   });
+}
+
+export function $asset(assetPath: string) {
+  const fullPath = path.isAbsolute(assetPath)
+    ? assetPath
+    : path.join($cli.paths.root, assetPath);
+
+  try {
+    return statSync(fullPath).isDirectory()
+      ? new pulumiAsset.FileArchive(fullPath)
+      : new pulumiAsset.FileAsset(fullPath);
+  } catch (e) {
+    throw new VisibleError(`Asset not found: ${fullPath}`);
+  }
+}
+
+export function $lazy<T>(fn: () => T) {
+  return output(undefined)
+    .apply(async () => output(fn()))
+    .apply((x) => x);
+}
+
+export function $print(...msg: Input<string>[]) {
+  return output(msg).apply((msg) => console.log(...msg));
 }
 
 export class Version extends ComponentResource {

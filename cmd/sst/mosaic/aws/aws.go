@@ -20,6 +20,7 @@ import (
 
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/iot"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"github.com/sst/ion/cmd/sst/mosaic/aws/iot_writer"
 	"github.com/sst/ion/cmd/sst/mosaic/watcher"
@@ -81,6 +82,7 @@ func Start(
 	s *server.Server,
 	args map[string]interface{},
 ) error {
+
 	expire := time.Hour * 24
 	from := time.Now()
 	server := fmt.Sprintf("localhost:%d/lambda/", s.Port)
@@ -93,6 +95,13 @@ func Start(
 	if err != nil {
 		return err
 	}
+
+	bootstrapData, err := provider.AwsBootstrap(config)
+	if err != nil {
+		return err
+	}
+
+	s3Client := s3.NewFromConfig(config)
 
 	originalURL, err := url.Parse(fmt.Sprintf("wss://%s/mqtt?X-Amz-Expires=%s", *endpointResp.EndpointAddress, strconv.FormatInt(int64(expire/time.Second), 10)))
 	if err != nil {
@@ -160,17 +169,22 @@ func Start(
 	shutdownChan := make(chan MQTT.Message, 1000)
 
 	prefix := fmt.Sprintf("ion/%s/%s", p.App().Name, p.App().Stage)
-	reader := iot_writer.NewReader()
+	reader := iot_writer.NewReader(s3Client)
 	if token := mqttClient.Subscribe(prefix+"/+/response/#", 1, func(c MQTT.Client, m MQTT.Message) {
-		slog.Info("iot", "topic", m.Topic())
+		slog.Info("iot", "topic", m.Topic(), "payload", len(m.Payload()))
 		for _, msg := range reader.Read(m) {
+			slog.Info("read", "requestID", msg.ID, "data", len(msg.Data))
 			write, ok := pending.Load(msg.ID)
 			if !ok {
 				return
 			}
 			casted := write.(*io.PipeWriter)
+			if len(msg.Data) == 0 {
+				slog.Info("closing", "requestID", msg.ID)
+				casted.Close()
+				return
+			}
 			casted.Write(msg.Data)
-			casted.Close()
 		}
 	}); token.Wait() && token.Error() != nil {
 		return token.Error()
@@ -193,7 +207,7 @@ func Start(
 	workerResponseChan := make(chan workerResponse, 1000)
 	workerShutdownChan := make(chan *WorkerInfo, 1000)
 
-	evts := bus.Subscribe(&watcher.FileChangedEvent{}, &project.CompleteEvent{})
+	evts := bus.Subscribe(&watcher.FileChangedEvent{}, &project.CompleteEvent{}, &runtime.BuildInput{})
 
 	if token := mqttClient.Subscribe(prefix+"/+/init", 1, func(c MQTT.Client, m MQTT.Message) {
 		slog.Info("iot", "topic", m.Topic())
@@ -212,22 +226,18 @@ func Start(
 	slog.Info("connected to iot")
 
 	go func() {
-		var complete *project.CompleteEvent
 		workers := map[string]*WorkerInfo{}
 		workerEnv := map[string][]string{}
 		builds := map[string]*runtime.BuildOutput{}
+		targets := map[string]*runtime.BuildInput{}
 
 		getBuildOutput := func(functionID string) *runtime.BuildOutput {
 			build := builds[functionID]
 			if build != nil {
 				return build
 			}
-			warp := complete.Warps[functionID]
-			build, err = runtime.Build(ctx, &runtime.BuildInput{
-				Warp:    warp,
-				Project: p,
-				Dev:     true,
-			})
+			target, _ := targets[functionID]
+			build, err = p.Runtime.Build(ctx, target)
 			if err == nil {
 				bus.Publish(&FunctionBuildEvent{
 					FunctionID: functionID,
@@ -252,14 +262,15 @@ func Start(
 			if build == nil {
 				return false
 			}
-			warp := complete.Warps[functionID]
-			worker, err := runtime.Run(ctx, &runtime.RunInput{
-				Warp:       warp,
-				Links:      complete.Links,
+			target, ok := targets[functionID]
+			if !ok {
+				return false
+			}
+			worker, err := p.Runtime.Run(ctx, &runtime.RunInput{
+				CfgPath:    p.PathConfig(),
+				Runtime:    target.Runtime,
 				Server:     server + workerID,
-				Project:    p,
 				WorkerID:   workerID,
-				Runtime:    warp.Runtime,
 				FunctionID: functionID,
 				Build:      build,
 				Env:        workerEnv[workerID],
@@ -292,14 +303,6 @@ func Start(
 			return true
 		}
 
-		for unknown := range evts {
-			casted, ok := unknown.(*project.CompleteEvent)
-			if !ok {
-				continue
-			}
-			complete = casted
-			break
-		}
 		for {
 			select {
 			case <-ctx.Done():
@@ -309,7 +312,6 @@ func Start(
 				if !ok {
 					continue
 				}
-
 				responseBody, err := io.ReadAll(evt.response.Body)
 				if err != nil {
 					continue
@@ -357,19 +359,18 @@ func Start(
 				break
 			case unknown := <-evts:
 				switch evt := unknown.(type) {
-				case *project.CompleteEvent:
-					complete = evt
-					break
+				case *runtime.BuildInput:
+					targets[evt.FunctionID] = evt
 				case *watcher.FileChangedEvent:
 					slog.Info("checking if code needs to be rebuilt", "file", evt.Path)
 					toBuild := map[string]bool{}
 
 					for functionID := range builds {
-						warp, ok := complete.Warps[functionID]
+						target, ok := targets[functionID]
 						if !ok {
 							continue
 						}
-						if runtime.ShouldRebuild(warp.Runtime, warp.FunctionID, evt.Path) {
+						if p.Runtime.ShouldRebuild(target.Runtime, target.FunctionID, evt.Path) {
 							for _, worker := range workers {
 								if worker.FunctionID == functionID {
 									slog.Info("stopping", "workerID", worker.WorkerID, "functionID", worker.FunctionID)
@@ -412,6 +413,14 @@ func Start(
 				if err != nil {
 					continue
 				}
+				if _, ok := targets[payload.FunctionID]; !ok {
+					go func() {
+						slog.Info("dev not ready yet", "functionID", payload.FunctionID)
+						time.Sleep(time.Second * 1)
+						initChan <- m
+					}()
+					continue
+				}
 				workerEnv[workerID] = payload.Env
 				if ok := run(payload.FunctionID, workerID); !ok {
 					result, _ := http.Post("http://"+server+workerID+"/runtime/init/error", "application/json", strings.NewReader(`{"errorMessage":"Function failed to build"}`))
@@ -448,7 +457,7 @@ func Start(
 		slog.Info("lambda request", "path", path)
 		workerID := path[2]
 		requestID := util.RandomString(8)
-		writer := iot_writer.New(mqttClient, prefix+"/"+workerID+"/request/"+requestID)
+		writer := iot_writer.New(mqttClient, s3Client, bootstrapData.Asset, prefix+"/"+workerID+"/request/"+requestID)
 		read, write := io.Pipe()
 		pending.Store(requestID, write)
 		defer func() {
@@ -473,7 +482,6 @@ func Start(
 			write := io.MultiWriter(writer, requestBody)
 			io.Copy(write, r.Body)
 		}
-		writer.Flush()
 		writer.Close()
 
 		hijacker, ok := w.(http.Hijacker)
@@ -520,6 +528,9 @@ func Start(
 		}()
 
 		<-done
+		read.Close()
+		conn.Close()
+		write.Close()
 		slog.Info("lambda sent response", "workerID", workerID)
 	})
 

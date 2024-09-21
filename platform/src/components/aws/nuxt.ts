@@ -35,14 +35,6 @@ export interface NuxtArgs extends SsrSiteArgs {
    */
   dev?: false | DevArgs["dev"];
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
-   *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
-   *
-   * @default `0`
-   */
-  warm?: SsrSiteArgs["warm"];
-  /**
    * Permissions and the resources that the [server function](#nodes-server) in your Nuxt app needs to access. These permissions are used to create the function's IAM role.
    *
    * :::tip
@@ -143,21 +135,25 @@ export interface NuxtArgs extends SsrSiteArgs {
    */
   invalidation?: SsrSiteArgs["invalidation"];
   /**
-   * Set in your Nuxt app. These are made available:
+   * Set [environment variables](https://cli.vuejs.org/guide/mode-and-env.html) in your Nuxt
+   * app. These are made available:
    *
-   * 1. In `vinxi build`, they are loaded into `process.env`.
-   * 2. Locally while running `sst dev vinxi dev`.
+   * 1. In `nuxt build`, they are loaded into `process.env`.
+   * 2. Locally while running through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your Nuxt app and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
    * :::
+   *
+   * Recall that in Vue, you need to prefix your environment variables with `VUE_APP_` to access these in the browser. [Read more here](https://cli.vuejs.org/guide/mode-and-env.html#using-env-variables-in-client-side-code).
    *
    * @example
    * ```js
    * {
    *   environment: {
    *     API_URL: api.url,
-   *     STRIPE_PUBLISHABLE_KEY: "pk_test_123"
+   *     // Accessible in the browser
+   *     VUE_APP_STRIPE_PUBLISHABLE_KEY: "pk_test_123"
    *   }
    * }
    * ```
@@ -442,19 +438,9 @@ export class Nuxt extends Component implements Link.Linkable {
     }
 
     function loadBuildMetadata() {
-      return outputPath.apply((outputPath) => {
-        const assetsPath = path.join(".output", "public");
-
-        return {
-          assetsPath,
-          // create 1 behaviour for each top level asset file/folder
-          staticRoutes: fs
-            .readdirSync(path.join(outputPath, assetsPath), {
-              withFileTypes: true,
-            })
-            .map((item) => (item.isDirectory() ? `${item.name}/*` : item.name)),
-        };
-      });
+      return outputPath.apply(() => ({
+        assetsPath: path.join(".output", "public"),
+      }));
     }
 
     function buildPlan() {
@@ -489,6 +475,13 @@ export class Nuxt extends Component implements Link.Linkable {
                 ],
               },
             },
+            fallthrough: {
+              group: {
+                primaryOriginName: "s3",
+                fallbackOriginName: "server",
+                fallbackStatusCodes: [403, 404],
+              },
+            },
           },
           behaviors: [
             {
@@ -502,14 +495,13 @@ export class Nuxt extends Component implements Link.Linkable {
               cfFunction: "serverCfFunction",
               origin: "server",
             },
-            ...buildMeta.staticRoutes.map(
-              (route) =>
-                ({
-                  cacheType: "static",
-                  pattern: route,
-                  origin: "s3",
-                }) as const,
-            ),
+            {
+              pattern: "*",
+              cacheType: "server",
+              cfFunction: "serverCfFunction",
+              origin: "fallthrough",
+              allowedMethods: ["GET", "HEAD", "OPTIONS"],
+            },
           ],
         });
       });

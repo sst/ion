@@ -343,6 +343,61 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-info).
 
 
 ---
+## AWS JSX Email
+
+Uses [JSX Email](https://jsx.email) and the `Email` component to design and send emails.
+
+To test this example, change the `sst.config.ts` to use your own email address.
+
+```ts title="sst.config.ts"
+sender: "email@example.com"
+```
+
+Then run.
+
+```bash
+npm install
+npx sst dev
+```
+
+You'll get an email from AWS asking you to confirm your email address. Click the link to
+verify it.
+
+Next, go to the URL in the `sst dev` CLI output. You should now receive an email rendered
+using JSX Email.
+
+```ts title="index.ts"
+import { Template } from "./templates/email";
+
+await render(Template({
+  email: "spongebob@example.com",
+  name: "Spongebob Squarepants"
+}))
+```
+
+Once you are ready to go to production, you can:
+
+- [Request production access](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html) for SES
+- And [use your domain](/docs/component/aws/email/) to send emails
+```ts title="sst.config.ts"
+const email = new sst.aws.Email("MyEmail", {
+  sender: "email@example.com",
+});
+const api = new sst.aws.Function("MyApi", {
+  handler: "index.handler",
+  link: [email],
+  url: true,
+});
+
+return {
+  api: api.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-jsx-email).
+
+
+---
 ## Kinesis streams
 
 Create a Kinesis stream, and subscribe to it with a function.
@@ -376,6 +431,77 @@ return {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-kinesis-stream).
+
+
+---
+## AWS Lambda streaming
+
+An example on how to enable streaming for Lambda functions.
+
+```ts title="sst.config.ts"
+{
+  streaming: true
+}
+```
+
+While `sst dev` doesn't support streaming, you can use the
+[`lambda-stream`](https://github.com/astuyve/lambda-stream) package to test locally.
+
+```bash
+npm install lambda-stream
+```
+
+Then, you can use the `streamifyResponse` function to wrap your handler:
+
+```ts title="index.ts"
+import { APIGatewayProxyEventV2 } from "aws-lambda";
+import { streamifyResponse, ResponseStream } from "lambda-stream";
+
+export const handler = streamifyResponse(myHandler);
+
+async function myHandler(
+  _event: APIGatewayProxyEventV2,
+  responseStream: ResponseStream
+): Promise<void> {
+  return new Promise((resolve, _reject) => {
+    responseStream.setContentType('text/plain')
+    responseStream.write('Hello')
+    setTimeout(() => {
+      responseStream.write(' World')
+      responseStream.end()
+      resolve()
+    }, 3000)
+  })
+}
+```
+
+When deployed, this will use the `awslambda.streamifyResponse`.
+
+:::note
+Streaming is currently not supported in `sst dev`.
+:::
+
+To test this in your terminal, use the `curl` command with the `--no-buffer` option.
+
+```bash "--no-buffer"
+curl --no-buffer https://u3dyblk457ghskwbmzrbylpxoi0ayrbb.lambda-url.us-east-1.on.aws
+```
+
+Here we are using a Function URL directly because API Gateway doesn't support streaming.
+```ts title="sst.config.ts"
+const fn = new sst.aws.Function("MyFunction", {
+  url: true,
+  streaming: true,
+  timeout: "15 minutes",
+  handler: "index.handler",
+});
+
+return {
+  url: fn.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-lambda-stream).
 
 
 ---
@@ -419,6 +545,218 @@ return {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-multi-region).
+
+
+---
+## AWS Next.js basic auth
+
+Deploys a simple Next.js app and adds basic auth to it.
+
+This is useful for dev environments where you want to share your app your team but ensure
+that it's not publicly accessible.
+
+:::tip
+You can use this for all the SSR sites, like Astro, Remix, SvelteKit, etc.
+:::
+
+This works by injecting some code into a CloudFront function that checks the basic auth
+header and matches it against the `USERNAME` and `PASSWORD` secrets.
+
+```ts title="sst.config.ts"
+{
+  injection: $interpolate`
+    if (
+        !event.request.headers.authorization
+          || event.request.headers.authorization.value !== "Basic ${basicAuth}"
+       ) {
+      return {
+        statusCode: 401,
+        headers: {
+          "www-authenticate": { value: "Basic" }
+        }
+      };
+    }`,
+}
+```
+
+To deploy this, you need to first set the `USERNAME` and `PASSWORD` secrets.
+
+```bash
+sst secret set USERNAME my-username
+sst secret set PASSWORD my-password
+```
+
+If you are deploying this to preview environments, you might want to set the secrets using
+the [`--fallback`](/docs/reference/cli#secret) flag.
+```ts title="sst.config.ts"
+const username = new sst.Secret("USERNAME");
+const password = new sst.Secret("PASSWORD");
+const basicAuth = $resolve([username.value, password.value]).apply(
+  ([username, password]) =>
+    Buffer.from(`${username}:${password}`).toString("base64")
+);
+
+new sst.aws.Nextjs("MyWeb", {
+  server: {
+    // Don't password protect prod
+    edge: $app.stage !== "production"
+      ? {
+        viewerRequest: {
+          injection: $interpolate`
+            if (
+                !event.request.headers.authorization
+                  || event.request.headers.authorization.value !== "Basic ${basicAuth}"
+               ) {
+              return {
+                statusCode: 401,
+                headers: {
+                  "www-authenticate": { value: "Basic" }
+                }
+              };
+            }`,
+        },
+      }
+      : undefined,
+  },
+});
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-nextjs-basic-auth).
+
+
+---
+## AWS Next.js streaming
+
+An example of how to use streaming Next.js RSC. Uses `Suspense` to stream an async component.
+
+```tsx title="app/page.tsx"
+<Suspense fallback={<div>Loading...</div>}>
+  <Friends />
+</Suspense>
+```
+
+For this demo we also need to make sure the route is not statically built.
+
+```ts title="app/page.tsx"
+export const dynamic = "force-dynamic";
+```
+
+This is deployed with OpenNext, which needs a config to enable streaming.
+
+```ts title="open-next.config.ts" {4}
+export default {
+  default: {
+    override: {
+      wrapper: "aws-lambda-streaming"
+    }
+  }
+};
+```
+
+You should see the _friends_ section load after a 3 second delay.
+
+:::note
+Safari handles streaming differently than other browsers.
+:::
+
+Safari uses a [different heuristic](https://bugs.webkit.org/show_bug.cgi?id=252413) to
+determine when to stream data. You need to render _enough_ initial HTML to trigger streaming.
+This is typically only a problem for demo apps.
+```ts title="sst.config.ts"
+new sst.aws.Nextjs("MyWeb");
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-nextjs-stream).
+
+
+---
+## Prisma in Lambda
+
+To use Prisma in a Lambda function you need to
+
+- Generate the Prisma Client with the right architecture
+- Copy the generated client to the function
+- Run the function inside a VPC
+
+You can set the architecture using the `binaryTargets` option in `prisma/schema.prisma`.
+
+```prisma title="prisma/schema.prisma"
+// For x86
+binaryTargets = ["native", "rhel-openssl-3.0.x"]
+// For ARM
+// binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
+```
+
+You can also switch to ARM, just make sure to also change the function architecture in your
+`sst.config.ts`.
+
+```ts title="sst.config.ts"
+{
+  // For ARM
+  architecture: "arm64"
+}
+```
+
+To generate the client, you need to run `prisma generate` when you make changes to the
+schema.
+
+Since this [needs to be done on every deploy](https://www.prisma.io/docs/orm/more/help-and-troubleshooting/help-articles/vercel-caching-issue#a-custom-postinstall-script), we add a `postinstall` script to the `package.json`.
+
+```json title="package.json"
+"scripts": {
+  "postinstall": "prisma generate"
+}
+```
+
+This runs the command on `npm install`.
+
+We then need to copy the generated client to the function when we deploy.
+
+```ts title="sst.config.ts"
+{
+  copyFiles: [{ from: "node_modules/.prisma/client/" }]
+}
+```
+
+Our function also needs to run inside a VPC, since Prisma doesn't support the Data API.
+
+```ts title="sst.config.ts"
+{
+  vpc
+}
+```
+
+#### Prisma in serverless environments
+
+Prisma is [not great in serverless environments](https://www.prisma.io/docs/orm/prisma-client/setup-and-configuration/databases-connections#serverless-environments-faas). For a couple of reasons:
+
+1. It doesn't support Data API, so you need to manage the connection pool on your own.
+2. Without the Data API, your functions need to run inside a VPC.
+   - You cannot use `sst dev` without [connecting to the VPC](/docs/live#using-a-vpc).
+3. Due to the internal architecture of their client, it's also has slower cold starts.
+
+Instead we recommend using [Drizzle](https://orm.drizzle.team). This example is here for
+reference for people that are already using Prisma.
+```ts title="sst.config.ts"
+const vpc = new sst.aws.Vpc("MyVpc", { nat: "managed" });
+const rds = new sst.aws.Postgres("MyPostgres", { vpc });
+
+const api = new sst.aws.Function("MyApi", {
+  vpc,
+  url: true,
+  link: [rds],
+  // For ARM
+  // architecture: "arm64",
+  handler: "index.handler",
+  copyFiles: [{ from: "node_modules/.prisma/client/" }],
+});
+
+return {
+  api: api.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-prisma).
 
 
 ---
@@ -545,6 +883,84 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-queue).
 
 
 ---
+## AWS Remix streaming
+
+Follows the [Remix Streaming](https://remix.run/docs/en/main/guides/streaming) guide to create
+an app that streams data.
+
+Uses the `defer` utility to stream data through the `loader` function.
+
+```tsx title="app/routes/_index.tsx"
+return defer({
+  spongebob,
+  friends: friendsPromise,
+});
+```
+
+Then uses the the `Suspense` and `Await` components to render the data.
+
+```tsx title="app/routes/_index.tsx"
+<Suspense fallback={<div>Loading...</div>}>
+  <Await resolve={friends}>
+    { /* ... */ }
+  </Await>
+</Suspense>
+```
+
+You should see the _friends_ section load after a 3 second delay.
+
+:::note
+Safari handles streaming differently than other browsers.
+:::
+
+Safari uses a [different heuristic](https://bugs.webkit.org/show_bug.cgi?id=252413) to
+determine when to stream data. You need to render _enough_ initial HTML to trigger streaming.
+This is typically only a problem for demo apps.
+
+Streaming works out of the box with the `Remix` component.
+```ts title="sst.config.ts"
+new sst.aws.Remix("MyWeb");
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-remix-stream).
+
+
+---
+## Router and bucket
+
+Creates a router that serves static files from the `public` folder of a given bucket.
+```ts title="sst.config.ts"
+// Create a bucket that CloudFront can access
+const bucket = new sst.aws.Bucket("MyBucket", {
+  access: "cloudfront",
+});
+
+// Upload the image to the `public` folder
+new aws.s3.BucketObjectv2("MyImage", {
+  bucket: bucket.name,
+  key: "public/spongebob.svg",
+  contentType: "image/svg+xml",
+  source: $asset("spongebob.svg"),
+});
+
+const router = new sst.aws.Router("MyRouter", {
+  routes: {
+    "/*": {
+      bucket,
+      rewrite: { regex: "^/(.*)$", to: "/public/$1" },
+    },
+  },
+});
+
+return {
+  image: $interpolate`${router.url}/spongebob.svg`,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-router-bucket).
+
+
+---
 ## Router and function URL
 
 Creates a router that routes all requests to a function with a URL.
@@ -554,7 +970,7 @@ const api = new sst.aws.Function("MyApi", {
   url: true,
 });
 const bucket = new sst.aws.Bucket("MyBucket", {
-  public: true,
+  access: "public",
 });
 const router = new sst.aws.Router("MyRouter", {
   domain: "router.ion.dev.sst.dev",
@@ -621,13 +1037,85 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-sharp).
 
 
 ---
-## Simple static site
+## AWS static site basic auth
 
-Deploy a simple HTML file as a static site with S3 and CloudFront.
+This deploys a simple static site and adds basic auth to it.
+
+This is useful for dev environments where you want to share a static site with your team but
+ensure that it's not publicly accessible.
+
+This works by injecting some code into a CloudFront function that checks the basic auth
+header and matches it against the `USERNAME` and `PASSWORD` secrets.
+
 ```ts title="sst.config.ts"
-// Deploys the current directory as a static site
+{
+  injection: $interpolate`
+    if (
+        !event.request.headers.authorization
+          || event.request.headers.authorization.value !== "Basic ${basicAuth}"
+       ) {
+      return {
+        statusCode: 401,
+        headers: {
+          "www-authenticate": { value: "Basic" }
+        }
+      };
+    }`,
+}
+```
+
+To deploy this, you need to first set the `USERNAME` and `PASSWORD` secrets.
+
+```bash
+sst secret set USERNAME my-username
+sst secret set PASSWORD my-password
+```
+
+If you are deploying this to preview environments, you might want to set the secrets using
+the [`--fallback`](/docs/reference/cli#secret) flag.
+```ts title="sst.config.ts"
+const username = new sst.Secret("USERNAME");
+const password = new sst.Secret("PASSWORD");
+const basicAuth = $resolve([username.value, password.value]).apply(
+  ([username, password]) =>
+    Buffer.from(`${username}:${password}`).toString("base64")
+);
+
 new sst.aws.StaticSite("MySite", {
-  path: "./dist",
+  path: "site",
+  // Don't password protect prod
+  edge: $app.stage !== "production"
+    ? {
+      viewerRequest: {
+        injection: $interpolate`
+          if (
+              !event.request.headers.authorization
+                || event.request.headers.authorization.value !== "Basic ${basicAuth}"
+             ) {
+            return {
+              statusCode: 401,
+              headers: {
+                "www-authenticate": { value: "Basic" }
+              }
+            };
+          }`,
+      },
+    }
+    : undefined,
+});
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-static-site-basic-auth).
+
+
+---
+## AWS static site
+
+Deploy a simple HTML file as a static site with S3 and CloudFront. The website is stored in
+the `site/` directory.
+```ts title="sst.config.ts"
+new sst.aws.StaticSite("MySite", {
+  path: "site",
 });
 ```
 
@@ -635,7 +1123,7 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-static-
 
 
 ---
-## Swift on Lambda
+## Swift in Lambda
 
 Deploys a simple Swift application to Lambda using the `al2023` runtime.
 
@@ -664,6 +1152,100 @@ return {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-swift).
+
+
+---
+## T3 Stack in AWS
+
+Deploy [T3 stack](https://create.t3.gg) with Drizzle and Postgres to AWS. To use this
+example run:
+
+```bash
+npm install
+npm run db:push
+npx sst dev
+```
+
+And deploy it to production with.
+
+```bash
+npx sst deploy --stage production
+```
+
+This example was created using `create-t3-app` and the following options: tRPC, Drizzle,
+no auth, Tailwind, Postgres, and the App Router
+
+Instead of a local database, we'll be using an RDS Postgres database and connect to it
+with the RDS Data API.
+
+```ts title="src/server/db/index.ts"
+import { Resource } from "sst";
+import { drizzle } from "drizzle-orm/aws-data-api/pg";
+import { RDSDataClient } from "@aws-sdk/client-rds-data";
+
+import * as schema from "./schema";
+
+const client = new RDSDataClient({});
+
+export const db = drizzle(client, {
+  schema,
+  database: Resource.MyPostgres.database,
+  secretArn: Resource.MyPostgres.secretArn,
+  resourceArn: Resource.MyPostgres.clusterArn,
+});
+```
+
+In our Next.js app we can access our Postgres database because we [link them](/docs/linking/)
+both. We don't need to use our `.env` files.
+
+```ts title="sst.config.ts" {4}
+ const rds = new sst.aws.Postgres("MyPostgres", { vpc });
+
+ new sst.aws.Nextjs("MyWeb", {
+   link: [rds]
+ });
+```
+
+For Drizzle Kit, we use the `aws-data-api` driver.
+
+```ts title="drizzle.config.ts" {5}
+import { Resource } from "sst";
+import { type Config } from "drizzle-kit";
+
+export default {
+  driver: "aws-data-api",
+  schema: "./src/server/db/schema.ts",
+  dialect: "postgresql",
+  dbCredentials: {
+    database: Resource.MyPostgres.database,
+    secretArn: Resource.MyPostgres.secretArn,
+    resourceArn: Resource.MyPostgres.clusterArn,
+  },
+  tablesFilter: ["aws-t3_*"],
+} satisfies Config;
+```
+
+And to make sure our credentials are available, we update our `package.json`
+with the [`sst shell`](/docs/reference/cli) CLI.
+
+```json title="package.json"
+"db:generate": "sst shell drizzle-kit generate",
+"db:migrate": "sst shell drizzle-kit migrate",
+"db:push": "sst shell drizzle-kit push",
+"db:studio": "sst shel drizzle-kit studio",
+```
+
+So running `npm run db:push` will run Drizzle Kit with the right credentials.
+```ts title="sst.config.ts"
+const vpc = new sst.aws.Vpc("MyVpc");
+const rds = new sst.aws.Postgres("MyPostgres", { vpc });
+
+new sst.aws.Nextjs("MyWeb", {
+  link: [rds]
+});
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-t3).
 
 
 ---

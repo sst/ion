@@ -8,7 +8,7 @@ import {
 import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
+import { FunctionArgs, FunctionArn } from "./function";
 import { hashStringToPrettyString, logicalName } from "../naming";
 import { parseDynamoStreamArn } from "./helpers/arn";
 import { DynamoLambdaSubscriber } from "./dynamo-lambda-subscriber";
@@ -446,9 +446,9 @@ export class Dynamo extends Component implements Link.Linkable {
                   args.ttl === undefined
                     ? undefined
                     : {
-                        attributeName: args.ttl,
-                        enabled: true,
-                      },
+                      attributeName: args.ttl,
+                      enabled: true,
+                    },
                 globalSecondaryIndexes: Object.entries(globalIndexes ?? {}).map(
                   ([name, index]) => ({
                     name,
@@ -458,9 +458,9 @@ export class Dynamo extends Component implements Link.Linkable {
                       ? { projectionType: "KEYS_ONLY" }
                       : Array.isArray(index.projection)
                         ? {
-                            projectionType: "INCLUDE",
-                            nonKeyAttributes: index.projection,
-                          }
+                          projectionType: "INCLUDE",
+                          nonKeyAttributes: index.projection,
+                        }
                         : { projectionType: "ALL" }),
                   }),
                 ),
@@ -472,9 +472,9 @@ export class Dynamo extends Component implements Link.Linkable {
                       ? { projectionType: "KEYS_ONLY" }
                       : Array.isArray(index.projection)
                         ? {
-                            projectionType: "INCLUDE",
-                            nonKeyAttributes: index.projection,
-                          }
+                          projectionType: "INCLUDE",
+                          nonKeyAttributes: index.projection,
+                        }
                         : { projectionType: "ALL" }),
                   }),
                 ),
@@ -554,9 +554,15 @@ export class Dynamo extends Component implements Link.Linkable {
    *   timeout: "60 seconds"
    * });
    * ```
+   *
+   * Or pass in the ARN of an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * table.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs,
+    subscriber: string | FunctionArgs | FunctionArn,
     args?: DynamoSubscriberArgs,
   ) {
     const sourceName = this.constructorName;

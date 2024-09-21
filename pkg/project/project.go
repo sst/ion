@@ -18,6 +18,10 @@ import (
 	"github.com/sst/ion/pkg/flag"
 	"github.com/sst/ion/pkg/js"
 	"github.com/sst/ion/pkg/project/provider"
+	"github.com/sst/ion/pkg/runtime"
+	"github.com/sst/ion/pkg/runtime/node"
+	"github.com/sst/ion/pkg/runtime/python"
+	"github.com/sst/ion/pkg/runtime/worker"
 )
 
 type App struct {
@@ -42,6 +46,7 @@ type Project struct {
 	home            provider.Home
 	env             map[string]string
 	loadedProviders map[string]provider.Provider
+	Runtime         *runtime.Collection
 }
 
 func Discover() (string, error) {
@@ -100,6 +105,12 @@ func New(input *ProjectConfig) (*Project, error) {
 		root:    rootPath,
 		config:  input.Config,
 		env:     map[string]string{},
+		Runtime: runtime.NewCollection(
+			input.Config,
+			node.New(),
+			worker.New(),
+			python.New(),
+		),
 	}
 	tmp := proj.PathWorkingDir()
 

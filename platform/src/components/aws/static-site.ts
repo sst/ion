@@ -67,6 +67,188 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
    */
   path?: BaseStaticSiteArgs["path"];
   /**
+   * Configure CloudFront Functions to customize the behavior of HTTP requests and responses at the edge.
+   */
+  edge?: Input<{
+    /**
+     * Configure the viewer request function.
+     *
+     * The viewer request function can be used to modify incoming requests before they reach
+     * your origin server. For example, you can redirect users, rewrite URLs, or add headers.
+     *
+     * By default, a viewer request function is created to rewrite URLs to:
+     * - Append `index.html` to the URL if the URL ends with a `/`.
+     * - Append `.html` to the URL if the URL does not contain a file extension.
+     *
+     * @example
+     *
+     * You can pass in the code to inject into the function. The provided code will be
+     * injected at the end of the function.
+     *
+     * ```js
+     * async function handler(event) {
+     *   // Default behavior code
+     *
+     *   // User injected code
+     *
+     *   return event.request;
+     * }
+     * ```
+     *
+     * To add a custom header to all requests.
+     *
+     * ```js
+     * {
+     *   edge: {
+     *     viewerRequest: {
+     *       injection: `event.request.headers["x-foo"] = "bar";`
+     *     }
+     *   }
+     * }
+     * ```
+     *
+     * You can use this add basic auth, [check out an example](/docs/examples/#aws-static-site-basic-auth).
+     *
+     * @example
+     *
+     * Alternatively you can pass in the ARN of an existing CloudFront function to
+     * override the default behavior.
+     *
+     * ```js
+     * {
+     *   edge: {
+     *     viewerRequest: "arn:aws:cloudfront::123456789012:function/my-function"
+     *   }
+     * }
+     * ```
+     */
+    viewerRequest?: Input<
+      | string
+      | {
+          /**
+           * The code to inject into the viewer request function.
+           *
+           * @example
+           * To add a custom header to all requests.
+           *
+           * ```js
+           * {
+           *   edge: {
+           *     viewerRequest: {
+           *       injection: `event.request.headers["x-foo"] = "bar";`
+           *     }
+           *   }
+           * }
+           * ```
+           */
+          injection: Input<string>;
+          /**
+           * The KV stores to associate with the viewer request function.
+           *
+           * Takes a list of CloudFront KeyValueStore ARNs.
+           *
+           * @example
+           * ```js
+           * {
+           *   edge: {
+           *     viewerRequest: {
+           *       kvStores: ["arn:aws:cloudfront::123456789012:key-value-store/my-store"]
+           *     }
+           *   }
+           * }
+           * ```
+           */
+          kvStores?: Input<Input<string>[]>;
+        }
+    >;
+    /**
+     * Configure the viewer response function.
+     *
+     * The viewer response function can be used to modify outgoing responses before they
+     * are sent to the client. For example, you can add security headers or change the response
+     * status code.
+     *
+     * By default, no viewer response function is set. A new function will be created with
+     * the provided code.
+     *
+     * @example
+     *
+     * You can pass in the code to inject into the function. And a CloudFront function will
+     * be created with the provided code injected into it.
+     *
+     * ```js
+     * async function handler(event) {
+     *   // User injected code
+     *
+     *   return event.response;
+     * }
+     * ```
+     *
+     * To add a custom header to all responses.
+     *
+     * ```js
+     * {
+     *   edge: {
+     *     viewerResponse: {
+     *       injection: `event.response.headers["x-foo"] = "bar";`
+     *     }
+     *   }
+     * }
+     * ```
+     *
+     * @example
+     *
+     * Alternatively you can pass in the ARN of an existing CloudFront function.
+     *
+     * ```js
+     * {
+     *   edge: {
+     *     viewerResponse: "arn:aws:cloudfront::123456789012:function/my-function"
+     *   }
+     * }
+     * ```
+     */
+    viewerResponse?: Input<
+      | string
+      | {
+          /**
+           * The code to inject into the viewer response function.
+           *
+           * @example
+           * To add a custom header to all responses.
+           *
+           * ```js
+           * {
+           *   edge: {
+           *     viewerResponse: {
+           *       injection: `event.response.headers["x-foo"] = "bar";`
+           *     }
+           *   }
+           * }
+           * ```
+           */
+          injection: Input<string>;
+          /**
+           * The KV stores to associate with the viewer response function.
+           *
+           * Takes a list of CloudFront KeyValueStore ARNs.
+           *
+           * @example
+           * ```js
+           * {
+           *   edge: {
+           *     viewerResponse: {
+           *       kvStores: ["arn:aws:cloudfront::123456789012:key-value-store/my-store"]
+           *     }
+           *   }
+           * }
+           * ```
+           */
+          kvStores?: Input<Input<string>[]>;
+        }
+    >;
+  }>;
+  /**
    * Configure if your static site needs to be built. This is useful if you are using a static site generator.
    *
    * The `build.output` directory will be uploaded to S3 instead.
@@ -156,6 +338,19 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
        * ```
        */
       path?: Input<string>;
+      /**
+       * Configure if files from previous deployments should be purged from the bucket.
+       * @default `true`
+       * @example
+       * ```js
+       * {
+       *   assets: {
+       *     purge: false
+       *   }
+       * }
+       * ```
+       */
+      purge?: Input<boolean>;
     }
   >;
   /**
@@ -468,7 +663,6 @@ export class StaticSite extends Component implements Link.Linkable {
     const bucket = createBucket();
     const { bucketName, bucketDomain } = getBucketDetails();
     const bucketFile = uploadAssets();
-    const cloudfrontFunction = createCloudfrontFunction();
     const invalidation = buildInvalidation();
     const distribution = createDistribution();
     this.assets = bucket;
@@ -512,6 +706,7 @@ export class StaticSite extends Component implements Link.Linkable {
               v.replace(/^\//, "").replace(/\/$/, ""),
             )
           : undefined,
+        purge: args.assets?.purge ?? true,
       };
     }
 
@@ -523,27 +718,6 @@ export class StaticSite extends Component implements Link.Linkable {
       );
     }
 
-    function createCloudfrontFunction() {
-      return new cloudfront.Function(
-        `${name}Function`,
-        {
-          runtime: "cloudfront-js-1.0",
-          code: `
-    function handler(event) {
-        var request = event.request;
-        var uri = request.uri;
-        if (uri.endsWith('/')) {
-          request.uri += 'index.html';
-        } else if (!uri.includes('.')) {
-          request.uri += '.html';
-        }
-        return request;
-    }`,
-        },
-        { parent },
-      );
-    }
-
     function createBucket() {
       if (assets.bucket) return;
 
@@ -551,35 +725,7 @@ export class StaticSite extends Component implements Link.Linkable {
         ...transform(
           args.transform?.assets,
           `${name}Assets`,
-          {
-            transform: {
-              policy: (policyArgs) => {
-                const newPolicy = iam.getPolicyDocumentOutput({
-                  statements: [
-                    {
-                      principals: [
-                        {
-                          type: "Service",
-                          identifiers: ["cloudfront.amazonaws.com"],
-                        },
-                      ],
-                      actions: ["s3:GetObject"],
-                      resources: [interpolate`${bucket!.arn}/*`],
-                    },
-                  ],
-                }).json;
-                policyArgs.policy = output([
-                  policyArgs.policy,
-                  newPolicy,
-                ]).apply(([policy, newPolicy]) => {
-                  const policyJson = JSON.parse(policy as string);
-                  const newPolicyJson = JSON.parse(newPolicy as string);
-                  policyJson.Statement.push(...newPolicyJson.Statement);
-                  return JSON.stringify(policyJson);
-                });
-              },
-            },
-          },
+          { access: "cloudfront" },
           { parent, retainOnDelete: false },
         ),
       );
@@ -656,7 +802,7 @@ export class StaticSite extends Component implements Link.Linkable {
           {
             bucketName,
             files: bucketFiles,
-            purge: true,
+            purge: assets.purge,
           },
           { parent },
         );
@@ -756,12 +902,20 @@ export class StaticSite extends Component implements Link.Linkable {
               compress: true,
               // CloudFront's managed CachingOptimized policy
               cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
-              functionAssociations: [
+              functionAssociations: output(args.edge).apply((edge) => [
                 {
                   eventType: "viewer-request",
-                  functionArn: cloudfrontFunction.arn,
+                  functionArn: createCloudfrontRequestFunction(),
                 },
-              ],
+                ...(edge?.viewerResponse
+                  ? [
+                      {
+                        eventType: "viewer-response",
+                        functionArn: createCloudfrontResponseFunction(),
+                      },
+                    ]
+                  : []),
+              ]),
             },
             domain: args.domain,
             invalidation,
@@ -770,6 +924,54 @@ export class StaticSite extends Component implements Link.Linkable {
           { dependsOn: bucketFile, parent },
         ),
       );
+    }
+
+    function createCloudfrontRequestFunction() {
+      return output(args.edge).apply((edge) => {
+        if (typeof edge?.viewerRequest === "string")
+          return output(edge.viewerRequest);
+
+        return new cloudfront.Function(
+          `${name}Function`,
+          {
+            runtime: "cloudfront-js-2.0",
+            keyValueStoreAssociations: edge?.viewerRequest?.kvStores ?? [],
+            code: `
+async function handler(event) {
+  if (event.request.uri.endsWith('/')) {
+    event.request.uri += 'index.html';
+  } else if (!event.request.uri.includes('.')) {
+    event.request.uri += '.html';
+  }
+  ${edge?.viewerRequest?.injection ?? ""}
+  return event.request;
+}`,
+          },
+          { parent },
+        ).arn;
+      });
+    }
+
+    function createCloudfrontResponseFunction() {
+      return output(args.edge).apply((edge) => {
+        if (typeof edge?.viewerResponse === "string")
+          return output(edge.viewerResponse);
+
+        return new cloudfront.Function(
+          `${name}ResponseFunction`,
+          {
+            runtime: "cloudfront-js-2.0",
+            keyValueStoreAssociations: edge?.viewerResponse?.kvStores ?? [],
+            code: `
+async function handler(event) {
+  ${edge?.viewerResponse?.injection ?? ""}
+  return event.response;
+}
+`,
+          },
+          { parent },
+        ).arn;
+      });
     }
 
     function buildInvalidation() {

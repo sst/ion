@@ -2,7 +2,7 @@ import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
 import { Component, Prettify, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
+import { FunctionArgs, FunctionArn } from "./function";
 import { hashStringToPrettyString, physicalName, logicalName } from "../naming";
 import { VisibleError } from "../error";
 import { DnsValidatedCertificate } from "./dns-validated-certificate";
@@ -386,9 +386,22 @@ export interface ApiGatewayV2AuthorizerArgs {
     /**
      * The Lambda authorizer function. Takes the handler path or the function args.
      * @example
+     * Add a simple authorizer.
+     *
      * ```js
      * {
      *   function: "src/authorizer.index"
+     * }
+     * ```
+     *
+     * Customize the authorizer handler.
+     *
+     * ```js
+     * {
+     *   function: {
+     *     handler: "src/authorizer.index",
+     *     memory: "2048 MB"
+     *   }
      * }
      * ```
      */
@@ -467,55 +480,55 @@ export interface ApiGatewayV2RouteArgs {
   auth?: Input<
     | false
     | {
+      /**
+       * Enable IAM authorization for a given API route. When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
+       */
+      iam?: Input<true>;
+      /**
+       * Enable JWT or JSON Web Token authorization for a given API route. When JWT auth is enabled, clients need to include a valid JWT in their requests.
+       *
+       * @example
+       * You can configure JWT auth.
+       *
+       * ```js
+       * {
+       *   auth: {
+       *     jwt: {
+       *       authorizer: myAuthorizer.id,
+       *       scopes: ["read:profile", "write:profile"]
+       *     }
+       *   }
+       * }
+       * ```
+       *
+       * Where `myAuthorizer` is created by calling the `addAuthorizer` method.
+       */
+      jwt?: Input<{
         /**
-         * Enable IAM authorization for a given API route. When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
+         * Authorizer ID of the JWT authorizer.
          */
-        iam?: Input<true>;
+        authorizer: Input<string>;
         /**
-         * Enable JWT or JSON Web Token authorization for a given API route. When JWT auth is enabled, clients need to include a valid JWT in their requests.
-         *
-         * @example
-         * You can configure JWT auth.
-         *
-         * ```js
-         * {
-         *   auth: {
-         *     jwt: {
-         *       authorizer: myAuthorizer.id,
-         *       scopes: ["read:profile", "write:profile"]
-         *     }
-         *   }
-         * }
-         * ```
-         *
-         * Where `myAuthorizer` is created by calling the `addAuthorizer` method.
+         * Defines the permissions or access levels that the JWT grants. If the JWT does not have the required scope, the request is rejected. By default it does not require any scopes.
          */
-        jwt?: Input<{
-          /**
-           * Authorizer ID of the JWT authorizer.
-           */
-          authorizer: Input<string>;
-          /**
-           * Defines the permissions or access levels that the JWT grants. If the JWT does not have the required scope, the request is rejected. By default it does not require any scopes.
-           */
-          scopes?: Input<Input<string>[]>;
-        }>;
-        /**
-         * Enable custom Lambda authorization for a given API route. Pass in the authorizer ID.
-         *
-         * @example
-         * ```js
-         * {
-         *   auth: {
-         *     lambda: myAuthorizer.id
-         *   }
-         * }
-         * ```
-         *
-         * Where `myAuthorizer` is created by calling the `addAuthorizer` method.
-         */
-        lambda?: Input<string>;
-      }
+        scopes?: Input<Input<string>[]>;
+      }>;
+      /**
+       * Enable custom Lambda authorization for a given API route. Pass in the authorizer ID.
+       *
+       * @example
+       * ```js
+       * {
+       *   auth: {
+       *     lambda: myAuthorizer.id
+       *   }
+       * }
+       * ```
+       *
+       * Where `myAuthorizer` is created by calling the `addAuthorizer` method.
+       */
+      lambda?: Input<string>;
+    }
   >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -700,10 +713,10 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
         return cors === true || cors === undefined
           ? defaultCors
           : {
-              ...defaultCors,
-              ...cors,
-              maxAge: cors.maxAge && toSeconds(cors.maxAge),
-            };
+            ...defaultCors,
+            ...cors,
+            maxAge: cors.maxAge && toSeconds(cors.maxAge),
+          };
       });
     }
 
@@ -877,9 +890,9 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     //       trailing slash, the API fails with the error {"message":"Not Found"}
     return this.apigDomain && this.apiMapping
       ? all([this.apigDomain.domainName, this.apiMapping.apiMappingKey]).apply(
-          ([domain, key]) =>
-            key ? `https://${domain}/${key}/` : `https://${domain}`,
-        )
+        ([domain, key]) =>
+          key ? `https://${domain}/${key}/` : `https://${domain}`,
+      )
       : this.api.apiEndpoint;
   }
 
@@ -997,10 +1010,16 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
    *   memory: "2048 MB"
    * });
    * ```
+   *
+   * Or pass in the ARN of an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * api.route("GET /", "arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public route(
     rawRoute: string,
-    handler: string | FunctionArgs,
+    handler: Input<string | FunctionArgs | FunctionArn>,
     args: ApiGatewayV2RouteArgs = {},
   ) {
     const route = this.parseRoute(rawRoute);

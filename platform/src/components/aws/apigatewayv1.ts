@@ -9,7 +9,7 @@ import {
 import { Component, Prettify, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
-import { FunctionArgs } from "./function";
+import { FunctionArgs, FunctionArn } from "./function";
 import { hashStringToPrettyString, physicalName, logicalName } from "../naming";
 import { VisibleError } from "../error";
 import { RETENTION } from "./logging";
@@ -713,6 +713,10 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
        */
       api: this.api,
       /**
+       * The Amazon API Gateway REST API stage
+       */
+      stage: this.stage,
+      /**
        * The CloudWatch LogGroup for the access logs.
        */
       logGroup: this.logGroup,
@@ -794,10 +798,16 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
    *   memory: "2048 MB"
    * });
    * ```
+   *
+   * Or pass in the ARN of an existing Lambda function.
+   *
+   * ```js title="sst.config.ts"
+   * api.route("GET /", "arn:aws:lambda:us-east-1:123456789012:function:my-function");
+   * ```
    */
   public route(
     route: string,
-    handler: string | FunctionArgs,
+    handler: string | FunctionArgs | FunctionArn,
     args: ApiGatewayV1RouteArgs = {},
   ) {
     const { method, path } = this.parseRoute(route);

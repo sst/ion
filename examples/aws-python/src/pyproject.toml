@@ -1,0 +1,18 @@
+[project]
+name = "aws-python"
+version = "0.1.0"
+description = "A SST app"
+authors = [
+    {name = "Nick Wall", email = "mail@walln.dev" },
+]
+dependencies = [
+    "python-dateutil>=2.9.0.post0",
+    "sst-sdk",
+]
+
+# It is recommended to specify your python version to match your Lambda runtime otherwise you may
+# encounter issues with dependencies.
+requires-python = ">=3.11"
+
+[tool.uv.sources]
+sst-sdk = { git = "https://github.com/sst/ion.git", subdirectory = "sdk/python" }

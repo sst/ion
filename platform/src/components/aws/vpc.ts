@@ -1,8 +1,20 @@
-import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
+import {
+  ComponentResourceOptions,
+  Output,
+  all,
+  interpolate,
+  output,
+} from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
-import { ec2, getAvailabilityZonesOutput } from "@pulumi/aws";
+import {
+  ec2,
+  getAvailabilityZonesOutput,
+  iam,
+  servicediscovery,
+} from "@pulumi/aws";
 import { Vpc as VpcV1 } from "./vpc-v1";
+import { Link } from "../link";
 export type { VpcArgs as VpcV1Args } from "./vpc-v1";
 
 export interface VpcArgs {
@@ -29,6 +41,22 @@ export interface VpcArgs {
    * ```
    */
   nat?: Input<"managed">;
+  /**
+   * Configures a bastion host that can be used to connect to resources in the VPC.
+   *
+   * When enabled, an EC2 instance with the bastion AMI will be launched in a public subnet.
+   * The instance will have AWS SSM (AWS Session Manager) enabled for secure access without
+   * the need for SSH key management.
+   *
+   * @default Bastion is not created
+   * @example
+   * ```ts
+   * {
+   *   bastion: true
+   * }
+   * ```
+   */
+  bastion?: Input<true>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -70,6 +98,10 @@ export interface VpcArgs {
      * Transform the EC2 route table resource for the private subnet.
      */
     privateRouteTable?: Transform<ec2.RouteTableArgs>;
+    /**
+     * Transform the EC2 bastion instance resource.
+     */
+    bastionInstance?: Transform<ec2.InstanceArgs>;
   };
 }
 
@@ -84,6 +116,8 @@ interface VpcRef {
   publicRouteTables: Output<ec2.RouteTable[]>;
   natGateways: Output<ec2.NatGateway[]>;
   elasticIps: Output<ec2.Eip[]>;
+  bastionInstance: Output<ec2.Instance | undefined>;
+  cloudmapNamespace: servicediscovery.PrivateDnsNamespace;
 }
 
 /**
@@ -131,7 +165,7 @@ interface VpcRef {
  * });
  * ```
  */
-export class Vpc extends Component {
+export class Vpc extends Component implements Link.Linkable {
   private vpc: ec2.Vpc;
   private internetGateway: ec2.InternetGateway;
   private securityGroup: ec2.SecurityGroup;
@@ -141,11 +175,16 @@ export class Vpc extends Component {
   private _privateSubnets: Output<ec2.Subnet[]>;
   private publicRouteTables: Output<ec2.RouteTable[]>;
   private privateRouteTables: Output<ec2.RouteTable[]>;
+  private bastionInstance: Output<ec2.Instance | undefined>;
+  private cloudmapNamespace: servicediscovery.PrivateDnsNamespace;
   public static v1 = VpcV1;
 
   constructor(name: string, args?: VpcArgs, opts?: ComponentResourceOptions) {
     const _version = 2;
-    super(__pulumiType, name, args, opts, _version);
+    super(__pulumiType, name, args, opts, {
+      _version,
+      _message: `To continue using the previous version, rename "Vpc" to "Vpc.v${$cli.state.version[name]}". Or recreate this component to update - https://sst.dev/docs/component/aws/cluster#forceupgrade`,
+    });
 
     if (args && "ref" in args) {
       const ref = args as VpcRef;
@@ -158,6 +197,8 @@ export class Vpc extends Component {
       this.privateRouteTables = output(ref.privateRouteTables);
       this.natGateways = output(ref.natGateways);
       this.elasticIps = ref.elasticIps;
+      this.bastionInstance = ref.bastionInstance;
+      this.cloudmapNamespace = ref.cloudmapNamespace;
       return;
     }
     const parent = this;
@@ -171,6 +212,8 @@ export class Vpc extends Component {
     const { publicSubnets, publicRouteTables } = createPublicSubnets();
     const { elasticIps, natGateways } = createNatGateways();
     const { privateSubnets, privateRouteTables } = createPrivateSubnets();
+    const bastionInstance = createBastion();
+    const cloudmapNamespace = createCloudmapNamespace();
 
     this.vpc = vpc;
     this.internetGateway = internetGateway;
@@ -181,11 +224,16 @@ export class Vpc extends Component {
     this._privateSubnets = privateSubnets;
     this.publicRouteTables = publicRouteTables;
     this.privateRouteTables = privateRouteTables;
+    this.bastionInstance = output(bastionInstance);
+    this.cloudmapNamespace = cloudmapNamespace;
 
     function normalizeAz() {
-      const zones = getAvailabilityZonesOutput({
-        state: "available",
-      });
+      const zones = getAvailabilityZonesOutput(
+        {
+          state: "available",
+        },
+        { parent },
+      );
       return all([zones, args?.az ?? 2]).apply(([zones, az]) =>
         Array(az)
           .fill(0)
@@ -401,6 +449,103 @@ export class Vpc extends Component {
         privateRouteTables: ret.apply((ret) => ret.map((r) => r.routeTable)),
       };
     }
+
+    function createBastion() {
+      if (!args?.bastion) return output(undefined);
+
+      const sg = new ec2.SecurityGroup(
+        `${name}BastionSecurityGroup`,
+        {
+          vpcId: vpc.id,
+          ingress: [
+            {
+              protocol: "tcp",
+              fromPort: 22,
+              toPort: 22,
+              cidrBlocks: ["0.0.0.0/0"],
+            },
+          ],
+          egress: [
+            {
+              protocol: "-1",
+              fromPort: 0,
+              toPort: 0,
+              cidrBlocks: ["0.0.0.0/0"],
+            },
+          ],
+        },
+        { parent },
+      );
+
+      const role = new iam.Role(
+        `${name}BastionRole`,
+        {
+          assumeRolePolicy: iam.getPolicyDocumentOutput({
+            statements: [
+              {
+                actions: ["sts:AssumeRole"],
+                principals: [
+                  {
+                    type: "Service",
+                    identifiers: ["ec2.amazonaws.com"],
+                  },
+                ],
+              },
+            ],
+          }).json,
+          managedPolicyArns: [
+            "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+          ],
+        },
+        { parent },
+      );
+      const instanceProfile = new iam.InstanceProfile(
+        `${name}BastionProfile`,
+        { role: role.name },
+        { parent },
+      );
+      const amiIds = ec2.getAmiIdsOutput(
+        {
+          owners: ["amazon"],
+          filters: [
+            {
+              name: "name",
+              // The AMI has the SSM agent pre-installed
+              values: ["al2023-ami-2023.5.20240916.0-kernel-6.1-x86_64"],
+            },
+          ],
+        },
+        { parent },
+      ).ids;
+      return new ec2.Instance(
+        ...transform(
+          args?.transform?.bastionInstance,
+          `${name}BastionInstance`,
+          {
+            instanceType: "t2.micro",
+            ami: amiIds.apply((ids) => ids[0]),
+            subnetId: publicSubnets.apply((v) => v[0].id),
+            vpcSecurityGroupIds: [sg.id],
+            iamInstanceProfile: instanceProfile.name,
+            tags: {
+              "sst:lookup-type": "bastion",
+            },
+          },
+          { parent },
+        ),
+      );
+    }
+
+    function createCloudmapNamespace() {
+      return new servicediscovery.PrivateDnsNamespace(
+        `${name}CloudmapNamespace`,
+        {
+          name: "sst",
+          vpc: vpc.id,
+        },
+        { parent },
+      );
+    }
   }
 
   /**
@@ -433,6 +578,16 @@ export class Vpc extends Component {
    */
   public get securityGroups() {
     return [this.securityGroup.id];
+  }
+
+  /**
+   * The bastion instance id.
+   */
+  public get bastion() {
+    return this.bastionInstance.apply((v) => {
+      if (!v) throw new Error("Bastion instance not created");
+      return v.id;
+    });
   }
 
   /**
@@ -476,6 +631,14 @@ export class Vpc extends Component {
        * The Amazon EC2 route table for the private subnet.
        */
       privateRouteTables: this.privateRouteTables,
+      /**
+       * The Amazon EC2 bastion instance.
+       */
+      bastionInstance: this.bastionInstance,
+      /**
+       * The AWS Cloudmap namespace.
+       */
+      cloudmapNamespace: this.cloudmapNamespace,
     };
   }
 
@@ -573,7 +736,10 @@ export class Vpc extends Component {
       const natGatewayIds = subnets.map((subnet, i) =>
         ec2
           .getNatGatewaysOutput({
-            filters: [{ name: "subnet-id", values: [subnet.id] }],
+            filters: [
+              { name: "subnet-id", values: [subnet.id] },
+              { name: "state", values: ["available"] },
+            ],
           })
           .ids.apply((ids) => ids[0]),
       );
@@ -591,6 +757,28 @@ export class Vpc extends Component {
         ),
       ),
     );
+    const bastionInstance = ec2
+      .getInstancesOutput({
+        filters: [
+          { name: "tag:sst:lookup-type", values: ["bastion"] },
+          { name: "vpc-id", values: [vpc.id] },
+        ],
+      })
+      .ids.apply((ids) =>
+        ids.length
+          ? ec2.Instance.get(`${name}BastionInstance`, ids[0])
+          : undefined,
+      );
+
+    const namespaceId = servicediscovery.getDnsNamespaceOutput({
+      name: "sst",
+      type: "DNS_PRIVATE",
+    }).id;
+    const cloudmapNamespace = servicediscovery.PrivateDnsNamespace.get(
+      `${name}CloudmapNamespace`,
+      namespaceId,
+      { vpc: vpcID },
+    );
 
     return new Vpc(name, {
       ref: true,
@@ -603,7 +791,18 @@ export class Vpc extends Component {
       publicRouteTables,
       natGateways,
       elasticIps,
+      bastionInstance,
+      cloudmapNamespace,
     } satisfies VpcRef as VpcArgs);
+  }
+
+  /** @internal */
+  public getSSTLink() {
+    return {
+      properties: {
+        bastion: this.bastionInstance.apply((v) => v?.id),
+      },
+    };
   }
 }
 

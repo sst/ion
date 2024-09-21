@@ -4,10 +4,11 @@ import { Input } from "../input";
 import { Link } from "../link";
 import { CognitoIdentityProvider } from "./cognito-identity-provider";
 import { CognitoUserPoolClient } from "./cognito-user-pool-client";
-import { Function, FunctionArgs } from "./function.js";
+import { Function, FunctionArgs, FunctionArn } from "./function.js";
 import { VisibleError } from "../error";
 import { cognito, lambda } from "@pulumi/aws";
 import { permission } from "./permission";
+import { functionBuilder } from "./helpers/function-builder";
 
 interface Triggers {
   /**
@@ -21,77 +22,77 @@ interface Triggers {
    * Triggered after the user successfully responds to the previous challenge, and a new
    * challenge needs to be created.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  createAuthChallenge?: string | FunctionArgs;
+  createAuthChallenge?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered during events like user sign-up, password recovery, email/phone number
    * verification, and when an admin creates a user. Use this trigger to customize the
    * email provider.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  customEmailSender?: string | FunctionArgs;
+  customEmailSender?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered during events like user sign-up, password recovery, email/phone number
    * verification, and when an admin creates a user. Use this trigger to customize the
    * message that is sent to your users.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  customMessage?: string | FunctionArgs;
+  customMessage?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered when an SMS message needs to be sent, such as for MFA or verification codes.
    * Use this trigger to customize the SMS provider.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  customSmsSender?: string | FunctionArgs;
+  customSmsSender?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered after each challenge response to determine the next action. Evaluates whether the
    * user has completed the authentication process or if additional challenges are needed.
    * ARN of the lambda function to name a custom challenge.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  defineAuthChallenge?: string | FunctionArgs;
+  defineAuthChallenge?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered after a successful authentication event. Use this to perform custom actions,
    * such as logging or modifying user attributes, after the user is authenticated.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  postAuthentication?: string | FunctionArgs;
+  postAuthentication?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered after a user is successfully confirmed; sign-up or email/phone number
    * verification. Use this to perform additional actions, like sending a welcome email or
    * initializing user data, after user confirmation.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  postConfirmation?: string | FunctionArgs;
+  postConfirmation?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered before the authentication process begins. Use this to implement custom
    * validation or checks (like checking if the user is banned) before continuing
    * authentication.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  preAuthentication?: string | FunctionArgs;
+  preAuthentication?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered before the user sign-up process completes. Use this to perform custom
    * validation, auto-confirm users, or auto-verify attributes based on custom logic.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  preSignUp?: string | FunctionArgs;
+  preSignUp?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered before tokens are generated in the authentication process. Use this to
    * customize or add claims to the tokens that will be generated and returned to the user.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  preTokenGeneration?: string | FunctionArgs;
+  preTokenGeneration?: string | FunctionArgs | FunctionArn;
   /**
    * The version of the preTokenGeneration trigger to use. Higher versions have access to
    * more information that support new features.
@@ -103,17 +104,17 @@ interface Triggers {
    * Use this to import and validate users from an existing user directory into the
    * Cognito User Pool during sign-in.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  userMigration?: string | FunctionArgs;
+  userMigration?: string | FunctionArgs | FunctionArn;
   /**
    * Triggered after the user responds to a custom authentication challenge. Use this to
    * verify the user's response to the challenge and determine whether to continue
    * authenticating the user.
    *
-   * Takes the handler path or the function args.
+   * Takes the handler path, the function args, or a function ARN.
    */
-  verifyAuthChallengeResponse?: string | FunctionArgs;
+  verifyAuthChallengeResponse?: string | FunctionArgs | FunctionArn;
 }
 
 export interface CognitoUserPoolArgs {
@@ -315,6 +316,33 @@ export interface CognitoUserPoolClientArgs {
   /**
    * A list of identity providers that are supported for this client.
    * @default `["COGNITO"]`
+   * @example
+   *
+   * :::tip
+   * Reference federated identity providers using their `providerName` property.
+   * :::
+   *
+   * If you are using a federated identity provider
+   *
+   * ```js title="sst.config.ts"
+   * const provider = userPool.addIdentityProvider("MyProvider", {
+   *   type: "oidc",
+   *   details: {
+   *     authorize_scopes: "email profile",
+   *     client_id: "your-client-id",
+   *     client_secret: "your-client-secret"
+   *   },
+   * });
+   * ```
+   *
+   * Make sure to pass in `provider.providerName` instead of hardcoding it to `"MyProvider"`.
+   * This ensures the client is created after the provider.
+   *
+   * ```ts
+   * userPool.addClient("Web", {
+   *   providers: [provider.providerName]
+   * });
+   * ```
    */
   providers?: Input<Input<string>[]>;
   /**
@@ -559,7 +587,7 @@ export class CognitoUserPool extends Component implements Link.Linkable {
                 function createTrigger(key: keyof Triggers) {
                   if (!triggers[key]) return;
 
-                  const fn = Function.fromDefinition(
+                  const fn = functionBuilder(
                     `${name}Trigger${key}`,
                     triggers[key]!,
                     {
