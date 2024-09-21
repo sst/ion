@@ -36,14 +36,6 @@ export interface AnalogArgs extends SsrSiteArgs {
    */
   dev?: false | DevArgs["dev"];
   /**
-   * The number of instances of the [server function](#nodes-server) to keep warm. This is useful for cases where you are experiencing long cold starts. The default is to not keep any instances warm.
-   *
-   * This works by starting a serverless cron job to make _n_ concurrent requests to the server function every few minutes. Where _n_ is the number of instances to keep warm.
-   *
-   * @default `0`
-   */
-  warm?: SsrSiteArgs["warm"];
-  /**
    * Permissions and the resources that the [server function](#nodes-server) in your Analog app needs to access. These permissions are used to create the function's IAM role.
    *
    * :::tip
@@ -401,7 +393,9 @@ export class Analog extends Component implements Link.Linkable {
     const outputPath = buildApp(parent, name, args, sitePath);
     const preset = outputPath.apply((output) => {
       const nitro = JSON.parse(
-        fs.readFileSync(path.join(output, "dist/analog/server/nitro.json")).toString(),
+        fs
+          .readFileSync(path.join(output, "dist/analog/server/nitro.json"))
+          .toString(),
       );
       if (!["aws-lambda"].includes(nitro.preset)) {
         throw new VisibleError(
@@ -453,79 +447,73 @@ export class Analog extends Component implements Link.Linkable {
     }
 
     function loadBuildMetadata() {
-      return outputPath.apply((outputPath) => {
-        const assetsPath = path.join("dist/analog", "public");
-
-        return {
-          assetsPath,
-          // create 1 behaviour for each top level asset file/folder
-          staticRoutes: fs
-            .readdirSync(path.join(outputPath, assetsPath), {
-              withFileTypes: true,
-            })
-            .map((item) => (item.isDirectory() ? `${item.name}/*` : item.name)),
-        };
-      });
+      return outputPath.apply(() => ({
+        assetsPath: path.join("dist/analog", "public"),
+      }));
     }
 
     function buildPlan() {
-      return all([outputPath, buildMeta, preset]).apply(
-        ([outputPath, buildMeta]) => {
-          const serverConfig = {
-            description: "Server handler for Solid",
-            handler: "index.handler",
-            bundle: path.join(outputPath, "dist/analog", "server")
-          };
+      return all([outputPath, buildMeta]).apply(([outputPath, buildMeta]) => {
+        const serverConfig = {
+          description: "Server handler for Analog",
+          handler: "index.handler",
+          bundle: path.join(outputPath, "dist/analog", "server"),
+        };
 
-          return validatePlan({
-            edge: false,
-            cloudFrontFunctions: {
-              serverCfFunction: {
-                injections: [useCloudFrontFunctionHostHeaderInjection()],
-              },
+        return validatePlan({
+          edge: false,
+          cloudFrontFunctions: {
+            serverCfFunction: {
+              injections: [useCloudFrontFunctionHostHeaderInjection()],
             },
-            origins: {
+          },
+          origins: {
+            server: {
               server: {
-                server: {
-                  function: serverConfig,
-                },
-              },
-              s3: {
-                s3: {
-                  copy: [
-                    {
-                      from: buildMeta.assetsPath,
-                      to: "",
-                      cached: true,
-                    },
-                  ],
-                },
+                function: serverConfig,
               },
             },
-            behaviors: [
-              {
-                cacheType: "server",
-                cfFunction: "serverCfFunction",
-                origin: "server",
+            s3: {
+              s3: {
+                copy: [
+                  {
+                    from: buildMeta.assetsPath,
+                    to: "",
+                    cached: true,
+                  },
+                ],
               },
-              {
-                pattern: "_server/",
-                cacheType: "server",
-                cfFunction: "serverCfFunction",
-                origin: "server",
+            },
+            fallthrough: {
+              group: {
+                primaryOriginName: "s3",
+                fallbackOriginName: "server",
+                fallbackStatusCodes: [403, 404],
               },
-              ...buildMeta.staticRoutes.map(
-                (route) =>
-                  ({
-                    cacheType: "static",
-                    pattern: route,
-                    origin: "s3",
-                  }) as const,
-              ),
-            ],
-          });
-        },
-      );
+            },
+          },
+          behaviors: [
+            {
+              cacheType: "server",
+              cfFunction: "serverCfFunction",
+              origin: "server",
+            },
+            {
+              pattern: "_server/",
+              cacheType: "server",
+              cfFunction: "serverCfFunction",
+              origin: "server",
+            },
+            {
+              pattern: "*",
+              cacheType: "server",
+              cfFunction: "serverCfFunction",
+              origin: "fallthrough",
+              allowedMethods: ["GET", "HEAD", "OPTIONS"],
+            },
+          ],
+        });
+      });
     }
   }
 

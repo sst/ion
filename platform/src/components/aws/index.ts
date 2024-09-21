@@ -1,4 +1,4 @@
-export * from "./analogjs.js";
+export * from "./analog.js";
 export * from "./apigatewayv1.js";
 export * from "./apigatewayv2.js";
 export * from "./apigateway-websocket.js";
