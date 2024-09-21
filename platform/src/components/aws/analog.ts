@@ -394,7 +394,7 @@ export class Analog extends Component implements Link.Linkable {
     const preset = outputPath.apply((output) => {
       const nitro = JSON.parse(
         fs
-          .readFileSync(path.join(output, "dist/analog/server/nitro.json"))
+          .readFileSync(path.join(output, "dist/analog/nitro.json"))
           .toString(),
       );
       if (!["aws-lambda"].includes(nitro.preset)) {
