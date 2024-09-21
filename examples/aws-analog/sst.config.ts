@@ -13,7 +13,6 @@ export default $config({
       dev: {
         command: "npm run start"
       },
-      
     });
   },
 });
