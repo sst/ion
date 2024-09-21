@@ -114,7 +114,7 @@ func CmdInit(cli *cli.Cli) error {
 		fmt.Println("  Analog detected. This will...")
 		fmt.Println("   - create an sst.config.ts")
 		fmt.Println("   - add sst to package.json")
-		template = "analogjs"
+		template = "analog"
 		break
 
 	case slices.ContainsFunc(hints, func(s string) bool { return strings.HasPrefix(s, "angular.json") }):

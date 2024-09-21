@@ -26,7 +26,7 @@
     {
       "type": "instructions",
       "properties": [
-        "Next steps: update vite.config.ts",
+        "Next steps: update plugins in vite.config.ts",
         "",
         "export default defineConfig({",
         "  plugins: [",
