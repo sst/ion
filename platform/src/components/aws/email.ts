@@ -108,7 +108,7 @@ export interface EmailArgs {
   dmarc?: Input<string>;
 
   /**
-   * The SNS topics to publish bounce, complaint, and delivery notifications to.
+   * The SNS topics to publish bounce, complaint, and delivery notifications to. To see how to properly proccess bounces and complaints please  read [Setting up event notifications for Amazon SES]{@link https://docs.aws.amazon.com/ses/latest/dg/monitor-sending-activity-using-notifications.html}
    *
    * @example
    *
