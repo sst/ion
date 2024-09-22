@@ -14,11 +14,16 @@ import {
   secret,
 } from "@pulumi/pulumi";
 import { buildNode } from "../../runtime/node.js";
-import { FunctionCodeUpdater } from "./providers/function-code-updater.js";
 import { bootstrap } from "./helpers/bootstrap.js";
 import { Duration, DurationMinutes, toSeconds } from "../duration.js";
 import { Size, toMBs } from "../size.js";
-import { Component, Prettify, Transform, transform } from "../component.js";
+import {
+  $print,
+  Component,
+  Prettify,
+  Transform,
+  transform,
+} from "../component.js";
 import { Link } from "../link.js";
 import { VisibleError } from "../error.js";
 import type { Input } from "../input.js";
@@ -443,12 +448,22 @@ export interface FunctionArgs {
    */
   link?: Input<any[]>;
   /**
-   * Enable streaming for the function. Stream is only supported when using the function
-   * `url` and not when using it with API Gateway.
+   * Enable streaming for the function.
    *
-   * :::tip
-   * You'll need to [wrap your handler](https://docs.aws.amazon.com/lambda/latest/dg/configuration-response-streaming.html) with `awslambda.streamifyResponse()` to enable streaming.
+   * Streaming is only supported when using the function `url` is enabled and not when using it
+   * with API Gateway.
+   *
+   * You'll also need to [wrap your handler](https://docs.aws.amazon.com/lambda/latest/dg/configuration-response-streaming.html) with `awslambda.streamifyResponse` to enable streaming.
+   *
+   * :::note
+   * Streaming is currently not supported in `sst dev`.
    * :::
+   *
+   * While `sst dev` doesn't support streaming, you can use the
+   * [`lambda-stream`](https://github.com/astuyve/lambda-stream) package to test locally.
+   *
+   * Check out the [AWS Lambda streaming example](/docs/examples/#aws-lambda-streaming) for more
+   * details.
    *
    * @default `false`
    * @example
@@ -478,53 +493,53 @@ export interface FunctionArgs {
   logging?: Input<
     | false
     | {
-        /**
-         * The duration the function logs are kept in CloudWatch.
-         *
-         * Not application when an existing log group is provided.
-         *
-         * @default `forever`
-         * @example
-         * ```js
-         * {
-         *   logging: {
-         *     retention: "1 week"
-         *   }
-         * }
-         * ```
-         */
-        retention?: Input<keyof typeof RETENTION>;
-        /**
-         * Assigns the given CloudWatch log group name to the function. This allows you to pass in a previously created log group.
-         *
-         * By default, the function creates a new log group when it's created.
-         *
-         * @default Creates a log group
-         * @example
-         * ```js
-         * {
-         *   logging: {
-         *     logGroup: "/existing/log-group"
-         *   }
-         * }
-         * ```
-         */
-        logGroup?: Input<string>;
-        /**
-         * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
-         * of the Lambda function.
-         * @default `"text"`
-         * @example
-         * ```js
-         * {
-         *   logging: {
-         *     format: "json"
-         *   }
-         * }
-         * ```
-         */
-        format?: Input<"text" | "json">;
-      }
+      /**
+       * The duration the function logs are kept in CloudWatch.
+       *
+       * Not application when an existing log group is provided.
+       *
+       * @default `forever`
+       * @example
+       * ```js
+       * {
+       *   logging: {
+       *     retention: "1 week"
+       *   }
+       * }
+       * ```
+       */
+      retention?: Input<keyof typeof RETENTION>;
+      /**
+       * Assigns the given CloudWatch log group name to the function. This allows you to pass in a previously created log group.
+       *
+       * By default, the function creates a new log group when it's created.
+       *
+       * @default Creates a log group
+       * @example
+       * ```js
+       * {
+       *   logging: {
+       *     logGroup: "/existing/log-group"
+       *   }
+       * }
+       * ```
+       */
+      logGroup?: Input<string>;
+      /**
+       * The [log format](https://docs.aws.amazon.com/lambda/latest/dg/monitoring-cloudwatchlogs-advanced.html)
+       * of the Lambda function.
+       * @default `"text"`
+       * @example
+       * ```js
+       * {
+       *   logging: {
+       *     format: "json"
+       *   }
+       * }
+       * ```
+       */
+      format?: Input<"text" | "json">;
+    }
   >;
   /**
    * The [architecture](https://docs.aws.amazon.com/lambda/latest/dg/foundation-arch.html)
@@ -586,45 +601,45 @@ export interface FunctionArgs {
   url?: Input<
     | boolean
     | {
-        /**
-         * The authorization used for the function URL. Supports [IAM authorization](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
-         * @default `"none"`
-         * @example
-         * ```js
-         * {
-         *   url: {
-         *     authorization: "iam"
-         *   }
-         * }
-         * ```
-         */
-        authorization?: Input<"none" | "iam">;
-        /**
-         * Customize the CORS (Cross-origin resource sharing) settings for the function URL.
-         * @default `true`
-         * @example
-         * Disable CORS.
-         * ```js
-         * {
-         *   url: {
-         *     cors: false
-         *   }
-         * }
-         * ```
-         * Only enable the `GET` and `POST` methods for `https://example.com`.
-         * ```js
-         * {
-         *   url: {
-         *     cors: {
-         *       allowMethods: ["GET", "POST"],
-         *       allowOrigins: ["https://example.com"]
-         *     }
-         *   }
-         * }
-         * ```
-         */
-        cors?: Input<boolean | Prettify<FunctionUrlCorsArgs>>;
-      }
+      /**
+       * The authorization used for the function URL. Supports [IAM authorization](https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html).
+       * @default `"none"`
+       * @example
+       * ```js
+       * {
+       *   url: {
+       *     authorization: "iam"
+       *   }
+       * }
+       * ```
+       */
+      authorization?: Input<"none" | "iam">;
+      /**
+       * Customize the CORS (Cross-origin resource sharing) settings for the function URL.
+       * @default `true`
+       * @example
+       * Disable CORS.
+       * ```js
+       * {
+       *   url: {
+       *     cors: false
+       *   }
+       * }
+       * ```
+       * Only enable the `GET` and `POST` methods for `https://example.com`.
+       * ```js
+       * {
+       *   url: {
+       *     cors: {
+       *       allowMethods: ["GET", "POST"],
+       *       allowOrigins: ["https://example.com"]
+       *     }
+       *   }
+       * }
+       * ```
+       */
+      cors?: Input<boolean | Prettify<FunctionUrlCorsArgs>>;
+    }
   >;
   /**
    * Configure how your function is bundled.
@@ -866,6 +881,77 @@ export interface FunctionArgs {
     }[]
   >;
   /**
+   * Configure the concurrency settings for the function.
+   *
+   * @default No concurrency settings set
+   * @example
+   * ```js
+   * {
+   *   concurrency: {
+   *     provisioned: 10,
+   *     reserved: 50
+   *   }
+   * }
+   * ```
+   */
+  concurrency?: Input<{
+    /**
+     * Provisioned concurrency ensures a specific number of Lambda instances are always
+     * ready to handle requests, reducing cold start times. Enabling this will incur
+     * extra charges.
+     *
+     * :::note
+     * Enabling provisioned concurrency will incur extra charges.
+     * :::
+     *
+     * Note that `versioning` needs to be enabled for provisioned concurrency.
+     *
+     * @default No provisioned concurrency
+     * @example
+     * ```js
+     * {
+     *   concurrency: {
+     *     provisioned: 10
+     *   }
+     * }
+     * ```
+     */
+    provisioned?: Input<number>;
+    /**
+     * Reserved concurrency limits the maximum number of concurrent executions for a
+     * function, ensuring critical functions always have capacity. It does not incur
+     * extra charges.
+     *
+     * :::note
+     * Setting this to `0` will disable the function from being triggered.
+     * :::
+     *
+     * @default No reserved concurrency
+     * @example
+     * ```js
+     * {
+     *   concurrency: {
+     *     reserved: 50
+     *   }
+     * }
+     * ```
+     */
+    reserved?: Input<number>;
+  }>;
+  /**
+   * Enable versioning for the function.
+   *
+   *
+   * @default false
+   * @example
+   * ```js
+   * {
+   *   versioning: true
+   * }
+   * ```
+   */
+  versioning?: Input<true>;
+  /**
    * A list of Lambda layer ARNs to add to the function.
    *
    * :::note
@@ -1060,12 +1146,10 @@ export class Function extends Component implements Link.Linkable {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
-    const pythonContainerMode = output(args.python).apply(
-      (python) => python?.container ?? false,
-    );
-    // Useful for future runtimes
-    const containerDeployment = pythonContainerMode;
     const dev = normalizeDev();
+    const isContainer = all([args.python, dev]).apply(
+      ([python, dev]) => !dev && (python?.container ?? false),
+    );
     const region = normalizeRegion();
     const bootstrapData = region.apply((region) => bootstrap.forRegion(region));
     const injections = normalizeInjections();
@@ -1085,21 +1169,16 @@ export class Function extends Component implements Link.Linkable {
     const { bundle, handler: handler0 } = buildHandler();
     const { handler, wrapper } = buildHandlerWrapper();
     const role = createRole();
-    const { zipPath, image } = createBuildAsset();
-
-    const bundleHash = calculateHash();
-    const file = createBucketObject();
-
+    const imageAsset = createImageAsset();
+    const zipAsset = createZipAsset();
     const logGroup = createLogGroup();
     const fn = createFunction();
-
-    const codeUpdater = updateFunctionCode();
-
     const fnUrl = createUrl();
+    createProvisioned();
 
     const links = linkData.apply((input) => input.map((item) => item.name));
 
-    this.function = codeUpdater.version.apply(() => fn);
+    this.function = fn;
     this.role = role;
     this.logGroup = logGroup;
     this.fnUrl = fnUrl;
@@ -1271,10 +1350,10 @@ export class Function extends Component implements Link.Linkable {
             : url.cors === true || url.cors === undefined
               ? defaultCors
               : {
-                  ...defaultCors,
-                  ...url.cors,
-                  maxAge: url.cors.maxAge && toSeconds(url.cors.maxAge),
-                };
+                ...defaultCors,
+                ...url.cors,
+                maxAge: url.cors.maxAge && toSeconds(url.cors.maxAge),
+              };
 
         return { authorization, cors };
       });
@@ -1329,13 +1408,6 @@ export class Function extends Component implements Link.Linkable {
         return vpc;
       });
     }
-    function calculateHash() {
-      return zipPath.apply(async (zipPath) => {
-        const hash = crypto.createHash("sha256");
-        hash.update(await fs.promises.readFile(zipPath));
-        return hash.digest("hex");
-      });
-    }
 
     function buildLinkData() {
       return output(args.link || []).apply((links) => Link.build(links));
@@ -1355,9 +1427,9 @@ export class Function extends Component implements Link.Linkable {
         }
 
         if (runtime === "python3.11") {
-          const buildResult = all([args, pythonContainerMode, linkData]).apply(
-            async ([args, pythonContainerMode, linkData]) => {
-              if (pythonContainerMode) {
+          const buildResult = all([args, isContainer, linkData]).apply(
+            async ([args, isContainer, linkData]) => {
+              if (isContainer) {
                 const result = await buildPythonContainer(name, {
                   ...args,
                   links: linkData,
@@ -1365,7 +1437,7 @@ export class Function extends Component implements Link.Linkable {
                 if (result.type === "error") {
                   throw new Error(
                     `Failed to build function "${args.handler}": ` +
-                      result.errors.join("\n").trim(),
+                    result.errors.join("\n").trim(),
                   );
                 }
                 return result;
@@ -1377,7 +1449,7 @@ export class Function extends Component implements Link.Linkable {
               if (result.type === "error") {
                 throw new Error(
                   `Failed to build function "${args.handler}": ` +
-                    result.errors.join("\n").trim(),
+                  result.errors.join("\n").trim(),
                 );
               }
               return result;
@@ -1406,7 +1478,7 @@ export class Function extends Component implements Link.Linkable {
             if (result.type === "error") {
               throw new Error(
                 `Failed to build function "${args.handler}": ` +
-                  result.errors.join("\n").trim(),
+                result.errors.join("\n").trim(),
               );
             }
             return result;
@@ -1451,12 +1523,12 @@ export class Function extends Component implements Link.Linkable {
 
           const linkInjection = hasLinkInjections
             ? linkData
-                .map((item) => [
-                  `process.env.SST_RESOURCE_${item.name} = ${JSON.stringify(
-                    JSON.stringify(item.properties),
-                  )};\n`,
-                ])
-                .join("")
+              .map((item) => [
+                `process.env.SST_RESOURCE_${item.name} = ${JSON.stringify(
+                  JSON.stringify(item.properties),
+                )};\n`,
+              ])
+              .join("")
             : "";
 
           const parsed = path.posix.parse(handler);
@@ -1486,21 +1558,21 @@ export class Function extends Component implements Link.Linkable {
               name: path.posix.join(handlerDir, `${newHandlerFileName}.mjs`),
               content: streaming
                 ? [
-                    linkInjection,
-                    `export const ${newHandlerFunction} = awslambda.streamifyResponse(async (event, responseStream, context) => {`,
-                    ...injections,
-                    `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
-                    `  return rawHandler(event, responseStream, context);`,
-                    `});`,
-                  ].join("\n")
+                  linkInjection,
+                  `export const ${newHandlerFunction} = awslambda.streamifyResponse(async (event, responseStream, context) => {`,
+                  ...injections,
+                  `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
+                  `  return rawHandler(event, responseStream, context);`,
+                  `});`,
+                ].join("\n")
                 : [
-                    linkInjection,
-                    `export const ${newHandlerFunction} = async (event, context) => {`,
-                    ...injections,
-                    `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
-                    `  return rawHandler(event, context);`,
-                    `};`,
-                  ].join("\n"),
+                  linkInjection,
+                  `export const ${newHandlerFunction} = async (event, context) => {`,
+                  ...injections,
+                  `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
+                  `  return rawHandler(event, context);`,
+                  `};`,
+                ].join("\n"),
             },
           };
         },
@@ -1525,18 +1597,18 @@ export class Function extends Component implements Link.Linkable {
               })),
               ...(dev
                 ? [
-                    {
-                      actions: ["iot:*"],
-                      resources: ["*"],
-                    },
-                    {
-                      actions: ["s3:*"],
-                      resources: [
-                        interpolate`arn:aws:s3:::${bootstrapData.asset}`,
-                        interpolate`arn:aws:s3:::${bootstrapData.asset}/*`,
-                      ],
-                    },
-                  ]
+                  {
+                    actions: ["iot:*"],
+                    resources: ["*"],
+                  },
+                  {
+                    actions: ["s3:*"],
+                    resources: [
+                      interpolate`arn:aws:s3:::${bootstrapData.asset}`,
+                      interpolate`arn:aws:s3:::${bootstrapData.asset}/*`,
+                    ],
+                  },
+                ]
                 : []),
             ],
           }),
@@ -1549,29 +1621,28 @@ export class Function extends Component implements Link.Linkable {
           {
             assumeRolePolicy: !$dev
               ? iam.assumeRolePolicyForPrincipal({
-                  Service: "lambda.amazonaws.com",
-                })
+                Service: "lambda.amazonaws.com",
+              })
               : iam.getPolicyDocumentOutput({
-                  statements: [
-                    {
-                      actions: ["sts:AssumeRole"],
-                      principals: [
-                        {
-                          type: "Service",
-                          identifiers: ["lambda.amazonaws.com"],
-                        },
-                        {
-                          type: "AWS",
-                          identifiers: [
-                            interpolate`arn:aws:iam::${
-                              getCallerIdentityOutput().accountId
+                statements: [
+                  {
+                    actions: ["sts:AssumeRole"],
+                    principals: [
+                      {
+                        type: "Service",
+                        identifiers: ["lambda.amazonaws.com"],
+                      },
+                      {
+                        type: "AWS",
+                        identifiers: [
+                          interpolate`arn:aws:iam::${getCallerIdentityOutput().accountId
                             }:root`,
-                          ],
-                        },
-                      ],
-                    },
-                  ],
-                }).json,
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              }).json,
             // if there are no statements, do not add an inline policy.
             // adding an inline policy with no statements will cause an error.
             inlinePolicies: policy.apply(({ statements }) =>
@@ -1580,13 +1651,13 @@ export class Function extends Component implements Link.Linkable {
             managedPolicyArns: logging.apply((logging) => [
               ...(logging
                 ? [
-                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-                  ]
+                  "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                ]
                 : []),
-              ...(args.vpc
+              ...(vpc
                 ? [
-                    "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
-                  ]
+                  "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+                ]
                 : []),
             ]),
           },
@@ -1595,86 +1666,78 @@ export class Function extends Component implements Link.Linkable {
       );
     }
 
-    function createBuildAsset() {
+    function createImageAsset() {
+      // The build artifact directory already exists, with all the user code and
+      // config files. It also has the dockerfile, we need to now just build and push to
+      // the container registry.
+
+      return isContainer.apply((isContainer) => {
+        if (!isContainer) return;
+
+        // TODO: walln - check service implementation for .dockerignore stuff
+
+        const authToken = ecr.getAuthorizationTokenOutput({
+          registryId: bootstrapData.assetEcrRegistryId,
+        });
+
+        // build image
+        //aws-python-container::sst:aws:Function::MyPythonFunction
+        return new Image(
+          `${name}Image`,
+          {
+            // tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
+            tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
+            // Cannot use latest tag it breaks lambda because for whatever reason
+            // .ref is actually digest + tags and is not properly qualified???
+            context: {
+              location: path.join($cli.paths.work, "artifacts", `${name}-src`),
+            },
+            // Use the pushed image as a cache source.
+            cacheFrom: [
+              {
+                registry: {
+                  ref: $interpolate`${bootstrapData.assetEcrUrl}:cache`,
+                },
+              },
+            ],
+            // TODO: walln - investigate buildx ecr caching best practices
+            // Include an inline cache with our pushed image.
+            // cacheTo: [{
+            //     registry: {
+            //       imageManifest: true,
+            //       ociMediaTypes: true,
+            //       ref: $interpolate`${bootstrapData.assetEcrUrl}:cache`,
+            //     }
+            // }],
+            cacheTo: [
+              {
+                inline: {},
+              },
+            ],
+            /// TODO: walln - enable arm64 builds by using architecture args
+            push: true,
+            registries: [
+              authToken.apply((authToken) => ({
+                address: authToken.proxyEndpoint,
+                username: authToken.userName,
+                password: secret(authToken.password),
+              })),
+            ],
+          },
+          { parent },
+        );
+      });
+    }
+
+    function createZipAsset() {
       // Note: cannot point the bundle to the `.open-next/server-function`
       //       b/c the folder contains node_modules. And pnpm node_modules
       //       contains symlinks. Pulumi cannot zip symlinks correctly.
       //       We will zip the folder ourselves.
+      return all([bundle, wrapper, copyFiles, isContainer]).apply(
+        async ([bundle, wrapper, copyFiles, isContainer]) => {
+          if (isContainer) return;
 
-      // If deploying to a container we need to first build the image. The zip
-      // is always needed so the FunctionCodeUpdater can track the contents of the
-      // image. This is convoluted, but I did not want to change too much of the function
-      // internals.
-      return all([bundle, wrapper, copyFiles, containerDeployment, dev]).apply(
-        async ([bundle, wrapper, copyFiles, containerDeployment, dev]) => {
-          function createImage() {
-            if (!containerDeployment) return undefined;
-            if (dev) return undefined;
-            // The build artifact directory already exists, with all the user code and
-            // config files. It also has the dockerfile, we need to now just build and push to
-            // the container registry.
-
-            // TODO: walln - check service implementation for .dockerignore stuff
-
-            const authToken = ecr.getAuthorizationTokenOutput({
-              registryId: bootstrapData.assetEcrRegistryId,
-            });
-
-            // build image
-            //aws-python-container::sst:aws:Function::MyPythonFunction
-            return new Image(
-              `${name}Image`,
-              {
-                // tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
-                tags: [$interpolate`${bootstrapData.assetEcrUrl}:latest`],
-                // Cannot use latest tag it breaks lambda because for whatever reason
-                // .ref is actually digest + tags and is not properly qualified???
-                context: {
-                  location: path.join(
-                    $cli.paths.work,
-                    "artifacts",
-                    `${name}-src`,
-                  ),
-                },
-                // Use the pushed image as a cache source.
-                cacheFrom: [
-                  {
-                    registry: {
-                      ref: $interpolate`${bootstrapData.assetEcrUrl}:cache`,
-                    },
-                  },
-                ],
-                // TODO: walln - investigate buildx ecr caching best practices
-                // Include an inline cache with our pushed image.
-                // cacheTo: [{
-                //     registry: {
-                //       imageManifest: true,
-                //       ociMediaTypes: true,
-                //       ref: $interpolate`${bootstrapData.assetEcrUrl}:cache`,
-                //     }
-                // }],
-                cacheTo: [
-                  {
-                    inline: {},
-                  },
-                ],
-                /// TODO: walln - enable arm64 builds by using architecture args
-                push: true,
-                registries: [
-                  authToken.apply((authToken) => ({
-                    address: authToken.proxyEndpoint,
-                    username: authToken.userName,
-                    password: secret(authToken.password),
-                  })),
-                ],
-              },
-              { parent: parent },
-            );
-          }
-
-          const image = createImage();
-
-          // Now proceed with the zipping this is the normal path for non-container deployments
           const zipPath = path.resolve(
             $cli.paths.work,
             "artifacts",
@@ -1719,45 +1782,32 @@ export class Function extends Component implements Link.Linkable {
 
             // Add copyFiles into the zip
             copyFiles.forEach(async (entry) => {
-              // TODO
-              //if ($app. mode === "deploy")
               entry.isDir
                 ? archive.directory(entry.from, entry.to, { date: new Date(0) })
                 : archive.file(entry.from, {
-                    name: entry.to,
-                    date: new Date(0),
-                  });
-              //if (mode === "start") {
-              //  try {
-              //    const dir = path.dirname(toPath);
-              //    await fs.mkdir(dir, { recursive: true });
-              //    await fs.symlink(fromPath, toPath);
-              //  } catch (ex) {
-              //    Logger.debug("Failed to symlink", fromPath, toPath, ex);
-              //  }
-              //}
+                  name: entry.to,
+                  date: new Date(0),
+                });
             });
             await archive.finalize();
           });
 
-          return { zipPath, image };
-        },
-      );
-    }
+          // Calculate hash of the zip file
+          const hash = crypto.createHash("sha256");
+          hash.update(await fs.promises.readFile(zipPath));
+          const hashValue = hash.digest("hex");
 
-    function createBucketObject() {
-      return new s3.BucketObjectv2(
-        `${name}Code`,
-        {
-          key: interpolate`assets/${name}-code-${bundleHash}.zip`,
-          bucket: region.apply((region) =>
-            bootstrap.forRegion(region).then((d) => d.asset),
-          ),
-          source: zipPath.apply((zipPath) => new asset.FileArchive(zipPath)),
-        },
-        {
-          parent,
-          retainOnDelete: true,
+          return new s3.BucketObjectv2(
+            `${name}Code`,
+            {
+              key: interpolate`assets/${name}-code-${hashValue}.zip`,
+              bucket: region.apply((region) =>
+                bootstrap.forRegion(region).then((d) => d.asset),
+              ),
+              source: new asset.FileArchive(zipPath),
+            },
+            { parent },
+          );
         },
       );
     }
@@ -1772,9 +1822,8 @@ export class Function extends Component implements Link.Linkable {
             args.transform?.logGroup,
             `${name}LogGroup`,
             {
-              name: interpolate`/aws/lambda/${
-                args.name ?? physicalName(64, `${name}Function`)
-              }`,
+              name: interpolate`/aws/lambda/${args.name ?? physicalName(64, `${name}Function`)
+                }`,
               retentionInDays: RETENTION[logging.retention],
             },
             { parent },
@@ -1787,40 +1836,19 @@ export class Function extends Component implements Link.Linkable {
       return all([
         logging,
         logGroup,
-        runtime,
-        pythonContainerMode,
-        image,
+        isContainer,
+        imageAsset,
+        zipAsset,
         dev,
-        containerDeployment,
       ]).apply(
-        ([
-          logging,
-          logGroup,
-          runtime,
-          pythonContainerMode,
-          image,
-          dev,
-          containerDeployment,
-        ]) => {
+        ([logging, logGroup, isContainer, imageAsset, zipAsset, dev]) => {
           const transformed = transform(
             args.transform?.function,
             `${name}Function`,
             {
               name: args.name,
-              description: all([args.description, dev]).apply(
-                ([description, dev]) =>
-                  dev
-                    ? description
-                      ? `${description.substring(0, 240)} (live)`
-                      : "live"
-                    : `${description ?? ""}`,
-              ),
-              code: new asset.FileArchive(
-                path.join($cli.paths.platform, "functions", "empty-function"),
-              ),
-              handler: unsecret(handler),
+              description: args.description ?? "",
               role: args.role ?? role!.arn,
-              runtime,
               timeout: timeout.apply((timeout) => toSeconds(timeout)),
               memorySize: memory.apply((memory) => toMBs(memory)),
               environment: {
@@ -1831,49 +1859,48 @@ export class Function extends Component implements Link.Linkable {
                 logFormat: logging.format === "json" ? "JSON" : "Text",
                 logGroup: logging.logGroup ?? logGroup!.name,
               },
-              vpcConfig: args.vpc && {
-                securityGroupIds: output(args.vpc).securityGroups,
-                subnetIds: output(args.vpc).privateSubnets,
+              vpcConfig: vpc && {
+                securityGroupIds: vpc.securityGroups,
+                subnetIds: vpc.privateSubnets,
               },
               layers: args.layers,
               tags: args.tags,
+              publish: output(args.versioning).apply((v) => v ?? false),
+              ...(isContainer
+                ? {
+                  packageType: "Image",
+                  imageUri: imageAsset!.ref.apply(
+                    (ref) => ref?.replace(":latest", ""),
+                  ),
+                  imageConfig: {
+                    commands: [handler],
+                  },
+                }
+                : {
+                  packageType: "Zip",
+                  s3Bucket: zipAsset!.bucket,
+                  s3Key: zipAsset!.key,
+                  handler: unsecret(handler),
+                  runtime,
+                }),
             },
             { parent },
           );
-          if (containerDeployment && !dev) {
-            return new lambda.Function(
-              transformed[0],
-              {
-                ...transformed[1],
-                // if the runtime is python3.11 and we are in container mode, deploy image
-                packageType: "Image",
-                imageUri: image?.ref.apply(
-                  (ref) => ref?.replace(":latest", ""),
-                ),
-                code: undefined,
-                runtime: undefined,
-                handler: undefined,
-                imageConfig: {
-                  commands: [handler],
-                },
-                architectures: all([transformed[1].architectures]).apply(
-                  ([architectures]) => (dev ? ["x86_64"] : architectures!),
-                ),
-              },
-              transformed[2],
-            );
-          }
           return new lambda.Function(
             transformed[0],
             {
               ...transformed[1],
-              packageType: "Zip",
-              runtime: all([transformed[1].runtime]).apply(([runtime]) =>
-                dev ? "provided.al2023" : runtime!,
-              ),
-              architectures: all([transformed[1].architectures]).apply(
-                ([architectures]) => (dev ? ["x86_64"] : architectures!),
-              ),
+              ...(dev
+                ? {
+                  description: transformed[1].description
+                    ? output(transformed[1].description).apply(
+                      (v) => `${v.substring(0, 240)} (live)`,
+                    )
+                    : "live",
+                  runtime: "provided.al2023",
+                  architectures: ["x86_64"],
+                }
+                : {}),
             },
             transformed[2],
           );
@@ -1900,21 +1927,28 @@ export class Function extends Component implements Link.Linkable {
       });
     }
 
-    function updateFunctionCode() {
-      return all([image]).apply(([image]) => {
-        return new FunctionCodeUpdater(
-          `${name}CodeUpdater`,
-          {
-            functionName: fn.name,
-            s3Bucket: file.bucket,
-            s3Key: file.key,
-            functionLastModified: fn.lastModified,
-            region,
-            imageUri: image?.ref.apply((ref) => ref?.replace(":latest", "")),
-          },
-          { parent },
-        );
-      });
+    function createProvisioned() {
+      return all([args.concurrency, fn.publish]).apply(
+        ([concurrency, publish]) => {
+          if (!concurrency?.provisioned || concurrency.provisioned === 0)
+            return;
+
+          if (publish !== true)
+            throw new VisibleError(
+              `Provisioned concurrency requires function versioning. Set "versioning: true" to enable function versioning.`,
+            );
+
+          return new lambda.ProvisionedConcurrencyConfig(
+            `${name}Provisioned`,
+            {
+              functionName: fn.name,
+              qualifier: fn.version,
+              provisionedConcurrentExecutions: concurrency.provisioned,
+            },
+            { parent },
+          );
+        },
+      );
     }
   }
 

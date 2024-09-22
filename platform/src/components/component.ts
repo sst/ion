@@ -5,6 +5,7 @@ import {
   runtime,
   output,
   asset as pulumiAsset,
+  Input,
 } from "@pulumi/pulumi";
 import { physicalName } from "./naming.js";
 import { VisibleError } from "./error.js";
@@ -48,7 +49,8 @@ export class Component extends ComponentResource {
     opts?: ComponentResourceOptions,
     _versionInfo: {
       _version: number;
-      _breakingChange?: string;
+      _message?: string;
+      _forceUpgrade?: `v${number}`;
     } = { _version: 1 },
   ) {
     const transforms = ComponentTransforms.get(type) ?? [];
@@ -135,6 +137,7 @@ export class Component extends ComponentResource {
               "aws:lambda/functionUrl:FunctionUrl",
               "aws:lambda/invocation:Invocation",
               "aws:lambda/permission:Permission",
+              "aws:lambda/provisionedConcurrencyConfig:ProvisionedConcurrencyConfig",
               "aws:lb/listener:Listener",
               "aws:route53/record:Record",
               "aws:s3/bucketCorsConfigurationV2:BucketCorsConfigurationV2",
@@ -337,27 +340,39 @@ export class Component extends ComponentResource {
     const newVersion = _versionInfo._version;
     if (oldVersion) {
       const className = type.replaceAll(":", ".");
-      if (oldVersion < newVersion) {
+      // Invalid forceUpgrade value
+      if (
+        _versionInfo._forceUpgrade &&
+        _versionInfo._forceUpgrade !== `v${newVersion}`
+      ) {
+        throw new VisibleError(
+          [
+            `The value of "forceUpgrade" does not match the version of "${className}" component.`,
+            `Set "forceUpgrade" to "v${newVersion}" to upgrade to the new version.`,
+          ].join("\n"),
+        );
+      }
+      // Version upgraded without forceUpgrade
+      if (oldVersion < newVersion && !_versionInfo._forceUpgrade) {
         throw new VisibleError(
           [
             `There is a new version of "${className}" that has breaking changes.`,
-            ...(_versionInfo._breakingChange
-              ? [_versionInfo._breakingChange]
-              : []),
-            `To continue using the previous version, rename "${className}" to "${className}.v${oldVersion}".`,
-            `Or recreate this component to update - https://ion.sst.dev/docs/components/#versioning`,
-          ].join(" "),
+            ...(_versionInfo._message ? [_versionInfo._message] : []),
+          ].join("\n"),
         );
       }
+      // Version downgraded
       if (oldVersion > newVersion) {
         throw new VisibleError(
           [
             `It seems you are trying to use an older version of "${className}".`,
             `You need to recreate this component to rollback - https://ion.sst.dev/docs/components/#versioning`,
-          ].join(" "),
+          ].join("\n"),
         );
       }
     }
+
+    // Set version
     if (newVersion > 1) {
       new Version(name, newVersion, { parent: this });
     }
@@ -408,6 +423,10 @@ export function $lazy<T>(fn: () => T) {
   return output(undefined)
     .apply(async () => output(fn()))
     .apply((x) => x);
+}
+
+export function $print(...msg: Input<string>[]) {
+  return output(msg).apply((msg) => console.log(...msg));
 }
 
 export class Version extends ComponentResource {

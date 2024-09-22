@@ -119,18 +119,7 @@ export interface ClusterArgs {
    * The VPC to use for the cluster.
    *
    * @example
-   * ```js
-   * {
-   *   vpc: {
-   *     id: "vpc-0d19d2b8ca2b268a1",
-   *     publicSubnets: ["subnet-0b6a2b73896dc8c4c", "subnet-021389ebee680c2f0"],
-   *     privateSubnets: ["subnet-0db7376a7ad4db5fd ", "subnet-06fc7ee8319b2c0ce"],
-   *     securityGroups: ["sg-0399348378a4c256c"],
-   *   }
-   * }
-   * ```
-   *
-   * Or create a `Vpc` component.
+   * Create a `Vpc` component.
    *
    * ```js title="sst.config.ts"
    * const myVpc = new sst.aws.Vpc("MyVpc");
@@ -141,6 +130,22 @@ export interface ClusterArgs {
    * ```js
    * {
    *   vpc: myVpc
+   * }
+   * ```
+   *
+   * By default, both the load balancer and the services are deployed in public subnets.
+   * The above is equivalent to:
+   *
+   * ```js
+   * {
+   *   vpc: {
+   *     id: myVpc.id,
+   *     loadBalancerSubnets: myVpc.publicSubnets,
+   *     serviceSubnets: myVpc.publicSubnets,
+   *     securityGroups: myVpc.securityGroups,
+   *     cloudmapNamespaceId: myVpc.nodes.cloudmapNamespace.id,
+   *     cloudmapNamespaceName: myVpc.nodes.cloudmapNamespace.name,
+   *   }
    * }
    * ```
    */
@@ -172,6 +177,60 @@ export interface ClusterArgs {
          */
         cloudmapNamespaceName: Input<string>;
       }>;
+  /**
+   * Force upgrade from `Cluster.v1` to the latest `Cluster` version. The only valid value
+   * is `v2`, which is the version of the new `Cluster`.
+   *
+   * In `Cluster.v1`, load balancers are deployed in public subnets, and services are
+   * deployed in private subnets. The VPC is required to have NAT gateways.
+   *
+   * In the latest `Cluster`, both the load balancer and the services are deployed in
+   * public subnets. The VPC is not required to have NAT gateways. So the new default makes
+   * this cheaper to run.
+   *
+   * To upgrade, add the prop.
+   *
+   * ```ts
+   * {
+   *   forceUpgrade: "v2"
+   * }
+   * ```
+   *
+   * Run `sst deploy`.
+   *
+   * :::tip
+   * You can remove this prop after you upgrade.
+   * :::
+   *
+   * This upgrades your component and the resources it created. You can now optionally
+   * remove the prop.
+   *
+   * After the upgrade, new services will be deployed in public subnets.
+   *
+   * :::caution
+   * New service will be deployed in public subnets.
+   * :::
+   *
+   * To continue deploying in private subnets, set `vpc.serviceSubnets` to a list of
+   * private subnets.
+   *
+   * ```js title="sst.config.ts" {4,8}
+   * const myVpc = new sst.aws.Vpc("MyVpc", { nat: "managed" });
+   *
+   * const cluster = new sst.aws.Cluster("MyCluster", {
+   *   forceUpgrade: "v2",
+   *   vpc: {
+   *     id: myVpc.id,
+   *     loadBalancerSubnets: myVpc.publicSubnets,
+   *     serviceSubnets: myVpc.privateSubnets,
+   *     securityGroups: myVpc.securityGroups,
+   *     cloudmapNamespaceId: myVpc.nodes.cloudmapNamespace.id,
+   *     cloudmapNamespaceName: myVpc.nodes.cloudmapNamespace.name,
+   *   }
+   * });
+   * ```
+   */
+  forceUpgrade?: "v2";
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -224,13 +283,16 @@ export interface ClusterServiceArgs {
     directory?: Input<string>;
   };
   /**
-   * Configure the docker build command for building the image.
+   * Configure the docker build command for building the image or specify a pre-built image.
+   *
+   * @default Build a docker image from the Dockerfile in the root directory.
+   * @example
+   *
+   * Building a docker image.
    *
    * Prior to building the image, SST will automatically add the `.sst` directory
    * to the `.dockerignore` if not already present.
    *
-   * @default `{}`
-   * @example
    * ```js
    * {
    *   image: {
@@ -242,48 +304,59 @@ export interface ClusterServiceArgs {
    *   }
    * }
    * ```
+   *
+   * Alternatively, you can pass in a pre-built image.
+   *
+   * ```js
+   * {
+   *   image: "nginxdemos/hello:plain-text"
+   * }
+   * ```
    */
-  image?: Input<{
-    /**
-     * The path to the [Docker build context](https://docs.docker.com/build/building/context/#local-context). The path is relative to your project's `sst.config.ts`.
-     * @default `"."`
-     * @example
-     *
-     * To change where the docker build context is located.
-     *
-     * ```js
-     * {
-     *   context: "./app"
-     * }
-     * ```
-     */
-    context?: Input<string>;
-    /**
-     * The path to the [Dockerfile](https://docs.docker.com/reference/cli/docker/image/build/#file).
-     * The path is relative to the build `context`.
-     * @default `"Dockerfile"`
-     * @example
-     * To use a different Dockerfile.
-     * ```js
-     * {
-     *   dockerfile: "Dockerfile.prod"
-     * }
-     * ```
-     */
-    dockerfile?: Input<string>;
-    /**
-     * Key-value pairs of [build args](https://docs.docker.com/build/guide/build-args/) to pass to the docker build command.
-     * @example
-     * ```js
-     * {
-     *   args: {
-     *     MY_VAR: "value"
-     *   }
-     * }
-     * ```
-     */
-    args?: Input<Record<string, Input<string>>>;
-  }>;
+  image?: Input<
+    | string
+    | {
+        /**
+         * The path to the [Docker build context](https://docs.docker.com/build/building/context/#local-context). The path is relative to your project's `sst.config.ts`.
+         * @default `"."`
+         * @example
+         *
+         * To change where the docker build context is located.
+         *
+         * ```js
+         * {
+         *   context: "./app"
+         * }
+         * ```
+         */
+        context?: Input<string>;
+        /**
+         * The path to the [Dockerfile](https://docs.docker.com/reference/cli/docker/image/build/#file).
+         * The path is relative to the build `context`.
+         * @default `"Dockerfile"`
+         * @example
+         * To use a different Dockerfile.
+         * ```js
+         * {
+         *   dockerfile: "Dockerfile.prod"
+         * }
+         * ```
+         */
+        dockerfile?: Input<string>;
+        /**
+         * Key-value pairs of [build args](https://docs.docker.com/build/guide/build-args/) to pass to the docker build command.
+         * @example
+         * ```js
+         * {
+         *   args: {
+         *     MY_VAR: "value"
+         *   }
+         * }
+         * ```
+         */
+        args?: Input<Record<string, Input<string>>>;
+      }
+  >;
   /**
    * Configure a public endpoint for the service. When configured, a load balancer
    * will be created to route traffic to the containers. By default, the endpoint is an
@@ -856,11 +929,22 @@ export class Cluster extends Component {
     opts?: ComponentResourceOptions,
   ) {
     const _version = 2;
-    const _breakingChange = [
-      `The new version of "sst.aws.Cluster" deploys services in the public subnets by default, and does not require VPC to have NAT gateways.`,
-      `Where previously in "sst.aws.Cluster.v1" it would deploy the services in the private subnets.`,
-    ].join(" ");
-    super(__pulumiType, name, args, opts, { _version, _breakingChange });
+    super(__pulumiType, name, args, opts, {
+      _version,
+      _message: [
+        ``,
+        `What changed:`,
+        `  - In the old version, load balancers were deployed in public subnets, and services were deployed in private subnets. The VPC was required to have NAT gateways.`,
+        `  - In the latest version, both the load balancer and the services are deployed in public subnets. The VPC is not required to have NAT gateways. So the new default makes this cheaper to run.`,
+        ``,
+        `To upgrade:`,
+        `  - Set \`forceUpgrade: "v${_version}"\` on the "Cluster" component. Learn more https://sst.dev/docs/component/aws/cluster#forceupgrade`,
+        ``,
+        `To continue using v${$cli.state.version[name]}:`,
+        `  - Rename "Cluster" to "Cluster.v${$cli.state.version[name]}". Learn more about versioning - https://ion.sst.dev/docs/components/#versioning`,
+      ].join("\n"),
+      _forceUpgrade: args.forceUpgrade,
+    });
 
     const parent = this;
 

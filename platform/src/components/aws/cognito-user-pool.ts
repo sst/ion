@@ -316,6 +316,33 @@ export interface CognitoUserPoolClientArgs {
   /**
    * A list of identity providers that are supported for this client.
    * @default `["COGNITO"]`
+   * @example
+   *
+   * :::tip
+   * Reference federated identity providers using their `providerName` property.
+   * :::
+   *
+   * If you are using a federated identity provider
+   *
+   * ```js title="sst.config.ts"
+   * const provider = userPool.addIdentityProvider("MyProvider", {
+   *   type: "oidc",
+   *   details: {
+   *     authorize_scopes: "email profile",
+   *     client_id: "your-client-id",
+   *     client_secret: "your-client-secret"
+   *   },
+   * });
+   * ```
+   *
+   * Make sure to pass in `provider.providerName` instead of hardcoding it to `"MyProvider"`.
+   * This ensures the client is created after the provider.
+   *
+   * ```ts
+   * userPool.addClient("Web", {
+   *   providers: [provider.providerName]
+   * });
+   * ```
    */
   providers?: Input<Input<string>[]>;
   /**
@@ -528,17 +555,17 @@ export class CognitoUserPool extends Component implements Link.Linkable {
                     triggers.customEmailSender === undefined
                       ? undefined
                       : {
-                        lambdaArn: createTrigger("customEmailSender")!,
-                        lambdaVersion: "V1_0",
-                      },
+                          lambdaArn: createTrigger("customEmailSender")!,
+                          lambdaVersion: "V1_0",
+                        },
                   customMessage: createTrigger("customMessage"),
                   customSmsSender:
                     triggers.customSmsSender === undefined
                       ? undefined
                       : {
-                        lambdaArn: createTrigger("customSmsSender")!,
-                        lambdaVersion: "V1_0",
-                      },
+                          lambdaArn: createTrigger("customSmsSender")!,
+                          lambdaVersion: "V1_0",
+                        },
                   defineAuthChallenge: createTrigger("defineAuthChallenge"),
                   postAuthentication: createTrigger("postAuthentication"),
                   postConfirmation: createTrigger("postConfirmation"),
@@ -548,9 +575,9 @@ export class CognitoUserPool extends Component implements Link.Linkable {
                     triggers.preTokenGeneration === undefined
                       ? undefined
                       : {
-                        lambdaArn: createTrigger("preTokenGeneration")!,
-                        lambdaVersion: triggers.preTokenGenerationVersion,
-                      },
+                          lambdaArn: createTrigger("preTokenGeneration")!,
+                          lambdaVersion: triggers.preTokenGenerationVersion,
+                        },
                   userMigration: createTrigger("userMigration"),
                   verifyAuthChallengeResponse: createTrigger(
                     "verifyAuthChallengeResponse",

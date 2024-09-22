@@ -656,11 +656,11 @@ function renderType(
     //   "type": "literal",
     //   "value": "arm64"
     // }
-    const santized =
+    const sanitized =
       typeof type.value === "string"
         ? type.value!.replace(/([*:])/g, "\\$1")
         : type.value;
-    return `<code class="symbol">&ldquo;</code><code class="primitive">${santized}</code><code class="symbol">&rdquo;</code>`;
+    return `<code class="symbol">&ldquo;</code><code class="primitive">${sanitized}</code><code class="symbol">&rdquo;</code>`;
   }
   function renderTemplateLiteralType(type: TypeDoc.TemplateLiteralType) {
     // ie. memory: `${number} MB`
@@ -1948,6 +1948,7 @@ async function buildComponents() {
       "../platform/src/global-config.d.ts",
       "../platform/src/components/linkable.ts",
       "../platform/src/components/secret.ts",
+      "../platform/src/components/aws/analog.ts",
       "../platform/src/components/aws/apigateway-websocket.ts",
       "../platform/src/components/aws/apigateway-websocket-route.ts",
       "../platform/src/components/aws/apigatewayv1.ts",

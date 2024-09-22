@@ -445,19 +445,9 @@ export class SolidStart extends Component implements Link.Linkable {
     }
 
     function loadBuildMetadata() {
-      return outputPath.apply((outputPath) => {
-        const assetsPath = path.join(".output", "public");
-
-        return {
-          assetsPath,
-          // create 1 behaviour for each top level asset file/folder
-          staticRoutes: fs
-            .readdirSync(path.join(outputPath, assetsPath), {
-              withFileTypes: true,
-            })
-            .map((item) => (item.isDirectory() ? `${item.name}/*` : item.name)),
-        };
-      });
+      return outputPath.apply(() => ({
+        assetsPath: path.join(".output", "public"),
+      }));
     }
 
     function buildPlan() {
@@ -494,6 +484,13 @@ export class SolidStart extends Component implements Link.Linkable {
                   ],
                 },
               },
+              fallthrough: {
+                group: {
+                  primaryOriginName: "s3",
+                  fallbackOriginName: "server",
+                  fallbackStatusCodes: [403, 404],
+                },
+              },
             },
             behaviors: [
               {
@@ -507,14 +504,13 @@ export class SolidStart extends Component implements Link.Linkable {
                 cfFunction: "serverCfFunction",
                 origin: "server",
               },
-              ...buildMeta.staticRoutes.map(
-                (route) =>
-                  ({
-                    cacheType: "static",
-                    pattern: route,
-                    origin: "s3",
-                  }) as const,
-              ),
+              {
+                pattern: "*",
+                cacheType: "server",
+                cfFunction: "serverCfFunction",
+                origin: "fallthrough",
+                allowedMethods: ["GET", "HEAD", "OPTIONS"],
+              },
             ],
           });
         },

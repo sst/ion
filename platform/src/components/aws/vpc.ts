@@ -181,7 +181,10 @@ export class Vpc extends Component implements Link.Linkable {
 
   constructor(name: string, args?: VpcArgs, opts?: ComponentResourceOptions) {
     const _version = 2;
-    super(__pulumiType, name, args, opts, { _version });
+    super(__pulumiType, name, args, opts, {
+      _version,
+      _message: `To continue using the previous version, rename "Vpc" to "Vpc.v${$cli.state.version[name]}". Or recreate this component to update - https://sst.dev/docs/component/aws/cluster#forceupgrade`,
+    });
 
     if (args && "ref" in args) {
       const ref = args as VpcRef;
@@ -225,9 +228,12 @@ export class Vpc extends Component implements Link.Linkable {
     this.cloudmapNamespace = cloudmapNamespace;
 
     function normalizeAz() {
-      const zones = getAvailabilityZonesOutput({
-        state: "available",
-      });
+      const zones = getAvailabilityZonesOutput(
+        {
+          state: "available",
+        },
+        { parent },
+      );
       return all([zones, args?.az ?? 2]).apply(([zones, az]) =>
         Array(az)
           .fill(0)
@@ -498,23 +504,29 @@ export class Vpc extends Component implements Link.Linkable {
         { role: role.name },
         { parent },
       );
+      const amiIds = ec2.getAmiIdsOutput(
+        {
+          owners: ["amazon"],
+          filters: [
+            {
+              name: "name",
+              // The AMI has the SSM agent pre-installed
+              values: ["al2023-ami-2023.5.20240916.0-kernel-6.1-x86_64"],
+            },
+          ],
+        },
+        { parent },
+      ).ids;
       return new ec2.Instance(
         ...transform(
           args?.transform?.bastionInstance,
           `${name}BastionInstance`,
           {
             instanceType: "t2.micro",
-            ami: "ami-0427090fd1714168b",
+            ami: amiIds.apply((ids) => ids[0]),
             subnetId: publicSubnets.apply((v) => v[0].id),
             vpcSecurityGroupIds: [sg.id],
             iamInstanceProfile: instanceProfile.name,
-            userData: [
-              `#!/bin/bash`,
-              `set -ex`,
-              `sudo yum install -y amazon-ssm-agent`,
-              `sudo systemctl enable amazon-ssm-agent`,
-              `sudo systemctl start amazon-ssm-agent`,
-            ].join("\n"),
             tags: {
               "sst:lookup-type": "bastion",
             },
@@ -764,7 +776,8 @@ export class Vpc extends Component implements Link.Linkable {
     }).id;
     const cloudmapNamespace = servicediscovery.PrivateDnsNamespace.get(
       `${name}CloudmapNamespace`,
-      interpolate`${namespaceId}:${vpcID}`,
+      namespaceId,
+      { vpc: vpcID },
     );
 
     return new Vpc(name, {
