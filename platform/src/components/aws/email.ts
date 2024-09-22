@@ -9,6 +9,7 @@ import { Component, Transform, transform } from "../component";
 import { Link } from "../link";
 import { Input } from "../input";
 import { Dns } from "../dns";
+import { SnsTopic } from "./sns-topic";
 import { dns as awsDns } from "./dns.js";
 import { ses, sesv2 } from "@pulumi/aws";
 import { permission } from "./permission";
@@ -105,6 +106,27 @@ export interface EmailArgs {
    * ```
    */
   dmarc?: Input<string>;
+
+  /**
+   * The SNS topics to publish bounce, complaint, and delivery notifications to.
+   *
+   * @example
+   *
+   * ```js
+   * {
+   *   publishers: {
+   *     Bounce: topic,
+   *     Complaint: topic,
+   *     Delivery: topic,
+   *   }
+   * }
+   * ```
+   */
+
+  publishers?: Partial<
+    Record<"Bounce" | "Complaint" | "Delivery", Input<SnsTopic>>
+  >;
+
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -227,6 +249,8 @@ export class Email extends Component implements Link.Linkable {
       waitForVerification();
     });
 
+    createIdentityPublishers();
+
     this._sender = output(args.sender);
     this.identity = identity;
 
@@ -299,6 +323,27 @@ export class Email extends Component implements Link.Linkable {
             value: dmarc,
           },
           { parent },
+        );
+      });
+    }
+
+    function createIdentityPublishers() {
+      all([args.publishers, identity]).apply(([topic, identity]) => {
+        if (!topic) return;
+
+        const types = Array.from(Object.keys(topic)) as Array<
+          "Bounce" | "Complaint" | "Delivery"
+        >;
+
+        if (types.length === 0) return;
+        // i used map because i saw it above but shouldn't you use forEach?
+        types.map(
+          (event) =>
+            new ses.IdentityNotificationTopic(`${event}-Notification`, {
+              identity: identity.arn,
+              notificationType: event,
+              topicArn: topic[event]?.arn,
+            }),
         );
       });
     }
