@@ -25,15 +25,54 @@ export interface RouterUrlRouteArgs extends BaseRouteArgs {
    * ```
    */
   url: Input<string>;
+  /**
+   * Rewrite the request path.
+   *
+   * @example
+   *
+   * By default, if the route path is `/api/*` and a request comes in for `/api/users/profile`,
+   * the request path the destination sees is `/api/users/profile`.
+   *
+   * If you want to serve the route from the root, you can rewrite the request path to
+   * `/users/profile`.
+   *
+   * ```js
+   * {
+   *   routes: {
+   *     "/api/*": {
+   *       url: "https://api.example.com",
+   *       rewrite: {
+   *         regex: "^/api/(.*)$",
+   *         to: "/$1"
+   *       }
+   *     }
+   *   }
+   * }
+   * ```
+   */
+  rewrite?: Input<{
+    /**
+     * The regex to match the request path.
+     */
+    regex: Input<string>;
+    /**
+     * The replacement for the matched path.
+     */
+    to: Input<string>;
+  }>;
 }
 
 export interface RouterBucketRouteArgs extends BaseRouteArgs {
   /**
    * A bucket to route to.
    *
+   * :::note
+   * You need to let CloudFront `access` the bucket.
+   * :::
+   *
    * @example
    *
-   * For example, let's say you have a bucket.
+   * For example, let's say you have a bucket that gives CloudFront `access`.
    *
    * ```ts title="sst.config.ts" {2}
    * const myBucket = new sst.aws.Bucket("MyBucket", {
@@ -41,11 +80,7 @@ export interface RouterBucketRouteArgs extends BaseRouteArgs {
    * });
    * ```
    *
-   * :::note
-   * The `access` props lets CloudFront access this bucket.
-   * :::
-   *
-   * You can set this directly as the destination for the route.
+   * You can then this directly as the destination for the route.
    *
    * ```js
    * {
@@ -70,9 +105,6 @@ export interface RouterBucketRouteArgs extends BaseRouteArgs {
    * ```
    */
   bucket?: Input<Bucket | string>;
-}
-
-interface BaseRouteArgs {
   /**
    * Rewrite the request path.
    *
@@ -109,6 +141,9 @@ interface BaseRouteArgs {
      */
     to: Input<string>;
   }>;
+}
+
+interface BaseRouteArgs {
   /**
    * Configure CloudFront Functions to customize the behavior of HTTP requests and responses at the edge.
    */
@@ -128,7 +163,7 @@ interface BaseRouteArgs {
        * header. The given code will be injected at the end of this function.
        *
        * ```js
-       * function handler(event) {
+       * async function handler(event) {
        *   // Default behavior code
        *
        *   // User injected code
@@ -209,7 +244,7 @@ interface BaseRouteArgs {
        * the provided code.
        *
        * ```js
-       * function handler(event) {
+       * async function handler(event) {
        *   // User injected code
        *
        *   return event.response;
@@ -307,8 +342,10 @@ export interface RouterArgs {
    * A map of routes to their destinations. The _key_ is the route path and the
    * _value_ can be:
    *
-   * - A string, the destination URL.
-   * - Or an object with the above properties.
+   * - The destination URL as a string
+   * - Or, an object with
+   *   - Args for a URL route
+   *   - Args for a bucket route
    *
    * :::note
    * All routes need to start with `/`.
@@ -478,19 +515,21 @@ export interface RouterArgs {
  *
  * #### Route to a bucket
  *
- * ```ts title="sst.config.ts"
+ * ```ts title="sst.config.ts" {2}
  * const myBucket = new sst.aws.Bucket("MyBucket", {
- *   access: "cloudfront",
+ *   access: "cloudfront"
  * });
  *
  * new sst.aws.Router("MyRouter", {
  *   routes: {
- *     "/files/*": myBucket
+ *     "/files/*": {
+ *       bucket: myBucket
+ *     }
  *   }
  * });
  * ```
  *
- * Make sure to allow AWS CloudFront to access the bucket by setting the `access` prop on the bucket.
+ * Make sure to allow CloudFront access to the bucket by setting the `access` prop on the bucket.
  *
  * #### Route all API requests separately
  *
@@ -572,7 +611,7 @@ export class Router extends Component implements Link.Linkable {
           {
             runtime: "cloudfront-js-2.0",
             code: [
-              `function handler(event) {`,
+              `async function handler(event) {`,
               `  event.request.headers["x-forwarded-host"] = event.request.headers.host;`,
               `  return event.request;`,
               `}`,
@@ -605,7 +644,7 @@ export class Router extends Component implements Link.Linkable {
           runtime: "cloudfront-js-2.0",
           keyValueStoreAssociations: config?.kvStores ?? [],
           code: `
-function handler(event) {
+async function handler(event) {
   ${
     injectHostHeader
       ? `event.request.headers["x-forwarded-host"] = event.request.headers.host;`
@@ -639,7 +678,7 @@ event.request.uri = event.request.uri.replace(re, "${rewrite.to}");`
           runtime: "cloudfront-js-2.0",
           keyValueStoreAssociations: config!.kvStores ?? [],
           code: `
-function handler(event) {
+async function handler(event) {
   ${config.injection ?? ""}
   return event.response;
 }`,

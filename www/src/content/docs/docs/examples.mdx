@@ -274,6 +274,51 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-ffmpeg)
 
 
 ---
+## AWS Hono streaming
+
+An example on how to enable streaming for Lambda functions using Hono.
+
+```ts title="sst.config.ts"
+{
+  streaming: true
+}
+```
+
+While `sst dev` doesn't support streaming, we can conditionally enable it on deploy.
+
+```ts title="index.ts"
+export const handler = process.env.SST_LIVE ? handle(app) : streamHandle(app);
+```
+
+This will return the standard handler for `sst dev`.
+
+:::note
+Streaming is currently not supported in `sst dev`.
+:::
+
+To test this in your terminal, use the `curl` command with the `--no-buffer` option.
+
+```bash "--no-buffer"
+curl --no-buffer https://u3dyblk457ghskwbmzrbylpxoi0ayrbb.lambda-url.us-east-1.on.aws
+```
+
+Here we are using a Function URL directly because API Gateway doesn't support streaming.
+```ts title="sst.config.ts"
+const hono = new sst.aws.Function("Hono", {
+  url: true,
+  streaming: true,
+  timeout: "15 minutes",
+  handler: "index.handler",
+});
+return {
+  api: hono.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-hono-steam).
+
+
+---
 ## IAM permissions boundaries
 
 Use permissions boundaries to set the maximum permissions for all IAM roles that'll be
@@ -434,6 +479,77 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-kinesis
 
 
 ---
+## AWS Lambda streaming
+
+An example on how to enable streaming for Lambda functions.
+
+```ts title="sst.config.ts"
+{
+  streaming: true
+}
+```
+
+While `sst dev` doesn't support streaming, you can use the
+[`lambda-stream`](https://github.com/astuyve/lambda-stream) package to test locally.
+
+```bash
+npm install lambda-stream
+```
+
+Then, you can use the `streamifyResponse` function to wrap your handler:
+
+```ts title="index.ts"
+import { APIGatewayProxyEventV2 } from "aws-lambda";
+import { streamifyResponse, ResponseStream } from "lambda-stream";
+
+export const handler = streamifyResponse(myHandler);
+
+async function myHandler(
+  _event: APIGatewayProxyEventV2,
+  responseStream: ResponseStream
+): Promise<void> {
+  return new Promise((resolve, _reject) => {
+    responseStream.setContentType('text/plain')
+    responseStream.write('Hello')
+    setTimeout(() => {
+      responseStream.write(' World')
+      responseStream.end()
+      resolve()
+    }, 3000)
+  })
+}
+```
+
+When deployed, this will use the `awslambda.streamifyResponse`.
+
+:::note
+Streaming is currently not supported in `sst dev`.
+:::
+
+To test this in your terminal, use the `curl` command with the `--no-buffer` option.
+
+```bash "--no-buffer"
+curl --no-buffer https://u3dyblk457ghskwbmzrbylpxoi0ayrbb.lambda-url.us-east-1.on.aws
+```
+
+Here we are using a Function URL directly because API Gateway doesn't support streaming.
+```ts title="sst.config.ts"
+const fn = new sst.aws.Function("MyFunction", {
+  url: true,
+  streaming: true,
+  timeout: "15 minutes",
+  handler: "index.handler",
+});
+
+return {
+  url: fn.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-lambda-stream).
+
+
+---
 ## AWS multi-region
 
 To deploy resources to multiple AWS regions, you can create a new provider for the region
@@ -551,6 +667,51 @@ new sst.aws.Nextjs("MyWeb", {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-nextjs-basic-auth).
+
+
+---
+## AWS Next.js streaming
+
+An example of how to use streaming Next.js RSC. Uses `Suspense` to stream an async component.
+
+```tsx title="app/page.tsx"
+<Suspense fallback={<div>Loading...</div>}>
+  <Friends />
+</Suspense>
+```
+
+For this demo we also need to make sure the route is not statically built.
+
+```ts title="app/page.tsx"
+export const dynamic = "force-dynamic";
+```
+
+This is deployed with OpenNext, which needs a config to enable streaming.
+
+```ts title="open-next.config.ts" {4}
+export default {
+  default: {
+    override: {
+      wrapper: "aws-lambda-streaming"
+    }
+  }
+};
+```
+
+You should see the _friends_ section load after a 3 second delay.
+
+:::note
+Safari handles streaming differently than other browsers.
+:::
+
+Safari uses a [different heuristic](https://bugs.webkit.org/show_bug.cgi?id=252413) to
+determine when to stream data. You need to render _enough_ initial HTML to trigger streaming.
+This is typically only a problem for demo apps.
+```ts title="sst.config.ts"
+new sst.aws.Nextjs("MyWeb");
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-nextjs-stream).
 
 
 ---
@@ -767,6 +928,49 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-queue).
 
 
 ---
+## AWS Remix streaming
+
+Follows the [Remix Streaming](https://remix.run/docs/en/main/guides/streaming) guide to create
+an app that streams data.
+
+Uses the `defer` utility to stream data through the `loader` function.
+
+```tsx title="app/routes/_index.tsx"
+return defer({
+  spongebob,
+  friends: friendsPromise,
+});
+```
+
+Then uses the the `Suspense` and `Await` components to render the data.
+
+```tsx title="app/routes/_index.tsx"
+<Suspense fallback={<div>Loading...</div>}>
+  <Await resolve={friends}>
+    { /* ... */ }
+  </Await>
+</Suspense>
+```
+
+You should see the _friends_ section load after a 3 second delay.
+
+:::note
+Safari handles streaming differently than other browsers.
+:::
+
+Safari uses a [different heuristic](https://bugs.webkit.org/show_bug.cgi?id=252413) to
+determine when to stream data. You need to render _enough_ initial HTML to trigger streaming.
+This is typically only a problem for demo apps.
+
+Streaming works out of the box with the `Remix` component.
+```ts title="sst.config.ts"
+new sst.aws.Remix("MyWeb");
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-remix-stream).
+
+
+---
 ## Router and bucket
 
 Creates a router that serves static files from the `public` folder of a given bucket.
@@ -781,9 +985,7 @@ new aws.s3.BucketObjectv2("MyImage", {
   bucket: bucket.name,
   key: "public/spongebob.svg",
   contentType: "image/svg+xml",
-  source: new $util.asset.FileAsset(
-    path.join($cli.paths.root, "spongebob.svg")
-  ),
+  source: $asset("spongebob.svg"),
 });
 
 const router = new sst.aws.Router("MyRouter", {
@@ -813,7 +1015,7 @@ const api = new sst.aws.Function("MyApi", {
   url: true,
 });
 const bucket = new sst.aws.Bucket("MyBucket", {
-  public: true,
+  access: "public",
 });
 const router = new sst.aws.Router("MyRouter", {
   domain: "router.ion.dev.sst.dev",
@@ -1075,7 +1277,7 @@ with the [`sst shell`](/docs/reference/cli) CLI.
 "db:generate": "sst shell drizzle-kit generate",
 "db:migrate": "sst shell drizzle-kit migrate",
 "db:push": "sst shell drizzle-kit push",
-"db:studio": "sst shel drizzle-kit studio",
+"db:studio": "sst shell drizzle-kit studio",
 ```
 
 So running `npm run db:push` will run Drizzle Kit with the right credentials.
