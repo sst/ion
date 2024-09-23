@@ -4,6 +4,7 @@ import { Input } from "../input";
 import { Dns } from "../dns";
 import { FunctionArgs } from "./function";
 import { Service } from "./service";
+import { TaskDefinition } from "./task-definition";
 import { RETENTION } from "./logging.js";
 import { cloudwatch, ec2, ecs, iam, lb } from "@pulumi/aws";
 import { ImageArgs } from "@pulumi/docker-build";
@@ -240,6 +241,267 @@ export interface ClusterArgs {
      * Transform the ECS Cluster resource.
      */
     cluster?: Transform<ecs.ClusterArgs>;
+  };
+}
+
+export interface ClusterTaskDefinitionArgs {
+  /**
+   * Configure the docker build command for building the image or specify a pre-built image.
+   *
+   * @default Build a docker image from the Dockerfile in the root directory.
+   * @example
+   *
+   * Building a docker image.
+   *
+   * Prior to building the image, SST will automatically add the `.sst` directory
+   * to the `.dockerignore` if not already present.
+   *
+   * ```js
+   * {
+   *   image: {
+   *     context: "./app",
+   *     dockerfile: "Dockerfile",
+   *     args: {
+   *       MY_VAR: "value"
+   *     }
+   *   }
+   * }
+   * ```
+   *
+   * Alternatively, you can pass in a pre-built image.
+   *
+   * ```js
+   * {
+   *   image: "nginxdemos/hello:plain-text"
+   * }
+   * ```
+   */
+  image?: Input<
+    | string
+    | {
+        /**
+         * The path to the [Docker build context](https://docs.docker.com/build/building/context/#local-context). The path is relative to your project's `sst.config.ts`.
+         * @default `"."`
+         * @example
+         *
+         * To change where the docker build context is located.
+         *
+         * ```js
+         * {
+         *   context: "./app"
+         * }
+         * ```
+         */
+        context?: Input<string>;
+        /**
+         * The path to the [Dockerfile](https://docs.docker.com/reference/cli/docker/image/build/#file).
+         * The path is relative to the build `context`.
+         * @default `"Dockerfile"`
+         * @example
+         * To use a different Dockerfile.
+         * ```js
+         * {
+         *   dockerfile: "Dockerfile.prod"
+         * }
+         * ```
+         */
+        dockerfile?: Input<string>;
+        /**
+         * Key-value pairs of [build args](https://docs.docker.com/build/guide/build-args/) to pass to the docker build command.
+         * @example
+         * ```js
+         * {
+         *   args: {
+         *     MY_VAR: "value"
+         *   }
+         * }
+         * ```
+         */
+        args?: Input<Record<string, Input<string>>>;
+      }
+  >;
+  /**
+   * The CPU architecture of the container in this service.
+   * @default `"x86_64"`
+   * @example
+   * ```js
+   * {
+   *   architecture: "arm64"
+   * }
+   * ```
+   */
+  architecture?: Input<"x86_64" | "arm64">;
+  /**
+   * The amount of CPU allocated to the container in this service.
+   *
+   * :::note
+   * [View the valid combinations](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-tasks-services.html#fargate-tasks-size) of CPU and memory.
+   * :::
+   *
+   * @default `"0.25 vCPU"`
+   * @example
+   * ```js
+   * {
+   *   cpu: "1 vCPU"
+   * }
+   *```
+   */
+  cpu?: keyof typeof supportedCpus;
+  /**
+   * The amount of memory allocated to the container in this service.
+   *
+   * :::note
+   * [View the valid combinations](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-tasks-services.html#fargate-tasks-size) of CPU and memory.
+   * :::
+   *
+   * @default `"0.5 GB"`
+   *
+   * @example
+   * ```js
+   * {
+   *   memory: "2 GB"
+   * }
+   *```
+   */
+  memory?: `${number} GB`;
+  /**
+   * The amount of ephemeral storage (in GB) allocated to a container in this service.
+   *
+   * @default `"21 GB"`
+   *
+   * @example
+   * ```js
+   * {
+   *   storage: "100 GB"
+   * }
+   * ```
+   */
+  storage?: `${number} GB`;
+  /**
+   * [Link resources](/docs/linking/) to your service. This will:
+   *
+   * 1. Grant the permissions needed to access the resources.
+   * 2. Allow you to access it in your app using the [SDK](/docs/reference/sdk/).
+   *
+   * @example
+   *
+   * Takes a list of components to link to the service.
+   *
+   * ```js
+   * {
+   *   link: [bucket, stripeKey]
+   * }
+   * ```
+   */
+  link?: FunctionArgs["link"];
+  /**
+   * Permissions and the resources that the service needs to access. These permissions are
+   * used to create the service's [task role](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html).
+   *
+   * :::tip
+   * If you `link` the service to a resource, the permissions to access it are
+   * automatically added.
+   * :::
+   *
+   * @example
+   * Allow the service to read and write to an S3 bucket called `my-bucket`.
+   *
+   * ```js
+   * {
+   *   permissions: [
+   *     {
+   *       actions: ["s3:GetObject", "s3:PutObject"],
+   *       resources: ["arn:aws:s3:::my-bucket/*"]
+   *     },
+   *   ]
+   * }
+   * ```
+   *
+   * Allow the service to perform all actions on an S3 bucket called `my-bucket`.
+   *
+   * ```js
+   * {
+   *   permissions: [
+   *     {
+   *       actions: ["s3:*"],
+   *       resources: ["arn:aws:s3:::my-bucket/*"]
+   *     },
+   *   ]
+   * }
+   * ```
+   *
+   * Granting the service permissions to access all resources.
+   *
+   * ```js
+   * {
+   *   permissions: [
+   *     {
+   *       actions: ["*"],
+   *       resources: ["*"]
+   *     },
+   *   ]
+   * }
+   * ```
+   */
+  permissions?: FunctionArgs["permissions"];
+  /**
+   * Key-value pairs of values that are set as [container environment variables](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/taskdef-envfiles.html).
+   * The keys need to:
+   * - Start with a letter
+   * - Be at least 2 characters long
+   * - Contain only letters, numbers, or underscores
+   *
+   * @example
+   *
+   * ```js
+   * {
+   *   environment: {
+   *     DEBUG: "true"
+   *   }
+   * }
+   * ```
+   */
+  environment?: FunctionArgs["environment"];
+  /**
+   * Configure the service's logs in CloudWatch.
+   * @default `{ retention: "forever" }`
+   * @example
+   * ```js
+   * {
+   *   logging: {
+   *     retention: "1 week"
+   *   }
+   * }
+   * ```
+   */
+  logging?: Input<{
+    /**
+     * The duration the logs are kept in CloudWatch.
+     * @default `"forever"`
+     */
+    retention?: Input<keyof typeof RETENTION>;
+  }>;
+  /**
+   * [Transform](/docs/components#transform) how this component creates its underlying
+   * resources.
+   */
+  transform?: {
+    /**
+     * Transform the Docker Image resource.
+     */
+    image?: Transform<ImageArgs>;
+    /**
+     * Transform the ECS Task IAM Role resource.
+     */
+    taskRole?: Transform<iam.RoleArgs>;
+    /**
+     * Transform the ECS Task Definition resource.
+     */
+    taskDefinition?: Transform<ecs.TaskDefinitionArgs>;
+    /**
+     * Transform the CloudWatch log group resource.
+     */
+    logGroup?: Transform<cloudwatch.LogGroupArgs>;
   };
 }
 
@@ -1008,6 +1270,17 @@ export class Cluster extends Component {
   public addService(name: string, args?: ClusterServiceArgs) {
     // Do not prefix the service to allow `Resource.MyService` to work.
     return new Service(name, {
+      cluster: {
+        name: this.cluster.name,
+        arn: this.cluster.arn,
+      },
+      vpc: this.args.vpc,
+      ...args,
+    });
+  }
+
+  public addTaskDefinition(name: string, args?: ClusterServiceArgs) {
+    return new TaskDefinition(name, {
       cluster: {
         name: this.cluster.name,
         arn: this.cluster.arn,
