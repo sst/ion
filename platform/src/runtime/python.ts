@@ -1,12 +1,11 @@
-import path from "path";
-import fs from "fs/promises";
+import pulumi, { Input, UnwrappedArray } from "@pulumi/pulumi";
 import { exec } from "child_process";
-import pulumi from "@pulumi/pulumi";
 import fsSync from "fs";
-import { Semaphore } from "../util/semaphore.js";
+import fs from "fs/promises";
+import path from "path";
 import { FunctionArgs } from "../components/aws/function.js";
 import { findAbove } from "../util/fs.js";
-import os from "os";
+import { Semaphore } from "../util/semaphore.js";
 
 const limiter = new Semaphore(
   parseInt(process.env.SST_BUILD_CONCURRENCY || "4"),
@@ -20,6 +19,7 @@ export async function buildPythonContainer(
       properties: any;
     }[];
   },
+  copyFiles?: UnwrappedArray<{ from: Input<string>; to?: Input<string> }>,
 ): Promise<
   | {
       type: "success";
@@ -95,6 +95,18 @@ export async function buildPythonContainer(
         ),
         path.join(out, "Dockerfile"),
       );
+    }
+
+    // add copyFiles to the output directory
+    if (copyFiles) {
+      // Copy files to the output directory and make directories if they don't exist
+      copyFiles.forEach(async (file) => {
+        const from = path.join($cli.paths.root, file.from);
+        const to = path.join(out, file.to || file.from);
+        await fs.mkdir(path.dirname(to), { recursive: true });
+        // copy file or directory
+        await fs.cp(from, to, { recursive: true });
+      });
     }
 
     return {
