@@ -1,3 +1,34 @@
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
+import archiver from "archiver";
+import type { Loader, BuildOptions } from "esbuild";
+import {
+  Output,
+  ComponentResourceOptions,
+  asset,
+  output,
+  all,
+  interpolate,
+  unsecret,
+  secret,
+} from "@pulumi/pulumi";
+import { buildNode } from "../../runtime/node.js";
+import { bootstrap } from "./helpers/bootstrap.js";
+import { Duration, DurationMinutes, toSeconds } from "../duration.js";
+import { Size, toMBs } from "../size.js";
+import {
+  $print,
+  Component,
+  Prettify,
+  Transform,
+  transform,
+} from "../component.js";
+import { Link } from "../link.js";
+import { VisibleError } from "../error.js";
+import type { Input } from "../input.js";
+import { physicalName } from "../naming.js";
+import { RETENTION } from "./logging.js";
 import {
   cloudwatch,
   ecr,
@@ -8,36 +39,11 @@ import {
   s3,
   types,
 } from "@pulumi/aws";
-import { Image } from "@pulumi/docker-build";
-import {
-  ComponentResourceOptions,
-  Output,
-  all,
-  asset,
-  interpolate,
-  output,
-  secret,
-  unsecret,
-} from "@pulumi/pulumi";
-import archiver from "archiver";
-import crypto from "crypto";
-import type { BuildOptions, Loader } from "esbuild";
-import fs from "fs";
-import path from "path";
-import { buildNode } from "../../runtime/node.js";
-import { buildPython, buildPythonContainer } from "../../runtime/python.js";
-import { Component, Prettify, Transform, transform } from "../component.js";
-import { Duration, DurationMinutes, toSeconds } from "../duration.js";
-import { VisibleError } from "../error.js";
-import type { Input } from "../input.js";
-import { Link } from "../link.js";
-import { physicalName } from "../naming.js";
-import { rpc } from "../rpc/rpc.js";
-import { Size, toMBs } from "../size.js";
-import { bootstrap } from "./helpers/bootstrap.js";
-import { RETENTION } from "./logging.js";
 import { Permission, permission } from "./permission.js";
 import { Vpc } from "./vpc.js";
+import { buildPython, buildPythonContainer } from "../../runtime/python.js";
+import { Image } from "@pulumi/docker-build";
+import { rpc } from "../rpc/rpc.js";
 
 /**
  * Helper type to define function ARN type
@@ -1428,12 +1434,12 @@ export class Function extends Component implements Link.Linkable {
             async ([args, isContainer, linkData]) => {
               if (isContainer) {
                 const result = await buildPythonContainer(
-                  name,
+                  name, 
                   {
                     ...args,
                     links: linkData,
                   },
-                  args.copyFiles,
+                  args.copyFiles
                 );
                 if (result.type === "error") {
                   throw new VisibleError(
