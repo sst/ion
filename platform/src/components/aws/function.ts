@@ -1383,8 +1383,11 @@ export class Function extends Component implements Link.Linkable {
           privateSubnets: args.vpc.privateSubnets,
           securityGroups: args.vpc.securityGroups,
         };
-        return args.vpc.nodes.natGateways.apply((natGateways) => {
-          if (natGateways.length === 0)
+        return all([
+          args.vpc.nodes.natGateways,
+          args.vpc.nodes.natInstances,
+        ]).apply(([natGateways, natInstances]) => {
+          if (natGateways.length === 0 && natInstances.length === 0)
             throw new VisibleError(
               `The VPC configured for the function does not have NAT enabled. Enable NAT by configuring "nat" on the "sst.aws.Vpc" component.`,
             );
@@ -1433,7 +1436,7 @@ export class Function extends Component implements Link.Linkable {
                   args.copyFiles,
                 );
                 if (result.type === "error") {
-                  throw new Error(
+                  throw new VisibleError(
                     `Failed to build function "${args.handler}": ` +
                       result.errors.join("\n").trim(),
                   );
@@ -1445,7 +1448,7 @@ export class Function extends Component implements Link.Linkable {
                 links: linkData,
               });
               if (result.type === "error") {
-                throw new Error(
+                throw new VisibleError(
                   `Failed to build function "${args.handler}": ` +
                     result.errors.join("\n").trim(),
                 );
@@ -1474,7 +1477,7 @@ export class Function extends Component implements Link.Linkable {
               links: linkData,
             });
             if (result.type === "error") {
-              throw new Error(
+              throw new VisibleError(
                 `Failed to build function "${args.handler}": ` +
                   result.errors.join("\n").trim(),
               );
@@ -1963,7 +1966,7 @@ export class Function extends Component implements Link.Linkable {
        */
       get role() {
         if (!self.role)
-          throw new Error(
+          throw new VisibleError(
             `"nodes.role" is not available when a pre-existing role is used.`,
           );
         return self.role;
@@ -1985,7 +1988,7 @@ export class Function extends Component implements Link.Linkable {
   public get url() {
     return this.fnUrl.apply((url) => {
       if (!url)
-        throw new Error(
+        throw new VisibleError(
           `Function URL is not enabled. Enable it with "url: true".`,
         );
       return url.functionUrl;

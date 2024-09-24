@@ -5,12 +5,9 @@ import "sst"
 export {}
 declare module "sst" {
   export interface Resource {
-    "MyBucket": {
+    "Hono": {
       "name": string
-      "type": "sst.aws.Bucket"
-    }
-    "MyWeb": {
-      "type": "sst.aws.Analog"
+      "type": "sst.aws.Function"
       "url": string
     }
   }

@@ -58,6 +58,68 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-apig-au
 
 
 ---
+## AWS Astro streaming
+
+Follows the [Astro Streaming](https://docs.astro.build/en/recipes/streaming-improve-page-performance/) guide to create an app that streams HTML.
+
+The `responseMode` in the [`astro-sst`](https://www.npmjs.com/package/astro-sst) adapter
+is set to enable streaming.
+
+
+```ts title="astro.config.mjs"
+adapter: aws({
+  responseMode: "stream"
+})
+```
+
+Now any components that return promises will be streamed.
+
+```astro title="src/components/Friends.astro"
+---
+import type { Character } from "./character";
+
+const friends: Character[] = await new Promise((resolve) => setTimeout(() => {
+  setTimeout(() => {
+    resolve(
+      [
+        { name: "Patrick Star", image: "patrick.png" },
+        { name: "Sandy Cheeks", image: "sandy.png" },
+        { name: "Squidward Tentacles", image: "squidward.png" },
+        { name: "Mr. Krabs", image: "mr-krabs.png" },
+      ]
+    );
+  }, 3000);
+}));
+---
+<div class="grid">
+  {friends.map((friend) => (
+    <div class="card">
+      <img class="img" src={friend.image} alt={friend.name} />
+      <p>{friend.name}</p>
+    </div>
+  ))}
+</div>
+```
+
+You should see the _friends_ section load after a 3 second delay.
+
+:::note
+Safari handles streaming differently than other browsers.
+:::
+
+Safari uses a [different heuristic](https://bugs.webkit.org/show_bug.cgi?id=252413) to
+determine when to stream data. You need to render _enough_ initial HTML to trigger streaming.
+This is typically only a problem for demo apps.
+
+There's nothing to configure for streaming in the `Astro` component.
+```ts title="sst.config.ts"
+new sst.aws.Astro("MyWeb");
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-astro-stream).
+
+
+---
 ## Bucket policy
 
 Create an S3 bucket and transform its bucket policy.
@@ -271,6 +333,51 @@ return {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-ffmpeg).
+
+
+---
+## AWS Hono streaming
+
+An example on how to enable streaming for Lambda functions using Hono.
+
+```ts title="sst.config.ts"
+{
+  streaming: true
+}
+```
+
+While `sst dev` doesn't support streaming, we can conditionally enable it on deploy.
+
+```ts title="index.ts"
+export const handler = process.env.SST_LIVE ? handle(app) : streamHandle(app);
+```
+
+This will return the standard handler for `sst dev`.
+
+:::note
+Streaming is currently not supported in `sst dev`.
+:::
+
+To test this in your terminal, use the `curl` command with the `--no-buffer` option.
+
+```bash "--no-buffer"
+curl --no-buffer https://u3dyblk457ghskwbmzrbylpxoi0ayrbb.lambda-url.us-east-1.on.aws
+```
+
+Here we are using a Function URL directly because API Gateway doesn't support streaming.
+```ts title="sst.config.ts"
+const hono = new sst.aws.Function("Hono", {
+  url: true,
+  streaming: true,
+  timeout: "15 minutes",
+  handler: "index.handler",
+});
+return {
+  api: hono.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-hono-steam).
 
 
 ---
