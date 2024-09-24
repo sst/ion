@@ -454,7 +454,7 @@ func Start(
 
 	s.Mux.HandleFunc(`/lambda/`, func(w http.ResponseWriter, r *http.Request) {
 		path := strings.Split(r.URL.Path, "/")
-		slog.Info("lambda request", "path", path)
+		slog.Info("lambda request", "method", r.Method, "path", path)
 		workerID := path[2]
 		requestID := util.RandomString(8)
 		writer := iot_writer.New(mqttClient, s3Client, bootstrapData.Asset, prefix+"/"+workerID+"/request/"+requestID)
@@ -464,13 +464,14 @@ func Start(
 			pending.Delete(requestID)
 		}()
 
-		writer.Write([]byte(r.Method + " /2018-06-01/" + strings.Join(path[3:], "/") + " HTTP/1.1\r\n"))
+		writer.Write([]byte(r.Method + " /" + strings.Join(path[3:], "/") + " HTTP/1.1\r\n"))
 		for name, headers := range r.Header {
 			if name == "Connection" {
 				continue
 			}
 			for _, h := range headers {
 				fmt.Fprintf(writer, "%v: %v\r\n", name, h)
+				slog.Info("lambda request", "header", name, "value", h)
 			}
 		}
 		fmt.Fprint(writer, "Connection: close\r\n")
@@ -478,11 +479,12 @@ func Start(
 		_, err := fmt.Fprint(writer, "\r\n")
 
 		requestBody := &bytes.Buffer{}
-		if r.ContentLength > 0 {
+		if r.Body != nil {
 			write := io.MultiWriter(writer, requestBody)
 			io.Copy(write, r.Body)
 		}
 		writer.Close()
+		slog.Info("body", "body", requestBody.String())
 
 		hijacker, ok := w.(http.Hijacker)
 		if !ok {

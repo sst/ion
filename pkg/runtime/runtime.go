@@ -7,8 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"sync"
 
+	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/project/path"
 )
 
@@ -24,15 +27,49 @@ type Worker interface {
 	Logs() io.ReadCloser
 }
 
+type ProcessWorker struct {
+	Out io.ReadCloser
+	Err io.ReadCloser
+	Cmd *exec.Cmd
+}
+
+func (w *ProcessWorker) Stop() {
+	// Terminate the whole process group
+	util.TerminateProcess(w.Cmd.Process.Pid)
+}
+
+func (w *ProcessWorker) Logs() io.ReadCloser {
+	reader, writer := io.Pipe()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(writer, w.Out)
+	}()
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(writer, w.Err)
+	}()
+
+	go func() {
+		wg.Wait()
+		defer writer.Close()
+	}()
+
+	return reader
+}
+
 type BuildInput struct {
-	CfgPath    string
-	Dev        bool                       `json:"dev"`
-	FunctionID string                     `json:"functionID"`
-	Handler    string                     `json:"handler"`
-	Runtime    string                     `json:"runtime"`
-	Properties json.RawMessage            `json:"properties"`
-	Links      map[string]json.RawMessage `json:"links"`
-	CopyFiles  []struct {
+	CfgPath      string
+	Dev          bool                       `json:"dev"`
+	FunctionID   string                     `json:"functionID"`
+	Architecture string                     `json:"architecture"`
+	Handler      string                     `json:"handler"`
+	Runtime      string                     `json:"runtime"`
+	Properties   json.RawMessage            `json:"properties"`
+	Links        map[string]json.RawMessage `json:"links"`
+	CopyFiles    []struct {
 		From string `json:"from"`
 		To   string `json:"to"`
 	} `json:"copyFiles"`
@@ -99,6 +136,7 @@ func (c *Collection) Build(ctx context.Context, input *BuildInput) (*BuildOutput
 	if err := os.MkdirAll(out, 0755); err != nil {
 		return nil, err
 	}
+	input.CfgPath = c.cfgPath
 	result, err := runtime.Build(ctx, input)
 	if err != nil {
 		return nil, err

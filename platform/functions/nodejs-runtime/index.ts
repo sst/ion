@@ -28,9 +28,11 @@ async function error(ex: any) {
   });
   await fetch(
     AWS_LAMBDA_RUNTIME_API +
-      (!context
-        ? `/runtime/init/error`
-        : `/runtime/invocation/${context.awsRequestId}/error`),
+      "/2018-06-01"(
+        !context
+          ? `/runtime/init/error`
+          : `/runtime/invocation/${context.awsRequestId}/error`,
+      ),
     {
       method: "POST",
       headers: {

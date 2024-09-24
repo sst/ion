@@ -19,6 +19,7 @@ import (
 	"github.com/sst/ion/pkg/js"
 	"github.com/sst/ion/pkg/project/provider"
 	"github.com/sst/ion/pkg/runtime"
+	"github.com/sst/ion/pkg/runtime/golang"
 	"github.com/sst/ion/pkg/runtime/node"
 	"github.com/sst/ion/pkg/runtime/python"
 	"github.com/sst/ion/pkg/runtime/worker"
@@ -62,6 +63,7 @@ func Discover() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	slog.Info("discovered config", "path", cfgPath)
 	return cfgPath, nil
 }
 
@@ -110,6 +112,7 @@ func New(input *ProjectConfig) (*Project, error) {
 			node.New(),
 			worker.New(),
 			python.New(),
+			golang.New(),
 		),
 	}
 	tmp := proj.PathWorkingDir()
