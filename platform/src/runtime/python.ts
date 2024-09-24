@@ -1,11 +1,11 @@
-import pulumi, { Input, UnwrappedArray } from "@pulumi/pulumi";
-import { exec } from "child_process";
-import fsSync from "fs";
-import fs from "fs/promises";
 import path from "path";
+import fs from "fs/promises";
+import { exec } from "child_process";
+import pulumi, { Input, UnwrappedArray } from "@pulumi/pulumi";
+import fsSync from "fs";
+import { Semaphore } from "../util/semaphore.js";
 import { FunctionArgs } from "../components/aws/function.js";
 import { findAbove } from "../util/fs.js";
-import { Semaphore } from "../util/semaphore.js";
 
 const limiter = new Semaphore(
   parseInt(process.env.SST_BUILD_CONCURRENCY || "4"),
