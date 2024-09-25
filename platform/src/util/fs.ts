@@ -7,7 +7,7 @@ export async function findAbove(
 ): Promise<string | undefined> {
   if (dir === "/") return undefined;
   if (await existsAsync(path.join(dir, target))) return dir;
-  return findAbove(path.resolve(path.join(dir, "..")), target);
+  return findAbove(path.join(dir, ".."), target);
 }
 
 export async function findBelow(dir: string, target: string) {
