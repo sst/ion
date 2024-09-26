@@ -34,6 +34,17 @@ export interface QueueArgs {
    */
   fifo?: Input<boolean>;
   /**
+   * Enable content-based deduplication for FIFO queues.
+   *
+   * @default `false`
+   * @example
+   * ```js
+   * {
+   *   contentBasedDeduplication: true
+   * }
+   */
+  contentBasedDeduplication?: Input<boolean>;
+  /**
    * Visibility timeout is a period of time during which a message is temporarily
    * invisible to other consumers after a consumer has retrieved it from the queue.
    * This mechanism prevents other consumers from processing the same message
@@ -321,6 +332,7 @@ export class Queue extends Component implements Link.Linkable {
 
     const parent = this;
     const fifo = normalizeFifo();
+    const contentBasedDeduplication = normalizeContentBasedDeduplication();
     const dlq = normalizeDlq();
     const visibilityTimeout = normalizeVisibilityTimeout();
 
@@ -332,6 +344,10 @@ export class Queue extends Component implements Link.Linkable {
 
     function normalizeFifo() {
       return output(args?.fifo).apply((v) => v ?? false);
+    }
+
+    function normalizeContentBasedDeduplication() {
+      return output(args?.contentBasedDeduplication).apply((v) => v ?? false);
     }
 
     function normalizeDlq() {
@@ -353,6 +369,7 @@ export class Queue extends Component implements Link.Linkable {
           `${name}Queue`,
           {
             fifoQueue: fifo,
+            contentBasedDeduplication,
             visibilityTimeoutSeconds: visibilityTimeout.apply((v) =>
               toSeconds(v),
             ),
