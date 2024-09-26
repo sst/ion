@@ -332,7 +332,6 @@ export class Queue extends Component implements Link.Linkable {
 
     const parent = this;
     const fifo = normalizeFifo();
-    const contentBasedDeduplication = normalizeContentBasedDeduplication();
     const dlq = normalizeDlq();
     const visibilityTimeout = normalizeVisibilityTimeout();
 
@@ -344,10 +343,6 @@ export class Queue extends Component implements Link.Linkable {
 
     function normalizeFifo() {
       return output(args?.fifo).apply((v) => v ?? false);
-    }
-
-    function normalizeContentBasedDeduplication() {
-      return output(args?.contentBasedDeduplication).apply((v) => v ?? false);
     }
 
     function normalizeDlq() {
@@ -369,7 +364,7 @@ export class Queue extends Component implements Link.Linkable {
           `${name}Queue`,
           {
             fifoQueue: fifo,
-            contentBasedDeduplication,
+            contentBasedDeduplication: args?.contentBasedDeduplication,
             visibilityTimeoutSeconds: visibilityTimeout.apply((v) =>
               toSeconds(v),
             ),
