@@ -122,11 +122,16 @@ export interface BucketArgs {
    */
   public?: Input<boolean>;
   /**
-   * Enable public read access for all the files in the bucket.
+   * Enable public read access for all the files in the bucket. By default, no access is
+   * granted.
    *
-   * Following are the possible values:
-   * - `public`: Host files directly from the bucket.
-   * - `cloudfront`: Use CloudFront to serve files from the bucket.
+   * :::tip
+   * If you are using the `Router` to serve files from this bucket, you need to allow
+   * `cloudfront` access the bucket.
+   * :::
+   *
+   * This adds a statement to the bucket policy that either allows `public` access or just
+   * `cloudfront` access.
    *
    * @example
    * ```js
@@ -279,7 +284,7 @@ interface BucketRef {
  *
  * ```ts title="sst.config.ts"
  * new sst.aws.Bucket("MyBucket", {
- *   public: true
+ *   access: "public"
  * });
  * ```
  *
@@ -601,7 +606,7 @@ export class Bucket extends Component implements Link.Linkable {
    * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: string | FunctionArgs | Input<FunctionArn>,
     args?: BucketSubscriberArgs,
   ) {
     this.ensureNotSubscribed();
@@ -664,7 +669,7 @@ export class Bucket extends Component implements Link.Linkable {
    */
   public static subscribe(
     bucketArn: Input<string>,
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: string | FunctionArgs | Input<FunctionArn>,
     args?: BucketSubscriberArgs,
   ) {
     return output(bucketArn).apply((bucketArn) => {
@@ -683,7 +688,7 @@ export class Bucket extends Component implements Link.Linkable {
     name: string,
     bucketName: Input<string>,
     bucketArn: Input<string>,
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: string | FunctionArgs | Input<FunctionArn>,
     args: BucketSubscriberArgs = {},
     opts: ComponentResourceOptions = {},
   ) {

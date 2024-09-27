@@ -1,5 +1,11 @@
 import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
-import { Component, Prettify, Transform, transform } from "../component";
+import {
+  Component,
+  outputId,
+  Prettify,
+  Transform,
+  transform,
+} from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
 import { FunctionArgs, FunctionArn } from "./function";
@@ -480,55 +486,55 @@ export interface ApiGatewayV2RouteArgs {
   auth?: Input<
     | false
     | {
-      /**
-       * Enable IAM authorization for a given API route. When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
-       */
-      iam?: Input<true>;
-      /**
-       * Enable JWT or JSON Web Token authorization for a given API route. When JWT auth is enabled, clients need to include a valid JWT in their requests.
-       *
-       * @example
-       * You can configure JWT auth.
-       *
-       * ```js
-       * {
-       *   auth: {
-       *     jwt: {
-       *       authorizer: myAuthorizer.id,
-       *       scopes: ["read:profile", "write:profile"]
-       *     }
-       *   }
-       * }
-       * ```
-       *
-       * Where `myAuthorizer` is created by calling the `addAuthorizer` method.
-       */
-      jwt?: Input<{
         /**
-         * Authorizer ID of the JWT authorizer.
+         * Enable IAM authorization for a given API route. When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
          */
-        authorizer: Input<string>;
+        iam?: Input<true>;
         /**
-         * Defines the permissions or access levels that the JWT grants. If the JWT does not have the required scope, the request is rejected. By default it does not require any scopes.
+         * Enable JWT or JSON Web Token authorization for a given API route. When JWT auth is enabled, clients need to include a valid JWT in their requests.
+         *
+         * @example
+         * You can configure JWT auth.
+         *
+         * ```js
+         * {
+         *   auth: {
+         *     jwt: {
+         *       authorizer: myAuthorizer.id,
+         *       scopes: ["read:profile", "write:profile"]
+         *     }
+         *   }
+         * }
+         * ```
+         *
+         * Where `myAuthorizer` is created by calling the `addAuthorizer` method.
          */
-        scopes?: Input<Input<string>[]>;
-      }>;
-      /**
-       * Enable custom Lambda authorization for a given API route. Pass in the authorizer ID.
-       *
-       * @example
-       * ```js
-       * {
-       *   auth: {
-       *     lambda: myAuthorizer.id
-       *   }
-       * }
-       * ```
-       *
-       * Where `myAuthorizer` is created by calling the `addAuthorizer` method.
-       */
-      lambda?: Input<string>;
-    }
+        jwt?: Input<{
+          /**
+           * Authorizer ID of the JWT authorizer.
+           */
+          authorizer: Input<string>;
+          /**
+           * Defines the permissions or access levels that the JWT grants. If the JWT does not have the required scope, the request is rejected. By default it does not require any scopes.
+           */
+          scopes?: Input<Input<string>[]>;
+        }>;
+        /**
+         * Enable custom Lambda authorization for a given API route. Pass in the authorizer ID.
+         *
+         * @example
+         * ```js
+         * {
+         *   auth: {
+         *     lambda: myAuthorizer.id
+         *   }
+         * }
+         * ```
+         *
+         * Where `myAuthorizer` is created by calling the `addAuthorizer` method.
+         */
+        lambda?: Input<string>;
+      }
   >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -713,10 +719,10 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
         return cors === true || cors === undefined
           ? defaultCors
           : {
-            ...defaultCors,
-            ...cors,
-            maxAge: cors.maxAge && toSeconds(cors.maxAge),
-          };
+              ...defaultCors,
+              ...cors,
+              maxAge: cors.maxAge && toSeconds(cors.maxAge),
+            };
       });
     }
 
@@ -890,9 +896,9 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
     //       trailing slash, the API fails with the error {"message":"Not Found"}
     return this.apigDomain && this.apiMapping
       ? all([this.apigDomain.domainName, this.apiMapping.apiMappingKey]).apply(
-        ([domain, key]) =>
-          key ? `https://${domain}/${key}/` : `https://${domain}`,
-      )
+          ([domain, key]) =>
+            key ? `https://${domain}/${key}/` : `https://${domain}`,
+        )
       : this.api.apiEndpoint;
   }
 
@@ -1019,7 +1025,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
    */
   public route(
     rawRoute: string,
-    handler: Input<string | FunctionArgs | FunctionArn>,
+    handler: string | FunctionArgs | Input<FunctionArn>,
     args: ApiGatewayV2RouteArgs = {},
   ) {
     const route = this.parseRoute(rawRoute);
@@ -1208,7 +1214,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
 
   private buildRouteId(route: string) {
     const suffix = logicalName(
-      hashStringToPrettyString([this.api.id, route].join(""), 6),
+      hashStringToPrettyString([outputId, route].join(""), 6),
     );
     return `${this.constructorName}Route${suffix}`;
   }
@@ -1218,10 +1224,21 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
    *
    * @param args Configure the authorizer.
    * @example
-   * Add a JWT authorizer.
+   * Add a Lambda authorizer.
    *
    * ```js title="sst.config.ts"
    * api.addAuthorizer({
+   *   name: "myAuthorizer",
+   *   lambda: {
+   *     function: "src/authorizer.index"
+   *   }
+   * });
+   * ```
+   *
+   * Add a JWT authorizer.
+   *
+   * ```js title="sst.config.ts"
+   * const authorizer = api.addAuthorizer({
    *   name: "myAuthorizer",
    *   jwt: {
    *     issuer: "https://issuer.com/",
@@ -1231,13 +1248,29 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
    * });
    * ```
    *
-   * Add a Lambda authorizer.
+   * Add a Cognito UserPool as a JWT authorizer.
    *
    * ```js title="sst.config.ts"
-   * api.addAuthorizer({
-   *   name: "myAuthorizer",
-   *   lambda: {
-   *     function: "src/authorizer.index"
+   * const pool = new sst.aws.CognitoUserPool("MyUserPool");
+   * const poolClient = userPool.addClient("Web");
+   *
+   * const authorizer = api.addAuthorizer({
+   *   name: "myCognitoAuthorizer",
+   *   jwt: {
+   *     issuer: $interpolate`https://cognito-idp.${aws.getRegionOutput().name}.amazonaws.com/${pool.id}`,
+   *     audiences: [poolClient.id]
+   *   }
+   * });
+   * ```
+   *
+   * Now you can use the authorizer in your routes.
+   *
+   * ```js title="sst.config.ts"
+   * api.route("GET /", "src/get.handler", {
+   *   auth: {
+   *     jwt: {
+   *       authorizer: authorizer.id
+   *     }
    *   }
    * });
    * ```

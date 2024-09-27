@@ -1,3 +1,4 @@
+export * from "./analog.js";
 export * from "./apigatewayv1.js";
 export * from "./apigatewayv2.js";
 export * from "./apigateway-websocket.js";
@@ -19,6 +20,7 @@ export * from "./nextjs.js";
 export * from "./postgres.js";
 export * from "./queue.js";
 export * from "./realtime.js";
+export * from "./redis.js";
 export * from "./remix.js";
 export * from "./router.js";
 export * from "./sns-topic.js";

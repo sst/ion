@@ -469,8 +469,8 @@ var root = &cli.Command{
 				{
 					Name: "target",
 					Description: cli.Description{
-						Short: "Comma seperated list of target URNs",
-						Long:  "Comma seperated list of target URNs.",
+						Short: "Comma separated list of target URNs",
+						Long:  "Comma separated list of target URNs.",
 					},
 				},
 			},
@@ -501,7 +501,7 @@ var root = &cli.Command{
 					"This is useful for cases when you pull some changes from a teammate and want to",
 					"see what will be deployed; before doing the actual deploy.",
 					"",
-					"Optionall, you can diff a specific set of resources by passing in a list of their URNs.",
+					"Optionally, you can diff a specific set of resources by passing in a list of their URNs.",
 					"",
 					"```bash frame=\"none\"",
 					"sst diff --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets",
@@ -522,8 +522,8 @@ var root = &cli.Command{
 				{
 					Name: "target",
 					Description: cli.Description{
-						Short: "Comma seperated list of target URNs",
-						Long:  "Comma seperated list of target URNs.",
+						Short: "Comma separated list of target URNs",
+						Long:  "Comma separated list of target URNs.",
 					},
 				},
 				{
@@ -591,6 +591,12 @@ var root = &cli.Command{
 					"```",
 					"",
 					"You'll need to run `sst install` if you update the `providers` in your config.",
+					"",
+					"By default, these packages are fetched from the NPM registry. If you want to use a different registry, you can set the `NPM_REGISTRY` environment variable.",
+					"",
+					"```bash frame=\"none\"",
+					"NPM_REGISTRY=https://my-registry.com sst add aws",
+					"```",
 				}, "\n"),
 			},
 			Args: []cli.Argument{
@@ -839,7 +845,6 @@ var root = &cli.Command{
 					"```bash frame=\"none\" frame=\"none\"",
 					"sst remove --stage production",
 					"```",
-					"```",
 					"Optionally, remove specific resources by passing in a list of their URNs.",
 					"You can get the URN of a resource from the [Console](/docs/console/#resources).",
 					"",
@@ -853,8 +858,8 @@ var root = &cli.Command{
 					Name: "target",
 					Type: "string",
 					Description: cli.Description{
-						Short: "Comma seperated list of target URNs",
-						Long:  "Comma seperated list of target URNs.",
+						Short: "Comma separated list of target URNs",
+						Long:  "Comma separated list of target URNs.",
 					},
 				},
 			},
@@ -963,6 +968,18 @@ var root = &cli.Command{
 			},
 		},
 		{
+			Name:   "common-errors",
+			Hidden: true,
+			Run: func(cli *cli.Cli) error {
+				data, err := json.MarshalIndent(project.CommonErrors, "", "  ")
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(data))
+				return nil
+			},
+		},
+		{
 			Name: "refresh",
 			Description: cli.Description{
 				Short: "Refresh the local app state",
@@ -992,8 +1009,8 @@ var root = &cli.Command{
 					Name: "target",
 					Type: "string",
 					Description: cli.Description{
-						Short: "Comma seperated list of target URNs",
-						Long:  "Comma seperated list of target URNs.",
+						Short: "Comma separated list of target URNs",
+						Long:  "Comma separated list of target URNs.",
 					},
 				},
 			},

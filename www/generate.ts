@@ -34,6 +34,12 @@ type CliCommand = {
   children: CliCommand[];
 };
 
+type CommonError = {
+  code: string;
+  message: string;
+  long: string[];
+};
+
 const cmd = process.argv[2];
 const linkHashes = new Map<
   TypeDoc.DeclarationReflection,
@@ -80,6 +86,7 @@ if (!cmd || cmd === "components") {
   }
 }
 if (!cmd || cmd === "cli") await generateCliDoc();
+if (!cmd || cmd === "common-errors") await generateCommonErrorsDoc();
 if (!cmd || cmd === "examples") await generateExamplesDocs();
 restoreCode();
 
@@ -301,6 +308,96 @@ function generateCliDoc() {
   }
 }
 
+function generateCommonErrorsDoc() {
+  const content = fs.readFileSync("common-errors-doc.json");
+  const json = JSON.parse(content.toString()) as CommonError[];
+  const outputFilePath = `src/content/docs/docs/common-errors.mdx`;
+
+  fs.writeFileSync(
+    outputFilePath,
+    [
+      renderHeader("Common Errors", "A list of CLI error messages and how to fix them."),
+      renderSourceMessage("cmd/sst/main.go"),
+      renderImports(outputFilePath),
+      renderBodyBegin(),
+      renderCommonErrorsAbout(),
+      renderCommonErrorsErrors(),
+      renderBodyEnd(),
+    ]
+      .flat()
+      .join("\n")
+  );
+
+  function renderCommonErrorsAbout() {
+    return [
+      "Below is a collection of common errors you might encounter when using SST.",
+      "",
+      ":::tip",
+      "The error messages in the CLI link to this doc.",
+      ":::",
+      "",
+      "The error messages and descriptions in this doc are auto-generated from the CLI.",
+      "",
+    ];
+  }
+
+  function renderCommonErrorsErrors() {
+    const lines: string[] = [];
+
+    for (const error of json) {
+      console.debug(` - command ${error.code}`);
+      lines.push(
+        ``,
+        `---`,
+        ``,
+        `## ${error.code}`,
+        ``,
+        `> ${error.message}`,
+        ``,
+        ...error.long,
+      );
+    }
+    return lines;
+  }
+
+  function renderCliDescription(description: CliCommand["description"]) {
+    return description.long ?? description.short;
+  }
+
+  function renderCliArgName(prop: CliCommand["args"][number]) {
+    return `${prop.name}${prop.required ? "" : "?"}`;
+  }
+
+  function renderCliCommandUsage(command: CliCommand) {
+    const parts: string[] = [];
+
+    parts.push(command.name);
+    command.args.forEach((arg) =>
+      arg.required ? parts.push(`<${arg.name}>`) : parts.push(`[${arg.name}]`)
+    );
+    return parts.join(" ");
+  }
+
+  function renderCliFlagType(type: CliCommand["flags"][number]["type"]) {
+    if (type.startsWith("[") && type.endsWith("]")) {
+      return type
+        .substring(1, type.length - 1)
+        .split(",")
+        .map((t: string) =>
+          [
+            `<code class="symbol">&ldquo;</code>`,
+            `<code class="primitive">${t}</code>`,
+            `<code class="symbol">&rdquo;</code>`,
+          ].join("")
+        )
+        .join(`<code class="symbol"> | </code>`);
+    }
+
+    if (type === "bool") return `<code class="primitive">boolean</code>`;
+    return `<code class="primitive">${type}</code>`;
+  }
+}
+
 async function generateExamplesDocs() {
   const modules = await buildExamples();
   const outputFilePath = `src/content/docs/docs/examples.mdx`;
@@ -331,7 +428,7 @@ async function generateExamplesDocs() {
 
   function renderIntro() {
     return [
-      `Below are a collection of example SST apps. These are available in the [\`examples/\`](${config.github}/tree/dev/examples) directory of the repo.`,
+      `Below is a collection of example SST apps. These are available in the [\`examples/\`](${config.github}/tree/dev/examples) directory of the repo.`,
       "",
       ":::tip",
       "This doc is best viewed through the site search or through the _AI_.",
@@ -655,11 +752,11 @@ function renderType(
     //   "type": "literal",
     //   "value": "arm64"
     // }
-    const santized =
+    const sanitized =
       typeof type.value === "string"
         ? type.value!.replace(/([*:])/g, "\\$1")
         : type.value;
-    return `<code class="symbol">&ldquo;</code><code class="primitive">${santized}</code><code class="symbol">&rdquo;</code>`;
+    return `<code class="symbol">&ldquo;</code><code class="primitive">${sanitized}</code><code class="symbol">&rdquo;</code>`;
   }
   function renderTemplateLiteralType(type: TypeDoc.TemplateLiteralType) {
     // ie. memory: `${number} MB`
@@ -763,7 +860,7 @@ function renderType(
     }
     if (type.name === "FunctionArn") {
       return [
-        "<code class=\"primitive\">\"arn:aws:lambda:$&#123;string&#125;\"</code>",
+        '<code class="primitive">"arn:aws:lambda:$&#123;string&#125;"</code>',
       ].join("");
     }
     // types in the same doc (links to the class ie. `subscribe()` return type)
@@ -810,6 +907,7 @@ function renderType(
       Service: "service",
       SnsTopicLambdaSubscriber: "sns-topic-lambda-subscriber",
       SnsTopicQueueSubscriber: "sns-topic-queue-subscriber",
+      Vpc: "vpc",
     }[type.name];
     if (externalModule) {
       const hash = type.name.endsWith("Args")
@@ -862,6 +960,12 @@ function renderType(
     }
     if (type.name === "ComponentResourceOptions") {
       return `[<code class="type">${type.name}</code>](https://www.pulumi.com/docs/concepts/options/)`;
+    }
+    if (type.name === "FileAsset") {
+      return `[<code class="type">${type.name}</code>](https://www.pulumi.com/docs/iac/concepts/assets-archives/#assets)`;
+    }
+    if (type.name === "FileArchive") {
+      return `[<code class="type">${type.name}</code>](https://www.pulumi.com/docs/iac/concepts/assets-archives/#archives)`;
     }
     // Handle $util type in global.d.ts
     if (type.name === "__module") {
@@ -1930,6 +2034,7 @@ async function buildComponents() {
       "../platform/src/global-config.d.ts",
       "../platform/src/components/linkable.ts",
       "../platform/src/components/secret.ts",
+      "../platform/src/components/aws/analog.ts",
       "../platform/src/components/aws/apigateway-websocket.ts",
       "../platform/src/components/aws/apigateway-websocket-route.ts",
       "../platform/src/components/aws/apigatewayv1.ts",
@@ -1950,6 +2055,7 @@ async function buildComponents() {
       "../platform/src/components/aws/bucket-queue-subscriber.ts",
       "../platform/src/components/aws/bucket-topic-subscriber.ts",
       "../platform/src/components/aws/cluster.ts",
+      "../platform/src/components/aws/cluster-v1.ts",
       "../platform/src/components/aws/cognito-identity-pool.ts",
       "../platform/src/components/aws/cognito-identity-provider.ts",
       "../platform/src/components/aws/cognito-user-pool.ts",
@@ -1966,6 +2072,7 @@ async function buildComponents() {
       "../platform/src/components/aws/nuxt.ts",
       "../platform/src/components/aws/realtime.ts",
       "../platform/src/components/aws/realtime-lambda-subscriber.ts",
+      "../platform/src/components/aws/redis.ts",
       "../platform/src/components/aws/remix.ts",
       "../platform/src/components/aws/queue.ts",
       "../platform/src/components/aws/queue-lambda-subscriber.ts",

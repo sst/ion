@@ -15,12 +15,12 @@ import (
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3"
+	"github.com/sst/ion/pkg/flag"
 )
 
 var PULUMI_VERSION = "v" + sdk.Version.String()
 
-const BUN_VERSION = "1.1.24"
-
+const BUN_VERSION = "1.1.29"
 const UV_VERSION = "0.3.2"
 
 var configDir = (func() string {
@@ -133,6 +133,9 @@ func CertPath() string {
 }
 
 func NeedsBun() bool {
+	if flag.NO_BUN {
+		return false
+	}
 	path := BunPath()
 	slog.Info("checking for bun", "path", path)
 	if _, err := os.Stat(path); err != nil {

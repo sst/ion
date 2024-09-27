@@ -3,9 +3,9 @@
 import path from "path";
 
 /**
- * ## AWS Router and bucket
+ * ## Router and bucket
  *
- * Creates a router that serves static files from the `public` folder in a bucket.
+ * Creates a router that serves static files from the `public` folder of a given bucket.
  */
 export default $config({
   app(input) {
@@ -26,9 +26,7 @@ export default $config({
       bucket: bucket.name,
       key: "public/spongebob.svg",
       contentType: "image/svg+xml",
-      source: new $util.asset.FileAsset(
-        path.join($cli.paths.root, "spongebob.svg")
-      ),
+      source: $asset("spongebob.svg"),
     });
 
     const router = new sst.aws.Router("MyRouter", {
