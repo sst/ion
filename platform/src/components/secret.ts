@@ -18,6 +18,10 @@ export class SecretMissingError extends VisibleError {
  * Secrets are encrypted when they are stored in your state file or in a function package.
  * :::
  *
+ * :::note
+ * Secret names must start with a capital letter and contain only letters and numbers
+ * :::
+ *
  * Secrets are encrypted and stored in an S3 Bucket in your AWS account. If used in your app config, they'll be encrypted in your state file as well. If used in your function code, they'll be decrypted and stored in the function package.
  *
  * @example
