@@ -18,15 +18,18 @@ export class SecretMissingError extends VisibleError {
  * Secrets are encrypted when they are stored in your state file or in a function package.
  * :::
  *
- * :::note
- * Secret names must start with a capital letter and contain only letters and numbers
- * :::
- *
  * Secrets are encrypted and stored in an S3 Bucket in your AWS account. If used in your app config, they'll be encrypted in your state file as well. If used in your function code, they'll be decrypted and stored in the function package.
  *
  * @example
  *
  * #### Create a secret
+ *
+ * The name of a secret follows the same rules as a component name. It must start with a capital letter and contain only letters and numbers.
+ *
+ * :::note
+ * Secret names must start with a capital letter and contain only letters and numbers.
+ * :::
+ *
  * ```ts title="sst.config.ts"
  * const secret = new sst.Secret("MySecret");
  * ```
