@@ -944,7 +944,7 @@ var root = &cli.Command{
 					"",
 					"This is completely optional and can be disabled at any time.",
 					"",
-					"You can also opt-out by setting an environment variable: `SST_TELEMETRY_DISABLED=1`.",
+					"You can also opt-out by setting an environment variable: `SST_TELEMETRY_DISABLED=1` or `DO_NOT_TRACK=1`.",
 				}, "\n"),
 			},
 			Children: []*cli.Command{
