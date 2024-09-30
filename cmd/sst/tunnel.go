@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/armon/go-socks5"
@@ -18,6 +20,7 @@ import (
 	"github.com/sst/ion/cmd/sst/cli"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/global"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/crypto/ssh"
 )
@@ -54,6 +57,21 @@ var CmdTunnel = &cli.Command{
 		Short: "",
 		Long:  strings.Join([]string{}, "\n"),
 	},
+	Run: func(c *cli.Cli) error {
+		err := global.EnsureTun2Socks()
+		if err != nil {
+			return err
+		}
+		// run as root
+		tunnelCmd := exec.Command("sudo", "/opt/sst/sst", "tunnel", "start", "--print-logs")
+		tunnelCmd.Stdout = os.Stdout
+		tunnelCmd.Stderr = os.Stderr
+		tunnelCmd.Start()
+		<-c.Context.Done()
+		tunnelCmd.Process.Signal(syscall.SIGINT)
+		tunnelCmd.Wait()
+		return nil
+	},
 	Children: []*cli.Command{
 		{
 			Name: "install",
@@ -68,20 +86,34 @@ var CmdTunnel = &cli.Command{
 				}, "\n"),
 			},
 			Run: func(c *cli.Cli) error {
-				// Get the current user
 				currentUser, err := user.Current()
 				if err != nil {
 					return err
 				}
-				binary, err := os.Executable()
+				sourcePath, err := os.Executable()
 				if err != nil {
 					return err
 				}
+				os.MkdirAll("/opt/sst", 0755)
+				destPath := "/opt/sst/sst"
+				sourceFile, err := os.Open(sourcePath)
+				if err != nil {
+					return err
+				}
+				defer sourceFile.Close()
+				destFile, err := os.Create(destPath)
+				if err != nil {
+					return err
+				}
+				defer destFile.Close()
+				_, err = io.Copy(destFile, sourceFile)
+				if err != nil {
+					return err
+				}
+				err = os.Chmod(destPath, 0755)
 				sudoersPath := "/etc/sudoers.d/sst"
-				command := binary + " tunnel start"
+				command := destPath + " tunnel start"
 				sudoersEntry := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: %s\n", currentUser.Username, command)
-
-				// Write the entry to the file
 				err = os.WriteFile(sudoersPath, []byte(sudoersEntry), 0440)
 				if err != nil {
 					return err
@@ -92,8 +124,6 @@ var CmdTunnel = &cli.Command{
 				} else {
 					cmd = exec.Command("visudo", "-c", "-f", sudoersPath)
 				}
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
 				err = cmd.Run()
 				if err != nil {
 					os.Remove(sudoersPath)
@@ -118,18 +148,19 @@ var CmdTunnel = &cli.Command{
 			},
 			Run: func(c *cli.Cli) error {
 				slog.Info("creating interface")
-				iface, err := water.New(water.Config{
-					DeviceType: water.TUN,
-					PlatformSpecificParams: water.PlatformSpecificParams{
-						Name:    "sst",
-						Persist: true,
-					},
-				})
+				tun := &netlink.Tuntap{
+					LinkAttrs: netlink.LinkAttrs{Name: "sst"},
+					Mode:      netlink.TUNTAP_MODE_TUN,
+				}
+				err := netlink.LinkAdd(tun)
 				if err != nil {
 					return err
 				}
-				iface.Close()
-				link, err := netlink.LinkByName(iface.Name())
+				defer func() {
+					slog.Info("deleting interface")
+					netlink.LinkDel(tun)
+				}()
+				link, err := netlink.LinkByName(tun.Name)
 				if err != nil {
 					return err
 				}
@@ -139,7 +170,7 @@ var CmdTunnel = &cli.Command{
 					return err
 				}
 				slog.Info("assigning address")
-				addr, err := netlink.ParseAddr("10.1.1.1/24")
+				addr, err := netlink.ParseAddr("172.16.0.0/12")
 				if err != nil {
 					return err
 				}
@@ -158,7 +189,6 @@ var CmdTunnel = &cli.Command{
 				}
 				netlink.RouteAdd(route)
 				defer netlink.RouteDel(route)
-				iface.Close()
 				slog.Info("getting ssh key")
 				key, err := os.ReadFile("/home/thdxr/.ssh/id_rsa")
 				if err != nil {
@@ -197,7 +227,14 @@ var CmdTunnel = &cli.Command{
 				}
 				go server.ListenAndServe("tcp", fmt.Sprintf("%s:%d", "127.0.0.1", 1080))
 				slog.Info("tunnel started")
+
+				socksCmd := exec.CommandContext(c.Context, "tun2socks", "-device", "sst", "-proxy", "socks5://127.0.0.1:1080")
+				socksCmd.Stdout = os.Stdout
+				socksCmd.Stderr = os.Stderr
+				socksCmd.Start()
 				<-c.Context.Done()
+				socksCmd.Process.Kill()
+				socksCmd.Wait()
 				return nil
 			},
 		},
