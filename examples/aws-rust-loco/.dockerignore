@@ -3,3 +3,7 @@ dockerfile
 .dockerignore
 .git
 .gitignore
+.cargo
+
+# sst
+.sst
