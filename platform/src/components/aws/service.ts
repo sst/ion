@@ -41,6 +41,7 @@ import {
 import { Permission } from "./permission.js";
 import { Vpc } from "./vpc.js";
 import { Vpc as VpcV1 } from "./vpc-v1";
+import { DevCommand } from "../experimental/dev-command.js";
 
 export interface ServiceArgs extends ClusterServiceArgs {
   /**
@@ -241,6 +242,7 @@ export class Service extends Component implements Link.Linkable {
           environment: args.environment,
           command: args.command,
           entrypoint: args.entrypoint,
+          dev: args.dev,
         },
       ];
 
@@ -846,48 +848,22 @@ export class Service extends Component implements Link.Linkable {
     }
 
     function registerReceiver() {
-      self.registerOutputs({
-        _receiver: all([containers]).apply(([containers]) => ({
-          directory:
-            typeof containers[0].image === "string"
-              ? undefined
-              : path.join(
-                  containers[0].image.dockerfile
-                    ? path.dirname(containers[0].image.dockerfile)
-                    : containers[0].image.context,
-                ),
-          links: linkData.apply((input) => input.map((item) => item.name)),
-          environment: {
-            ...args.environment,
-            AWS_REGION: region,
-          },
-          aws: {
-            role: taskRole.arn,
-          },
-        })),
-        _dev: all([containers]).apply(([containers]) => ({
-          links: linkData.apply((input) => input.map((item) => item.name)),
-          environment: {
-            ...args.environment,
-            AWS_REGION: region,
-          },
-          aws: {
-            role: taskRole.arn,
-          },
-          autostart: output(args.dev?.autostart).apply((val) => val ?? true),
-          directory: output(args.dev?.directory).apply(
-            (dir) =>
-              dir ||
-              (typeof containers[0].image === "string"
-                ? undefined
-                : path.join(
-                    containers[0].image.dockerfile
-                      ? path.dirname(containers[0].image.dockerfile)
-                      : containers[0].image.context,
-                  )),
-          ),
-          command: args.dev?.command,
-        })),
+      containers.apply((val) => {
+        for (const container of val) {
+          const title = val.length == 1 ? name : `${name}${container.name}`;
+          new DevCommand(`${title}Dev`, {
+            link: args.link,
+            dev: {
+              title,
+              autostart: true,
+              ...container.dev,
+            },
+            environment: {
+              ...container.environment,
+              AWS_REGION: region,
+            },
+          });
+        }
       });
     }
   }

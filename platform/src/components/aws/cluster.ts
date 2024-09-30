@@ -991,6 +991,35 @@ export interface ClusterServiceArgs {
        */
       retention?: Input<keyof typeof RETENTION>;
     }>;
+    /**
+     * Configure how this container works in `sst dev`.
+     *
+     * :::note
+     * In `sst dev` your container is run locally; it's not deployed.
+     * :::
+     *
+     * Instead of deploying your service, this starts it locally. It's run
+     * as a separate process in the `sst dev` multiplexer. Read more about
+     * [`sst dev`](/docs/reference/cli/#dev).
+     */
+    dev?: {
+      /**
+       * The command that `sst dev` runs to start this in dev mode. This is the command you run
+       * when you want to run your service locally.
+       */
+      command?: Input<string>;
+      /**
+       * Configure if you want to automatically start this when `sst dev` starts. You can still
+       * start it manually later.
+       * @default `true`
+       */
+      autostart?: Input<boolean>;
+      /**
+       * Change the directory from where the `command` is run.
+       * @default Uses the `image.dockerfile` path
+       */
+      directory?: Input<string>;
+    };
   }>[];
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
