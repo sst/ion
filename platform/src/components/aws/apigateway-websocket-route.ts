@@ -7,7 +7,7 @@ import {
   output,
 } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
-import { Function, FunctionArgs } from "./function";
+import { Function, FunctionArgs, FunctionArn } from "./function";
 import { ApiGatewayWebSocketRouteArgs } from "./apigateway-websocket";
 import { apigatewayv2, lambda } from "@pulumi/aws";
 import { FunctionBuilder, functionBuilder } from "./helpers/function-builder";
@@ -37,7 +37,7 @@ export interface Args extends ApiGatewayWebSocketRouteArgs {
   /**
    * The function that’ll be invoked.
    */
-  handler: Input<string | FunctionArgs>;
+  handler: Input<string | FunctionArgs | FunctionArn>;
   /**
    * @internal
    */

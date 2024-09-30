@@ -1078,7 +1078,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
    */
   public routeUrl(
     rawRoute: string,
-    url: Input<string>,
+    url: string,
     args: ApiGatewayV2RouteArgs = {},
   ) {
     const route = this.parseRoute(rawRoute);
@@ -1145,7 +1145,7 @@ export class ApiGatewayV2 extends Component implements Link.Linkable {
    */
   public routePrivate(
     rawRoute: string,
-    arn: Input<string>,
+    arn: string,
     args: ApiGatewayV2RouteArgs = {},
   ) {
     if (!this.vpcLink)

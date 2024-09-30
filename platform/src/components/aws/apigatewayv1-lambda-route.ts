@@ -6,7 +6,7 @@ import {
   output,
 } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
-import { Function, FunctionArgs } from "./function";
+import { Function, FunctionArgs, FunctionArn } from "./function";
 import { apigateway, lambda } from "@pulumi/aws";
 import {
   ApiGatewayV1BaseRouteArgs,
@@ -18,7 +18,7 @@ export interface Args extends ApiGatewayV1BaseRouteArgs {
   /**
    * The route function.
    */
-  handler: Input<string | FunctionArgs>;
+  handler: Input<string | FunctionArgs | FunctionArn>;
   /**
    * @internal
    */
