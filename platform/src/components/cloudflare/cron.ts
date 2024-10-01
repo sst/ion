@@ -29,18 +29,6 @@ export interface CronArgs {
    *   }
    * }
    * ```
-   *
-   * :::note
-   * Your worker should export a `scheduled` handler instead of the standard `fetch`
-   * :::
-   *
-   * ```ts
-   * export default {
-   *   async scheduled() {
-   *     console.log("Running on a schedule");
-   *   },
-   * };
-   * ```
    */
   job: Input<string | WorkerArgs>;
   /**
