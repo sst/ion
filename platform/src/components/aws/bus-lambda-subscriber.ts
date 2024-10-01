@@ -56,18 +56,27 @@ export class BusLambdaSubscriber extends Component {
     const fn = createFunction();
     const permission = createPermission();
     const target = createTarget();
+    const fnDescription = createDescription();
 
     this.fn = fn;
     this.permission = permission;
     this.rule = rule;
     this.target = target;
 
+    function createDescription() {
+      const subscriber = output(args.subscriber).get();
+      if (typeof subscriber === "string" || !subscriber.description) {
+        return interpolate`Subscribed to ${bus.name}`;
+      }
+      return output(subscriber.description);
+    }
+
     function createFunction() {
       return functionBuilder(
         `${name}Function`,
         args.subscriber,
         {
-          description: interpolate`Subscribed to ${bus.name}`,
+          description: fnDescription,
         },
         undefined,
         { parent: self },
