@@ -600,9 +600,13 @@ export class Service extends Component implements Link.Linkable {
                         "awslogs-stream-prefix": "/service",
                       },
                     },
-                    environment: all([args.environment ?? [], linkData]).apply(
-                      ([env, linkData]) => [
+                    environment: all([args.environment ?? [], container.environment ?? [], linkData]).apply(
+                      ([env, containerEnv, linkData]) => [
                         ...Object.entries(env).map(([name, value]) => ({
+                          name,
+                          value,
+                        })),
+                        ...Object.entries(containerEnv).map(([name, value]) => ({
                           name,
                           value,
                         })),
