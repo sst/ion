@@ -1193,7 +1193,7 @@ export class Cluster extends Component {
 
     function createCluster() {
       return new ecs.Cluster(
-        ...transform(args.transform?.cluster, `${name}Cluster`, {}, { parent })
+        ...transform(args.transform?.cluster, `${name}Cluster`, {}, { parent }),
       );
     }
   }
