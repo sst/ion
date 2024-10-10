@@ -254,6 +254,7 @@ export class Service extends Component implements Link.Linkable {
           command: args.command,
           entrypoint: args.entrypoint,
           dev: args.dev,
+          mountPoints: args.mountPoints,
         },
       ];
 
@@ -634,6 +635,7 @@ export class Service extends Component implements Link.Linkable {
                     linuxParameters: {
                       initProcessEnabled: true,
                     },
+                    mountPoints: container.mountPoints,
                   };
 
                   function createImage() {

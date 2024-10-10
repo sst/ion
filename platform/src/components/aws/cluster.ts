@@ -979,6 +979,31 @@ export interface ClusterServiceArgs {
        */
       directory?: Input<string>;
     };
+    /**
+     * The mount points for the data volumes in your container.
+     * This parameter maps to Volumes in the creat-container Docker API and the `--volume`
+     * option to docker run.
+     *
+     * Windows containers can mount whole directories on the same drive as `$env:ProgramData`.
+     * Windows containers cannot mount directories on a different drive, and mount points
+     * cannot be used across drives. You must specify mount points to attach an Amazon EBS
+     * volume directly to an Amazon ECS task.
+     */
+    mountPoints?: {
+      /**
+       * The name of the volume to mount.
+       */
+      sourceVolume: Input<string>;
+
+      /**
+       * The path in the container where the volume will be mounted.
+       */
+      containerPath: Input<string>;
+      /**
+       * If this value is true, the container has read-only access to the volume. If this value is false, then the container can write to the volume. The default value is false.
+       */
+      readOnly?: Input<boolean>;
+    }[];
   }>[];
   /**
    * Assigns the given IAM role name to the containers running in the service. This allows you to pass in a previously created role.
@@ -1138,7 +1163,7 @@ export class Cluster extends Component {
   constructor(
     name: string,
     args: ClusterArgs,
-    opts?: ComponentResourceOptions,
+    opts?: ComponentResourceOptions
   ) {
     const _version = 2;
     super(__pulumiType, name, args, opts, {
@@ -1168,7 +1193,7 @@ export class Cluster extends Component {
 
     function createCluster() {
       return new ecs.Cluster(
-        ...transform(args.transform?.cluster, `${name}Cluster`, {}, { parent }),
+        ...transform(args.transform?.cluster, `${name}Cluster`, {}, { parent })
       );
     }
   }
