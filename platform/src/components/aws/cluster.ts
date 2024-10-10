@@ -1163,7 +1163,7 @@ export class Cluster extends Component {
   constructor(
     name: string,
     args: ClusterArgs,
-    opts?: ComponentResourceOptions
+    opts?: ComponentResourceOptions,
   ) {
     const _version = 2;
     super(__pulumiType, name, args, opts, {
