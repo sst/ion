@@ -1270,7 +1270,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
               ),
             ),
           },
-          { parent },
+          { parent, dependsOn: resources },
         ),
       );
     }
