@@ -8,14 +8,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/flag"
 	"github.com/sst/ion/pkg/project/path"
 	"github.com/sst/ion/pkg/runtime"
+	"golang.org/x/sync/semaphore"
 )
 
 var loaderMap = map[string]api.Loader{
@@ -55,15 +58,21 @@ var LoaderToString = []string{
 }
 
 type Runtime struct {
-	cfgPath  string
-	contexts map[string]esbuild.BuildContext
-	results  map[string]esbuild.BuildResult
+	cfgPath     string
+	contexts    sync.Map
+	results     sync.Map
+	concurrency *semaphore.Weighted
 }
 
 func New() *Runtime {
+	weight := int64(4)
+	if flag.SST_BUILD_CONCURRENCY != "" {
+		weight, _ = strconv.ParseInt(flag.SST_BUILD_CONCURRENCY, 10, 64)
+	}
 	return &Runtime{
-		contexts: map[string]esbuild.BuildContext{},
-		results:  map[string]esbuild.BuildResult{},
+		contexts:    sync.Map{},
+		results:     sync.Map{},
+		concurrency: semaphore.NewWeighted(weight),
 	}
 }
 
@@ -163,13 +172,13 @@ func (r *Runtime) getFile(input *runtime.BuildInput) (string, bool) {
 }
 
 func (r *Runtime) ShouldRebuild(functionID string, file string) bool {
-	result, ok := r.results[functionID]
+	result, ok := r.results.Load(functionID)
 	if !ok {
 		return false
 	}
 
 	var meta = map[string]interface{}{}
-	err := json.Unmarshal([]byte(result.Metafile), &meta)
+	err := json.Unmarshal([]byte(result.(esbuild.BuildResult).Metafile), &meta)
 	if err != nil {
 		return false
 	}
