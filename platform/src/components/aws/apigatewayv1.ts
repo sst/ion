@@ -23,7 +23,7 @@ import { RETENTION } from "./logging";
 import { ApiGatewayV1LambdaRoute } from "./apigatewayv1-lambda-route";
 import { ApiGatewayV1Authorizer } from "./apigatewayv1-authorizer";
 import { setupApiGatewayAccount } from "./helpers/apigateway-account";
-import { apigateway, cloudwatch, getRegionOutput } from "@pulumi/aws";
+import {apigateway, cloudwatch, getRegionOutput, s3} from "@pulumi/aws";
 import { Dns } from "../dns";
 import { dns as awsDns } from "./dns";
 import { DnsValidatedCertificate } from "./dns-validated-certificate";
@@ -563,6 +563,11 @@ export interface ApiGatewayV1IntegrationArgs {
   passthroughBehavior?: Input<"when-no-match" | "never" | "when-no-templates">;
 }
 
+interface ApiGatewayV1Ref {
+  ref: boolean;
+  api: apigateway.RestApi;
+}
+
 /**
  * The `ApiGatewayV1` component lets you add an [Amazon API Gateway REST API](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-rest-api.html) to your app.
  *
@@ -659,19 +664,23 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
     opts: ComponentResourceOptions = {},
   ) {
     super(__pulumiType, name, args, opts);
+    this.constructorName = name;
+    this.constructorArgs = args;
+    this.constructorOpts = opts;
+
+    if (args && "ref" in args) {
+      const ref = args as unknown as ApiGatewayV1Ref
+      this.api = ref.api;
+    } else {
+      this.api = createApi();
+    }
 
     const parent = this;
 
     const region = normalizeRegion();
     const endpoint = normalizeEndpoint();
-    const apigAccount = setupApiGatewayAccount(name);
-    const api = createApi();
 
-    this.resources["/"] = api.rootResourceId;
-    this.constructorName = name;
-    this.constructorArgs = args;
-    this.constructorOpts = opts;
-    this.api = api;
+    this.resources["/"] = this.api.rootResourceId;
     this.region = region;
     this.endpointType = endpoint.types;
 
@@ -700,6 +709,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
     }
 
     function createApi() {
+      const apigAccount = setupApiGatewayAccount(name);
       return new apigateway.RestApi(
         ...transform(
           args.transform?.api,
@@ -1422,6 +1432,44 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
         url: this.url,
       },
     };
+  }
+
+  /**
+   * Reference an existing Api-Gateway REST Api with the given api name. This is useful when you
+   * create a api in one stage and want to share it in another stage. It avoids having to
+   * create a new api in the other stage.
+   *
+   * :::tip
+   * You can use the `static get` method to share a api across stages.
+   * :::
+   *
+   * @param name The name of the component.
+   * @param apiName The name of the Api-Gateway REST Api.
+   *
+   * @example
+   * Imagine you create a api in the `dev` stage. And in your personal stage `frank`,
+   * instead of creating a new api, you want to share the api from `dev`.
+   *
+   * ```ts title=sst.config.ts"
+   * const api = $app.stage === "frank"
+   *  ? sst.aws.ApiGatewayV1.get("MyApi", "app-dev-api-12345678")
+   *  : new sst.aws.ApiGatewayV1("MyApi");
+   * ```
+   *
+   * Here `app-dev-api-12345678` is the auto-generated api name for the api created
+   * in the `dev` stage. You can find this by outputting the api name in the `dev` stage.
+   *
+   * ```ts title="sst.config.ts"
+   * return {
+   *   api: api.name
+   * };
+   * ```
+   */
+  public static get(name: string, apiName: Input<string>) {
+    return new ApiGatewayV1(name, {
+      ref: true,
+      api: apigateway.RestApi.get(`${name}RestApi`, apiName),
+    } as unknown as ApiGatewayV1Args);
   }
 }
 
