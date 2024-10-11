@@ -46,11 +46,13 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 		return nil, err
 	}
 
-	fileName := strings.TrimSuffix(rel, filepath.Ext(rel))
+	fileName := strings.TrimSuffix(filepath.Base(rel), filepath.Ext(rel))
 	// Lambda handler can only contain 1 dot separating the file name and function name
 	fileName = strings.ReplaceAll(fileName, ".", "-")
-	handler := fileName + filepath.Ext(input.Handler)
-	target := filepath.Join(input.Out(), fileName+extension)
+	folder := filepath.Dir(rel)
+	path := filepath.Join(folder, fileName)
+	handler := path + filepath.Ext(input.Handler)
+	target := filepath.Join(input.Out(), path+extension)
 	slog.Info("loader info", "loader", properties.Loader)
 
 	loader := map[string]esbuild.Loader{}
