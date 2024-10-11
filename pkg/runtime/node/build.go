@@ -46,7 +46,7 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 		return nil, err
 	}
 
-	fileName := strings.TrimSuffix(filepath.Base(rel), filepath.Ext(rel))
+	fileName := strings.TrimSuffix(rel, filepath.Ext(rel))
 	// Lambda handler can only contain 1 dot separating the file name and function name
 	fileName = strings.ReplaceAll(fileName, ".", "-")
 	handler := fileName + filepath.Ext(input.Handler)
