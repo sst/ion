@@ -340,12 +340,10 @@ func (p *Project) Provider(name string) (provider.Provider, bool) {
 }
 
 func (p *Project) Cleanup() error {
-	if !flag.SST_NO_CLEANUP {
+	if flag.SST_NO_CLEANUP {
 		return nil
 	}
-	return os.RemoveAll(
-		filepath.Join(p.PathWorkingDir(), "artifacts"),
-	)
+	return nil
 }
 
 func (p *Project) PathLog(name string) string {
