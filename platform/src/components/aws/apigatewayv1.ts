@@ -7,13 +7,7 @@ import {
   jsonStringify,
   output,
 } from "@pulumi/pulumi";
-import {
-  Component,
-  outputId,
-  Prettify,
-  Transform,
-  transform,
-} from "../component";
+import { Component, outputId, Prettify, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
 import { FunctionArgs, FunctionArn } from "./function";
@@ -23,7 +17,7 @@ import { RETENTION } from "./logging";
 import { ApiGatewayV1LambdaRoute } from "./apigatewayv1-lambda-route";
 import { ApiGatewayV1Authorizer } from "./apigatewayv1-authorizer";
 import { setupApiGatewayAccount } from "./helpers/apigateway-account";
-import {apigateway, cloudwatch, getRegionOutput, s3} from "@pulumi/aws";
+import { apigateway, cloudwatch, getRegionOutput } from "@pulumi/aws";
 import { Dns } from "../dns";
 import { dns as awsDns } from "./dns";
 import { DnsValidatedCertificate } from "./dns-validated-certificate";
@@ -444,73 +438,73 @@ export interface ApiGatewayV1RouteArgs {
   auth?: Input<
     | false
     | {
-        /**
-         * Enable IAM authorization for a given API route.
-         *
-         * When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
-         */
-        iam?: Input<true>;
-        /**
-         * Enable custom Lambda authorization for a given API route. Pass in the authorizer ID.
-         * @example
-         * ```js
-         * {
-         *   auth: {
-         *     custom: myAuthorizer.id
-         *   }
-         * }
-         * ```
-         *
-         * Where `myAuthorizer` is:
-         *
-         * ```js
-         * const userPool = new aws.cognito.UserPool();
-         * const myAuthorizer = api.addAuthorizer({
-         *   name: "MyAuthorizer",
-         *   userPools: [userPool.arn]
-         * });
-         * ```
-         */
-        custom?: Input<string>;
-        /**
-         * Enable Cognito User Pool authorization for a given API route.
-         *
-         * @example
-         * You can configure JWT auth.
-         *
-         * ```js
-         * {
-         *   auth: {
-         *     cognito: {
-         *       authorizer: myAuthorizer.id,
-         *       scopes: ["read:profile", "write:profile"]
-         *     }
-         *   }
-         * }
-         * ```
-         *
-         * Where `myAuthorizer` is:
-         *
-         * ```js
-         * const userPool = new aws.cognito.UserPool();
-         *
-         * const myAuthorizer = api.addAuthorizer({
-         *   name: "MyAuthorizer",
-         *   userPools: [userPool.arn]
-         * });
-         * ```
-         */
-        cognito?: Input<{
-          /**
-           * Authorizer ID of the Cognito User Pool authorizer.
-           */
-          authorizer: Input<string>;
-          /**
-           * Defines the permissions or access levels that the authorization token grants.
-           */
-          scopes?: Input<Input<string>[]>;
-        }>;
-      }
+    /**
+     * Enable IAM authorization for a given API route.
+     *
+     * When IAM auth is enabled, clients need to use Signature Version 4 to sign their requests with their AWS credentials.
+     */
+    iam?: Input<true>;
+    /**
+     * Enable custom Lambda authorization for a given API route. Pass in the authorizer ID.
+     * @example
+     * ```js
+     * {
+     *   auth: {
+     *     custom: myAuthorizer.id
+     *   }
+     * }
+     * ```
+     *
+     * Where `myAuthorizer` is:
+     *
+     * ```js
+     * const userPool = new aws.cognito.UserPool();
+     * const myAuthorizer = api.addAuthorizer({
+     *   name: "MyAuthorizer",
+     *   userPools: [userPool.arn]
+     * });
+     * ```
+     */
+    custom?: Input<string>;
+    /**
+     * Enable Cognito User Pool authorization for a given API route.
+     *
+     * @example
+     * You can configure JWT auth.
+     *
+     * ```js
+     * {
+     *   auth: {
+     *     cognito: {
+     *       authorizer: myAuthorizer.id,
+     *       scopes: ["read:profile", "write:profile"]
+     *     }
+     *   }
+     * }
+     * ```
+     *
+     * Where `myAuthorizer` is:
+     *
+     * ```js
+     * const userPool = new aws.cognito.UserPool();
+     *
+     * const myAuthorizer = api.addAuthorizer({
+     *   name: "MyAuthorizer",
+     *   userPools: [userPool.arn]
+     * });
+     * ```
+     */
+    cognito?: Input<{
+      /**
+       * Authorizer ID of the Cognito User Pool authorizer.
+       */
+      authorizer: Input<string>;
+      /**
+       * Defines the permissions or access levels that the authorization token grants.
+       */
+      scopes?: Input<Input<string>[]>;
+    }>;
+  }
   >;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
@@ -652,24 +646,19 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
   private apiMapping?: Output<apigateway.BasePathMapping>;
   private region: Output<string>;
   private resources: Record<string, Output<string>> = {};
-  private routes: (ApiGatewayV1LambdaRoute | ApiGatewayV1IntegrationRoute)[] =
-    [];
+  private routes: (ApiGatewayV1LambdaRoute | ApiGatewayV1IntegrationRoute)[] = [];
   private stage?: apigateway.Stage;
   private logGroup?: cloudwatch.LogGroup;
   private endpointType: Output<"EDGE" | "REGIONAL" | "PRIVATE">;
 
-  constructor(
-    name: string,
-    args: ApiGatewayV1Args = {},
-    opts: ComponentResourceOptions = {},
-  ) {
+  constructor(name: string, args: ApiGatewayV1Args = {}, opts: ComponentResourceOptions = {}) {
     super(__pulumiType, name, args, opts);
     this.constructorName = name;
     this.constructorArgs = args;
     this.constructorOpts = opts;
 
     if (args && "ref" in args) {
-      const ref = args as unknown as ApiGatewayV1Ref
+      const ref = args as unknown as ApiGatewayV1Ref;
       this.api = ref.api;
     } else {
       this.api = createApi();
@@ -693,17 +682,15 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
         if (!endpoint) return { types: "EDGE" as const };
 
         if (endpoint.type === "private" && !endpoint.vpcEndpointIds)
-          throw new VisibleError(
-            "Please provide the VPC endpoint IDs for the private endpoint.",
-          );
+          throw new VisibleError("Please provide the VPC endpoint IDs for the private endpoint.");
 
         return endpoint.type === "regional"
           ? { types: "REGIONAL" as const }
           : endpoint.type === "private"
             ? {
-                types: "PRIVATE" as const,
-                vpcEndpointIds: endpoint.vpcEndpointIds,
-              }
+              types: "PRIVATE" as const,
+              vpcEndpointIds: endpoint.vpcEndpointIds,
+            }
             : { types: "EDGE" as const };
       });
     }
@@ -728,10 +715,9 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
    */
   public get url() {
     return this.apigDomain && this.apiMapping
-      ? all([this.apigDomain.domainName, this.apiMapping.basePath]).apply(
-          ([domain, key]) =>
-            key ? `https://${domain}/${key}/` : `https://${domain}`,
-        )
+      ? all([this.apigDomain.domainName, this.apiMapping.basePath]).apply(([domain, key]) =>
+        key ? `https://${domain}/${key}/` : `https://${domain}`,
+      )
       : interpolate`https://${this.api.id}.execute-api.${this.region}.amazonaws.com/${$app.stage}/`;
   }
 
@@ -949,32 +935,17 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
     }
     const [methodRaw, path] = route.split(" ");
     const method = methodRaw.toUpperCase();
-    if (
-      ![
-        "ANY",
-        "DELETE",
-        "GET",
-        "HEAD",
-        "OPTIONS",
-        "PATCH",
-        "POST",
-        "PUT",
-      ].includes(method)
-    )
+    if (!["ANY", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"].includes(method))
       throw new VisibleError(`Invalid method ${methodRaw} in route ${route}`);
 
     if (!path.startsWith("/"))
-      throw new VisibleError(
-        `Invalid path ${path} in route ${route}. Path must start with "/".`,
-      );
+      throw new VisibleError(`Invalid path ${path} in route ${route}. Path must start with "/".`);
 
     return { method, path };
   }
 
   private buildRouteId(method: string, path: string) {
-    const suffix = logicalName(
-      hashStringToPrettyString([outputId, method, path].join(""), 6),
-    );
+    const suffix = logicalName(hashStringToPrettyString([outputId, method, path].join(""), 6));
     return `${this.constructorName}Route${suffix}`;
   }
 
@@ -984,17 +955,12 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
       const parentPath = "/" + pathParts.slice(0, i).join("/");
       const subPath = "/" + pathParts.slice(0, i + 1).join("/");
       if (!this.resources[subPath]) {
-        const suffix = logicalName(
-          hashStringToPrettyString([this.api.id, subPath].join(""), 6),
-        );
+        const suffix = logicalName(hashStringToPrettyString([this.api.id, subPath].join(""), 6));
         const resource = new apigateway.Resource(
           `${this.constructorName}Resource${suffix}`,
           {
             restApi: this.api.id,
-            parentId:
-              parentPath === "/"
-                ? this.api.rootResourceId
-                : this.resources[parentPath],
+            parentId: parentPath === "/" ? this.api.rootResourceId : this.resources[parentPath],
             pathPart: pathParts[i],
           },
           { parent: this },
@@ -1133,16 +1099,14 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
         return {
           name: norm.name,
           path: norm.path,
-          dns: norm.dns === false ? undefined : norm.dns ?? awsDns(),
+          dns: norm.dns === false ? undefined : (norm.dns ?? awsDns()),
           cert: norm.cert,
         };
       });
     }
 
     function createCorsRoutes() {
-      const resourceIds = routes.map(
-        (route) => route.nodes.integration.resourceId,
-      );
+      const resourceIds = routes.map((route) => route.nodes.integration.resourceId);
 
       return all([args.cors, resourceIds]).apply(([cors, resourceIds]) => {
         if (cors === false) return [];
@@ -1231,8 +1195,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
                   "gatewayresponse.header.Access-Control-Allow-Headers": "'*'",
                 },
                 responseTemplates: {
-                  "application/json":
-                    '{"message":$context.error.messageString}',
+                  "application/json": '{"message":$context.error.messageString}',
                 },
               },
               { parent },
@@ -1242,16 +1205,12 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
     }
 
     function createDeployment() {
-      const resources = all([corsRoutes, corsResponses]).apply(
-        ([corsRoutes, corsResponses]) =>
-          [
-            corsRoutes.map((v) => Object.values(v)),
-            corsResponses,
-            routes.map((route) => [
-              route.nodes.integration,
-              route.nodes.method,
-            ]),
-          ].flat(3),
+      const resources = all([corsRoutes, corsResponses]).apply(([corsRoutes, corsResponses]) =>
+        [
+          corsRoutes.map((v) => Object.values(v)),
+          corsResponses,
+          routes.map((route) => [route.nodes.integration, route.nodes.method]),
+        ].flat(3),
       );
 
       // filter serializable output values
@@ -1273,10 +1232,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
             restApi: api.id,
             triggers: all([resourcesSanitized]).apply(([resources]) =>
               Object.fromEntries(
-                resources.map((resource) => [
-                  resource.urn,
-                  JSON.stringify(resource),
-                ]),
+                resources.map((resource) => [resource.urn, JSON.stringify(resource)]),
               ),
             ),
           },
@@ -1292,9 +1248,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
           `${name}AccessLog`,
           {
             name: `/aws/vendedlogs/apis/${physicalName(64, name)}`,
-            retentionInDays: accessLog.apply(
-              (accessLog) => RETENTION[accessLog.retention],
-            ),
+            retentionInDays: accessLog.apply((accessLog) => RETENTION[accessLog.retention]),
           },
           { parent },
         ),
@@ -1391,14 +1345,10 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
           {
             name: domain.name,
             aliasName: endpointType.apply((v) =>
-              v === "EDGE"
-                ? apigDomain.cloudfrontDomainName
-                : apigDomain.regionalDomainName,
+              v === "EDGE" ? apigDomain.cloudfrontDomainName : apigDomain.regionalDomainName,
             ),
             aliasZone: endpointType.apply((v) =>
-              v === "EDGE"
-                ? apigDomain.cloudfrontZoneId
-                : apigDomain.regionalZoneId,
+              v === "EDGE" ? apigDomain.cloudfrontZoneId : apigDomain.regionalZoneId,
             ),
           },
           { parent },
@@ -1444,7 +1394,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
    * :::
    *
    * @param name The name of the component.
-   * @param apiName The name of the Api-Gateway REST Api.
+   * @param apiId The id of the Api-Gateway REST Api.
    *
    * @example
    * Imagine you create a api in the `dev` stage. And in your personal stage `frank`,
@@ -1465,10 +1415,10 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
    * };
    * ```
    */
-  public static get(name: string, apiName: Input<string>) {
+  public static get(name: string, apiId: Input<string>) {
     return new ApiGatewayV1(name, {
       ref: true,
-      api: apigateway.RestApi.get(`${name}RestApi`, apiName),
+      api: apigateway.RestApi.get(`${name}RestApi`, apiId),
     } as unknown as ApiGatewayV1Args);
   }
 }
