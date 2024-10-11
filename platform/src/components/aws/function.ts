@@ -1056,6 +1056,11 @@ export interface FunctionArgs {
    * @internal
    */
   _skipMetadata?: boolean;
+
+  /**
+   * If enabled, it does not create an lambda wrapper which makes it possible to use with different custom runtimes like PHP
+   */
+  skipHandlerWrapper?: Input<boolean>
 }
 
 /**
@@ -1530,7 +1535,7 @@ export class Function extends Component implements Link.Linkable {
           runtime,
         ]) => {
           if (dev) return { handler };
-          if (runtime.startsWith("python")) {
+          if (runtime.startsWith("python") || args.skipHandlerWrapper) {
             return { handler };
           }
 
