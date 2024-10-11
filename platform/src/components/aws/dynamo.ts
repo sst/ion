@@ -17,6 +17,17 @@ import { permission } from "./permission";
 
 export interface DynamoArgs {
   /**
+   * Define whether the table has deletion protection enabled.
+   *
+   * @example
+   * ```js
+   * {
+   *   deletionProtectionEnabled: true,
+   * }
+   * ```
+   */
+  deletionProtectionEnabled?: Input<boolean>;
+  /**
    * An object defining the fields of the table that'll be used to create indexes. The key is the name of the field and the value is the type.
    *
    * :::note
@@ -416,13 +427,14 @@ export class Dynamo extends Component implements Link.Linkable {
 
     function createTable() {
       return all([
+        args.deletionProtectionEnabled,
         args.fields,
         args.primaryIndex,
         args.globalIndexes,
         args.localIndexes,
         args.stream,
       ]).apply(
-        ([fields, primaryIndex, globalIndexes, localIndexes, stream]) =>
+        ([deletionProtectionEnabled, fields, primaryIndex, globalIndexes, localIndexes, stream]) =>
           new dynamodb.Table(
             ...transform(
               args.transform?.table,
@@ -433,6 +445,7 @@ export class Dynamo extends Component implements Link.Linkable {
                   type: type === "string" ? "S" : type === "number" ? "N" : "B",
                 })),
                 billingMode: "PAY_PER_REQUEST",
+                deletionProtectionEnabled: deletionProtectionEnabled,
                 hashKey: primaryIndex.hashKey,
                 rangeKey: primaryIndex.rangeKey,
                 streamEnabled: Boolean(stream),
