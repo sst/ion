@@ -339,7 +339,8 @@ export class StaticSite extends Component implements Link.Linkable {
                     key: file,
                     hash,
                     cacheControl: fileOption.cacheControl,
-                    contentType: getContentType(file, "UTF-8"),
+                    contentType:
+                      fileOption.contentType ?? getContentType(file, "UTF-8"),
                   };
                 }),
               )),
@@ -405,6 +406,7 @@ export class StaticSite extends Component implements Link.Linkable {
         [".pdf"]: { mime: "application/pdf", isText: false },
         [".zip"]: { mime: "application/zip", isText: false },
         [".wasm"]: { mime: "application/wasm", isText: false },
+        [".webmanifest"]: { mime: "application/manifest+json", isText: true },
       };
       const extensionData = extensions[ext as keyof typeof extensions];
       const mime = extensionData?.mime ?? "application/octet-stream";
