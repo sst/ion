@@ -17,17 +17,6 @@ import { permission } from "./permission";
 
 export interface DynamoArgs {
   /**
-   * Define whether the table has deletion protection enabled.
-   *
-   * @example
-   * ```js
-   * {
-   *   deletionProtectionEnabled: true,
-   * }
-   * ```
-   */
-  deletionProtectionEnabled?: Input<boolean>;
-  /**
    * An object defining the fields of the table that'll be used to create indexes. The key is the name of the field and the value is the type.
    *
    * :::note
@@ -213,6 +202,17 @@ export interface DynamoArgs {
    * ```
    */
   ttl?: Input<string>;
+  /**
+   * Enable deletion protection for the table. When enabled, the table cannot be deleted.
+   *
+   * @example
+   * ```js
+   * {
+   *   deletionProtection: true,
+   * }
+   * ```
+   */
+  deletionProtection?: Input<true>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -427,14 +427,21 @@ export class Dynamo extends Component implements Link.Linkable {
 
     function createTable() {
       return all([
-        args.deletionProtectionEnabled,
+        args.deletionProtection,
         args.fields,
         args.primaryIndex,
         args.globalIndexes,
         args.localIndexes,
         args.stream,
       ]).apply(
-        ([deletionProtectionEnabled, fields, primaryIndex, globalIndexes, localIndexes, stream]) =>
+        ([
+          deletionProtection,
+          fields,
+          primaryIndex,
+          globalIndexes,
+          localIndexes,
+          stream,
+        ]) =>
           new dynamodb.Table(
             ...transform(
               args.transform?.table,
@@ -445,7 +452,7 @@ export class Dynamo extends Component implements Link.Linkable {
                   type: type === "string" ? "S" : type === "number" ? "N" : "B",
                 })),
                 billingMode: "PAY_PER_REQUEST",
-                deletionProtectionEnabled: deletionProtectionEnabled,
+                deletionProtectionEnabled: deletionProtection,
                 hashKey: primaryIndex.hashKey,
                 rangeKey: primaryIndex.rangeKey,
                 streamEnabled: Boolean(stream),
