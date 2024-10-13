@@ -427,20 +427,20 @@ export class Dynamo extends Component implements Link.Linkable {
 
     function createTable() {
       return all([
-        args.deletionProtection,
         args.fields,
         args.primaryIndex,
         args.globalIndexes,
         args.localIndexes,
         args.stream,
+        args.deletionProtection,
       ]).apply(
         ([
-          deletionProtection,
           fields,
           primaryIndex,
           globalIndexes,
           localIndexes,
           stream,
+          deletionProtection,
         ]) =>
           new dynamodb.Table(
             ...transform(
@@ -452,7 +452,6 @@ export class Dynamo extends Component implements Link.Linkable {
                   type: type === "string" ? "S" : type === "number" ? "N" : "B",
                 })),
                 billingMode: "PAY_PER_REQUEST",
-                deletionProtectionEnabled: deletionProtection,
                 hashKey: primaryIndex.hashKey,
                 rangeKey: primaryIndex.rangeKey,
                 streamEnabled: Boolean(stream),
@@ -498,6 +497,7 @@ export class Dynamo extends Component implements Link.Linkable {
                         : { projectionType: "ALL" }),
                   }),
                 ),
+                deletionProtectionEnabled: deletionProtection,
               },
               { parent },
             ),
