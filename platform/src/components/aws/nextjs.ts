@@ -593,10 +593,11 @@ export class Nextjs extends Component implements Link.Linkable {
     function normalizeBuildCommand() {
       return all([args?.buildCommand, args?.openNextVersion]).apply(
         ([buildCommand, openNextVersion]) => {
+          if (buildCommand) return buildCommand;
           const version = openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION;
           const packageName = getOpenNextPackage(version);
-
-          return buildCommand ?? `npx --yes ${packageName}@${version} build`;
+          
+          return `npx --yes ${packageName}@${version} build`;
         }
       );
     }
