@@ -11,7 +11,7 @@ const CONTAINER_PORT = 8080;
 
 /**
  * ## Surrealdb in AWS [Fargate with EFS]
- * _A low cost setup **not recommended for production!_
+ * _A low cost setup **not recommended for production**!_
  *
  * You can use SST to deploy containers with persisting volumes, such as EFS.
  *
