@@ -49,8 +49,10 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 	fileName := strings.TrimSuffix(filepath.Base(rel), filepath.Ext(rel))
 	// Lambda handler can only contain 1 dot separating the file name and function name
 	fileName = strings.ReplaceAll(fileName, ".", "-")
-	handler := fileName + filepath.Ext(input.Handler)
-	target := filepath.Join(input.Out(), fileName+extension)
+	folder := filepath.Dir(rel)
+	path := filepath.Join(folder, fileName)
+	handler := path + filepath.Ext(input.Handler)
+	target := filepath.Join(input.Out(), path+extension)
 	slog.Info("loader info", "loader", properties.Loader)
 
 	loader := map[string]esbuild.Loader{}
@@ -227,7 +229,9 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 			if slices.Contains(installPackages, "sharp") {
 				cmd = append(cmd, "--libc=glibc")
 			}
-			err = exec.Command("npm", cmd...).Run()
+			proc := exec.Command("npm", cmd...)
+			proc.Dir = input.Out()
+			err = proc.Run()
 			if err != nil {
 				return nil, err
 			}

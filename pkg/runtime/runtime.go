@@ -43,7 +43,7 @@ type BuildInput struct {
 }
 
 func (input *BuildInput) Out() string {
-	suffix := ""
+	suffix := "-src"
 	if input.Dev {
 		suffix = "-dev"
 	}
@@ -167,7 +167,6 @@ func (c *Collection) Build(ctx context.Context, input *BuildInput) (*BuildOutput
 		}
 		ciphertext := gcm.Seal(nil, make([]byte, 12), json, nil)
 		err = os.WriteFile(filepath.Join(result.Out, "resource.enc"), ciphertext, 0644)
-		os.WriteFile(filepath.Join(result.Out, input.EncryptionKey), ciphertext, 0644)
 		if err != nil {
 			return nil, err
 		}
