@@ -619,7 +619,7 @@ export class Service extends Component implements Link.Linkable {
                     command: container.command,
                     entrypoint: container.entrypoint,
                     pseudoTerminal: true,
-                    portMappings: [{ containerPortRange: "1-65535" }],
+                    portMappings: container.portMappings || [{ containerPortRange: "1-65535" }],
                     logConfiguration: {
                       logDriver: "awslogs",
                       options: {

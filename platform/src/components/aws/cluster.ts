@@ -959,6 +959,46 @@ export interface ClusterServiceArgs {
       retention?: Input<keyof typeof RETENTION>;
     }>;
     /**
+     * Port mappings allow containers to access ports on the host container instance to send or
+     * receive traffic. Port mappings are specified as part of the container definition.
+     */
+    portMappings?: Input<{
+      /**
+       * The application protocol that's used for the port mapping.
+       * This parameter only applies to Service Connect.
+       * Valid Values: `http | http2 | grpc`
+       */
+      appProtocol?: Input<"http" | "http2" | "grpc">;
+      /**
+       * The port number on the container that's bound to the user-specified or automatically assigned host port.
+       */
+      containerPort: Input<number>;
+      /**
+       * The port number range on the container that's bound to the dynamically mapped host port range.
+       */
+      containerPortRange?: Input<string>;
+      /**
+       * The port number on the container instance to reserve for your container.
+       * If you omit this field, the host port is automatically assigned.
+       */
+      hostPort?: Input<number>;
+      /**
+       * The host port range.
+       * This is set automatically when using a container port range.
+       */
+      hostPortRange?: Input<string>;
+      /**
+       * The protocol used for the port mapping. Valid values are `tcp` and `udp`.
+       * The default is `tcp`.
+       */
+      protocol?: Input<"tcp" | "udp">;
+      /**
+       * The name that's used for the port mapping.
+       * This parameter only applies to Service Connect.
+       */
+      name?: Input<string>;
+    }>;
+    /**
      * Configure how this container works in `sst dev`. Same as the top-level
      * [`dev`](#dev).
      */
@@ -1138,7 +1178,7 @@ export class Cluster extends Component {
   constructor(
     name: string,
     args: ClusterArgs,
-    opts?: ComponentResourceOptions,
+    opts?: ComponentResourceOptions
   ) {
     const _version = 2;
     super(__pulumiType, name, args, opts, {
@@ -1168,7 +1208,7 @@ export class Cluster extends Component {
 
     function createCluster() {
       return new ecs.Cluster(
-        ...transform(args.transform?.cluster, `${name}Cluster`, {}, { parent }),
+        ...transform(args.transform?.cluster, `${name}Cluster`, {}, { parent })
       );
     }
   }
