@@ -8,14 +8,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/flag"
 	"github.com/sst/ion/pkg/project/path"
 	"github.com/sst/ion/pkg/runtime"
+	"golang.org/x/sync/semaphore"
 )
 
 var loaderMap = map[string]api.Loader{
@@ -32,16 +35,45 @@ var loaderMap = map[string]api.Loader{
 	"binary":  api.LoaderBinary,
 }
 
-type Runtime struct {
-	cfgPath  string
-	contexts map[string]esbuild.BuildContext
-	results  map[string]esbuild.BuildResult
+var LoaderToString = []string{
+	"none",
+	"base64",
+	"binary",
+	"copy",
+	"css",
+	"dataurl",
+	"default",
+	"empty",
+	"file",
+	"global-css",
+	"js",
+	"json",
+	"json",
+	"jsx",
+	"local-css",
+	"text",
+	"ts",
+	"ts",
+	"tsx",
 }
 
-func New() *Runtime {
+type Runtime struct {
+	version     string
+	contexts    sync.Map
+	results     sync.Map
+	concurrency *semaphore.Weighted
+}
+
+func New(version string) *Runtime {
+	weight := int64(4)
+	if flag.SST_BUILD_CONCURRENCY != "" {
+		weight, _ = strconv.ParseInt(flag.SST_BUILD_CONCURRENCY, 10, 64)
+	}
 	return &Runtime{
-		contexts: map[string]esbuild.BuildContext{},
-		results:  map[string]esbuild.BuildResult{},
+		contexts:    sync.Map{},
+		results:     sync.Map{},
+		version:     version,
+		concurrency: semaphore.NewWeighted(weight),
 	}
 }
 
@@ -79,9 +111,9 @@ func (w *Worker) Logs() io.ReadCloser {
 }
 
 type NodeProperties struct {
-	Loader       map[string]string `json:"loader"`
-	Install      []string
-	Banner       string
+	Loader       map[string]string    `json:"loader"`
+	Install      []string             `json:"install"`
+	Banner       string               `json:"banner"`
 	ESBuild      esbuild.BuildOptions `json:"esbuild"`
 	Minify       bool                 `json:"minify"`
 	Format       string               `json:"format"`
@@ -106,10 +138,7 @@ func (r *Runtime) Run(ctx context.Context, input *runtime.RunInput) (runtime.Wor
 		input.WorkerID,
 	)
 	util.SetProcessGroupID(cmd)
-	cmd.Cancel = func() error {
-		return util.TerminateProcess(cmd.Process.Pid)
-	}
-
+	util.SetProcessCancel(cmd)
 	cmd.Env = input.Env
 	cmd.Env = append(cmd.Env, "NODE_OPTIONS="+os.Getenv("NODE_OPTIONS"))
 	cmd.Env = append(cmd.Env, "VSCODE_INSPECTOR_OPTIONS="+os.Getenv("VSCODE_INSPECTOR_OPTIONS"))
@@ -135,7 +164,10 @@ func (r *Runtime) getFile(input *runtime.BuildInput) (string, bool) {
 	fileSplit := strings.Split(filepath.Base(input.Handler), ".")
 	base := strings.Join(fileSplit[:len(fileSplit)-1], ".")
 	for _, ext := range NODE_EXTENSIONS {
-		file := filepath.Join(path.ResolveRootDir(input.CfgPath), dir, base+ext)
+		file := filepath.Join(dir, base+ext)
+		if !filepath.IsAbs(file) {
+			file = filepath.Join(path.ResolveRootDir(input.CfgPath), file)
+		}
 		if _, err := os.Stat(file); err == nil {
 			return file, true
 		}
@@ -144,13 +176,13 @@ func (r *Runtime) getFile(input *runtime.BuildInput) (string, bool) {
 }
 
 func (r *Runtime) ShouldRebuild(functionID string, file string) bool {
-	result, ok := r.results[functionID]
+	result, ok := r.results.Load(functionID)
 	if !ok {
 		return false
 	}
 
 	var meta = map[string]interface{}{}
-	err := json.Unmarshal([]byte(result.Metafile), &meta)
+	err := json.Unmarshal([]byte(result.(esbuild.BuildResult).Metafile), &meta)
 	if err != nil {
 		return false
 	}

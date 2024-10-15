@@ -8,43 +8,63 @@ export default $config({
       home: "aws",
     };
   },
-  console: {
-    autodeploy: {
-      target(event) {
-        if (
-          event.type === "branch" &&
-          event.branch === "dev" &&
-          event.action === "pushed"
-        ) {
-          return { stage: "dev" };
-        }
-      },
-      workflow(context) {
-        context.install();
-        context.shell("cd examples/internal/playground && npm install");
-        context.deploy();
-      },
-    },
-  },
   async run() {
-    const bucket = new sst.aws.Bucket("MyBucket", {
-      access: "public",
-      transform: {
-        bucket: (args) => {
-          args.tags = { foo: "bar" };
+    const ret: Record<string, $util.Output<string>> = {};
+
+    const vpc = addVpc();
+    const bucket = addBucket();
+    //const app = addFunction();
+    //const service = addService();
+    //const cron = addCron();
+
+    return ret;
+
+    function addVpc() {
+      return new sst.aws.Vpc("MyVpc");
+    }
+
+    function addBucket() {
+      const bucket = new sst.aws.Bucket("MyBucket");
+      ret.bucket = bucket.name;
+      return bucket;
+    }
+
+    function addCron() {
+      const cron = new sst.aws.Cron("MyCron", {
+        schedule: "rate(1 minute)",
+        job: {
+          handler: "functions/handler-example/index.handler",
+          link: [bucket],
         },
-      },
-    });
+      });
+      ret.cron = cron.nodes.job.name;
+      return cron;
+    }
 
-    const app = new sst.aws.Function("MyApp", {
-      handler: "functions/handler-example/index.handler",
-      link: [bucket],
-      url: true,
-    });
+    function addFunction() {
+      const app = new sst.aws.Function("MyApp", {
+        handler: "functions/handler-example/index.handler",
+        link: [bucket],
+        url: true,
+      });
+      ret.app = app.url;
+      return app;
+    }
 
-    return {
-      bucket: bucket.name,
-      app: app.url,
-    };
+    function addService() {
+      const cluster = new sst.aws.Cluster("MyCluster", { vpc });
+      const service = cluster.addService("MyService", {
+        public: {
+          ports: [{ listen: "80/http" }],
+        },
+        image: {
+          context: "cluster",
+        },
+        link: [bucket],
+      });
+      ret.service = service.url;
+
+      return service;
+    }
   },
 });

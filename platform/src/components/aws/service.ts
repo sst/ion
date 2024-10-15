@@ -77,12 +77,14 @@ export class Service extends Component implements Link.Linkable {
   private readonly _service?: ecs.Service;
   private readonly cloudmapNamespace?: Output<string>;
   private readonly cloudmapService?: servicediscovery.Service;
+  private readonly executionRole?: iam.Role;
   private readonly taskRole: iam.Role;
   private readonly taskDefinition?: ecs.TaskDefinition;
   private readonly loadBalancer?: lb.LoadBalancer;
   private readonly domain?: Output<string | undefined>;
   private readonly _url?: Output<string>;
   private readonly devUrl?: Output<string>;
+  private readonly dev: boolean;
 
   constructor(
     name: string,
@@ -93,6 +95,7 @@ export class Service extends Component implements Link.Linkable {
 
     const self = this;
 
+    const dev = normalizeDev();
     const cluster = output(args.cluster);
     const { isSstVpc, vpc } = normalizeVpc();
     const region = normalizeRegion();
@@ -104,16 +107,14 @@ export class Service extends Component implements Link.Linkable {
     const containers = normalizeContainers();
     const pub = normalizePublic();
 
-    const linkData = buildLinkData();
-    const linkPermissions = buildLinkPermissions();
-
     const taskRole = createTaskRole();
 
+    this.dev = !!dev;
     this.cloudmapNamespace = vpc.cloudmapNamespaceName;
     this.taskRole = taskRole;
 
-    if ($dev) {
-      this.devUrl = !pub ? undefined : output(args.dev?.url ?? URL_UNAVAILABLE);
+    if (dev) {
+      this.devUrl = !pub ? undefined : dev.url;
       registerReceiver();
       return;
     }
@@ -130,6 +131,7 @@ export class Service extends Component implements Link.Linkable {
 
     this._service = service;
     this.cloudmapService = cloudmapService;
+    this.executionRole = executionRole;
     this.taskDefinition = taskDefinition;
     this.loadBalancer = loadBalancer;
     this.domain = pub?.domain
@@ -142,8 +144,17 @@ export class Service extends Component implements Link.Linkable {
             domain ? `https://${domain}/` : `http://${loadBalancer}`,
         );
 
-    registerHint();
+    this.registerOutputs({ _hint: this._url });
     registerReceiver();
+
+    function normalizeDev() {
+      if (!$dev) return undefined;
+      if (args.dev === false) return undefined;
+
+      return {
+        url: output(args.dev?.url ?? URL_UNAVAILABLE),
+      };
+    }
 
     function normalizeVpc() {
       // "vpc" is a Vpc.v1 component
@@ -356,14 +367,6 @@ export class Service extends Component implements Link.Linkable {
       return { ports, domain };
     }
 
-    function buildLinkData() {
-      return output(args.link || []).apply((links) => Link.build(links));
-    }
-
-    function buildLinkPermissions() {
-      return Link.getInclude<Permission>("aws.permission", args.link);
-    }
-
     function createLoadBalancer() {
       if (!pub) return {};
 
@@ -501,26 +504,36 @@ export class Service extends Component implements Link.Linkable {
     }
 
     function createTaskRole() {
-      const policy = all([args.permissions || [], linkPermissions]).apply(
-        ([argsPermissions, linkPermissions]) =>
-          iam.getPolicyDocumentOutput({
-            statements: [
-              ...argsPermissions,
-              ...linkPermissions.map((item) => ({
-                actions: item.actions,
-                resources: item.resources,
-              })),
-              {
-                actions: [
-                  "ssmmessages:CreateControlChannel",
-                  "ssmmessages:CreateDataChannel",
-                  "ssmmessages:OpenControlChannel",
-                  "ssmmessages:OpenDataChannel",
-                ],
-                resources: ["*"],
-              },
-            ],
-          }),
+      if (args.taskRole)
+        return iam.Role.get(
+          `${name}TaskRole`,
+          args.taskRole,
+          {},
+          { parent: self },
+        );
+
+      const policy = all([
+        args.permissions || [],
+        Link.getInclude<Permission>("aws.permission", args.link),
+      ]).apply(([argsPermissions, linkPermissions]) =>
+        iam.getPolicyDocumentOutput({
+          statements: [
+            ...argsPermissions,
+            ...linkPermissions.map((item) => ({
+              actions: item.actions,
+              resources: item.resources,
+            })),
+            {
+              actions: [
+                "ssmmessages:CreateControlChannel",
+                "ssmmessages:CreateDataChannel",
+                "ssmmessages:OpenControlChannel",
+                "ssmmessages:OpenDataChannel",
+              ],
+              resources: ["*"],
+            },
+          ],
+        }),
       );
 
       return new iam.Role(
@@ -528,7 +541,7 @@ export class Service extends Component implements Link.Linkable {
           args.transform?.taskRole,
           `${name}TaskRole`,
           {
-            assumeRolePolicy: !$dev
+            assumeRolePolicy: !dev
               ? iam.assumeRolePolicyForPrincipal({
                   Service: "ecs-tasks.amazonaws.com",
                 })
@@ -547,17 +560,28 @@ export class Service extends Component implements Link.Linkable {
     }
 
     function createExecutionRole() {
+      if (args.executionRole)
+        return iam.Role.get(
+          `${name}ExecutionRole`,
+          args.executionRole,
+          {},
+          { parent: self },
+        );
+
       return new iam.Role(
-        `${name}ExecutionRole`,
-        {
-          assumeRolePolicy: iam.assumeRolePolicyForPrincipal({
-            Service: "ecs-tasks.amazonaws.com",
-          }),
-          managedPolicyArns: [
-            "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
-          ],
-        },
-        { parent: self },
+        ...transform(
+          args.transform?.executionRole,
+          `${name}ExecutionRole`,
+          {
+            assumeRolePolicy: iam.assumeRolePolicyForPrincipal({
+              Service: "ecs-tasks.amazonaws.com",
+            }),
+            managedPolicyArns: [
+              "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+            ],
+          },
+          { parent: self },
+        ),
       );
     }
 
@@ -583,7 +607,11 @@ export class Service extends Component implements Link.Linkable {
             executionRoleArn: executionRole.arn,
             taskRoleArn: taskRole.arn,
             containerDefinitions: $jsonStringify(
-              containers.apply((containers) =>
+              all([
+                containers,
+                args.environment ?? [],
+                Link.propertiesToEnv(Link.getProperties(args.link)),
+              ]).apply(([containers, env, linkEnvs]) =>
                 containers.map((container) => {
                   return {
                     name: container.name,
@@ -600,28 +628,8 @@ export class Service extends Component implements Link.Linkable {
                         "awslogs-stream-prefix": "/service",
                       },
                     },
-                    environment: all([args.environment ?? [], container.environment ?? [], linkData]).apply(
-                      ([env, containerEnv, linkData]) => [
-                        ...Object.entries(env).map(([name, value]) => ({
-                          name,
-                          value,
-                        })),
-                        ...Object.entries(containerEnv).map(([name, value]) => ({
-                          name,
-                          value,
-                        })),
-                        ...linkData.map((d) => ({
-                          name: `SST_RESOURCE_${d.name}`,
-                          value: JSON.stringify(d.properties),
-                        })),
-                        {
-                          name: "SST_RESOURCE_App",
-                          value: JSON.stringify({
-                            name: $app.name,
-                            stage: $app.stage,
-                          }),
-                        },
-                      ],
+                    environment: Object.entries({ ...env, ...container.environment, ...linkEnvs }).map(
+                      ([name, value]) => ({ name, value }),
                     ),
                     linuxParameters: {
                       initProcessEnabled: true,
@@ -629,74 +637,73 @@ export class Service extends Component implements Link.Linkable {
                   };
 
                   function createImage() {
-                    return container.image.apply((imageArgs) => {
-                      if (typeof imageArgs === "string")
-                        return output(imageArgs);
+                    if (typeof container.image === "string")
+                      return output(container.image);
 
-                      const contextPath = path.join(
-                        $cli.paths.root,
-                        imageArgs.context,
-                      );
-                      const dockerfile = imageArgs.dockerfile ?? "Dockerfile";
-                      const dockerfilePath = imageArgs.dockerfile
-                        ? path.join($cli.paths.root, imageArgs.dockerfile)
-                        : path.join(
-                            $cli.paths.root,
-                            imageArgs.context,
-                            "Dockerfile",
-                          );
-                      const dockerIgnorePath = fs.existsSync(
-                        path.join(contextPath, `${dockerfile}.dockerignore`),
-                      )
-                        ? path.join(contextPath, `${dockerfile}.dockerignore`)
-                        : path.join(contextPath, ".dockerignore");
-
-                      // add .sst to .dockerignore if not exist
-                      const lines = fs.existsSync(dockerIgnorePath)
-                        ? fs
-                            .readFileSync(dockerIgnorePath)
-                            .toString()
-                            .split("\n")
-                        : [];
-                      if (!lines.find((line) => line === ".sst")) {
-                        fs.writeFileSync(
-                          dockerIgnorePath,
-                          [...lines, "", "# sst", ".sst"].join("\n"),
+                    const contextPath = path.join(
+                      $cli.paths.root,
+                      container.image.context,
+                    );
+                    const dockerfile =
+                      container.image.dockerfile ?? "Dockerfile";
+                    const dockerfilePath = container.image.dockerfile
+                      ? path.join($cli.paths.root, container.image.dockerfile)
+                      : path.join(
+                          $cli.paths.root,
+                          container.image.context,
+                          "Dockerfile",
                         );
-                      }
+                    const dockerIgnorePath = fs.existsSync(
+                      path.join(contextPath, `${dockerfile}.dockerignore`),
+                    )
+                      ? path.join(contextPath, `${dockerfile}.dockerignore`)
+                      : path.join(contextPath, ".dockerignore");
 
-                      // Build image
-                      const image = new Image(
-                        ...transform(
-                          args.transform?.image,
-                          `${name}Image${container.name}`,
-                          {
-                            context: { location: contextPath },
-                            dockerfile: { location: dockerfilePath },
-                            buildArgs: imageArgs.args ?? {},
-                            platforms: [imageArgs.platform],
-                            tags: [
-                              interpolate`${bootstrapData.assetEcrUrl}:${container.name}`,
-                            ],
-                            registries: [
-                              ecr
-                                .getAuthorizationTokenOutput({
-                                  registryId: bootstrapData.assetEcrRegistryId,
-                                })
-                                .apply((authToken) => ({
-                                  address: authToken.proxyEndpoint,
-                                  password: secret(authToken.password),
-                                  username: authToken.userName,
-                                })),
-                            ],
-                            push: true,
-                          },
-                          { parent: self },
-                        ),
+                    // add .sst to .dockerignore if not exist
+                    const lines = fs.existsSync(dockerIgnorePath)
+                      ? fs.readFileSync(dockerIgnorePath).toString().split("\n")
+                      : [];
+                    if (!lines.find((line) => line === ".sst")) {
+                      fs.writeFileSync(
+                        dockerIgnorePath,
+                        [...lines, "", "# sst", ".sst"].join("\n"),
                       );
+                    }
 
-                      return interpolate`${bootstrapData.assetEcrUrl}@${image.digest}`;
-                    });
+                    // Build image
+                    const image = new Image(
+                      ...transform(
+                        args.transform?.image,
+                        `${name}Image${container.name}`,
+                        {
+                          context: { location: contextPath },
+                          dockerfile: { location: dockerfilePath },
+                          buildArgs: {
+                            ...container.image.args,
+                            ...linkEnvs,
+                          },
+                          platforms: [container.image.platform],
+                          tags: [
+                            interpolate`${bootstrapData.assetEcrUrl}:${container.name}`,
+                          ],
+                          registries: [
+                            ecr
+                              .getAuthorizationTokenOutput({
+                                registryId: bootstrapData.assetEcrRegistryId,
+                              })
+                              .apply((authToken) => ({
+                                address: authToken.proxyEndpoint,
+                                password: secret(authToken.password),
+                                username: authToken.userName,
+                              })),
+                          ],
+                          push: true,
+                        },
+                        { parent: self },
+                      ),
+                    );
+
+                    return interpolate`${bootstrapData.assetEcrUrl}@${image.digest}`;
                   }
 
                   function createLogGroup() {
@@ -706,9 +713,8 @@ export class Service extends Component implements Link.Linkable {
                         `${name}LogGroup${container.name}`,
                         {
                           name: interpolate`/sst/cluster/${cluster.name}/${name}/${container.name}`,
-                          retentionInDays: container.logging.apply(
-                            (logging) => RETENTION[logging.retention],
-                          ),
+                          retentionInDays:
+                            RETENTION[container.logging.retention],
                         },
                         { parent: self },
                       ),
@@ -847,10 +853,6 @@ export class Service extends Component implements Link.Linkable {
       });
     }
 
-    function registerHint() {
-      self.registerOutputs({ _hint: self._url });
-    }
-
     function registerReceiver() {
       containers.apply((val) => {
         for (const container of val) {
@@ -860,11 +862,20 @@ export class Service extends Component implements Link.Linkable {
             dev: {
               title,
               autostart: true,
+              directory: output(args.image).apply((image) => {
+                if (!image) return "";
+                if (typeof image === "string") return "";
+                if (image.context) return path.dirname(image.context);
+                return "";
+              }),
               ...container.dev,
             },
             environment: {
               ...container.environment,
               AWS_REGION: region,
+            },
+            aws: {
+              role: taskRole.arn,
             },
           });
         }
@@ -881,7 +892,7 @@ export class Service extends Component implements Link.Linkable {
   public get url() {
     const errorMessage =
       "Cannot access the URL because no public ports are exposed.";
-    if ($dev) {
+    if (this.dev) {
       if (!this.devUrl) throw new VisibleError(errorMessage);
       return this.devUrl;
     }
@@ -894,8 +905,9 @@ export class Service extends Component implements Link.Linkable {
    * The name of the Cloud Map service.
    */
   public get service() {
-    if ($dev) return interpolate`dev.${this.cloudmapNamespace}`;
-    return interpolate`${this.cloudmapService!.name}.${this.cloudmapNamespace}`;
+    return this.dev
+      ? interpolate`dev.${this.cloudmapNamespace}`
+      : interpolate`${this.cloudmapService!.name}.${this.cloudmapNamespace}`;
   }
 
   /**
@@ -908,21 +920,23 @@ export class Service extends Component implements Link.Linkable {
        * The Amazon ECS Service.
        */
       get service() {
-        if ($dev)
+        if (self.dev)
           throw new VisibleError("Cannot access `nodes.service` in dev mode.");
         return self.service!;
       },
       /**
+       * The Amazon ECS Execution Role.
+       */
+      executionRole: this.executionRole,
+      /**
        * The Amazon ECS Task Role.
        */
-      get taskRole() {
-        return self.taskRole;
-      },
+      taskRole: this.taskRole,
       /**
        * The Amazon ECS Task Definition.
        */
       get taskDefinition() {
-        if ($dev)
+        if (self.dev)
           throw new VisibleError(
             "Cannot access `nodes.taskDefinition` in dev mode.",
           );
@@ -932,7 +946,7 @@ export class Service extends Component implements Link.Linkable {
        * The Amazon Elastic Load Balancer.
        */
       get loadBalancer() {
-        if ($dev)
+        if (self.dev)
           throw new VisibleError(
             "Cannot access `nodes.loadBalancer` in dev mode.",
           );
@@ -949,7 +963,7 @@ export class Service extends Component implements Link.Linkable {
   public getSSTLink() {
     return {
       properties: {
-        url: $dev ? this.devUrl : this._url,
+        url: this.dev ? this.devUrl : this._url,
         service: this.service,
       },
     };

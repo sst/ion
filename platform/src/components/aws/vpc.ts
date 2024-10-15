@@ -5,10 +5,9 @@ import {
   interpolate,
   output,
 } from "@pulumi/pulumi";
-import { $print, Component, Transform, transform } from "../component";
+import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
 import {
-  autoscaling,
   ec2,
   getAvailabilityZonesOutput,
   iam,
@@ -37,18 +36,28 @@ export interface VpcArgs {
   /**
    * Configures NAT. Enabling NAT allows resources in private subnets to connect to the internet.
    *
-   * If `"managed"` is specified, a NAT Gateway is created in each AZ. All the traffic from
+   * There are two NAT options:
+   * 1. `"managed"` creates a [NAT Gateway](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html)
+   * 2. `"ec2"` creates an [EC2 instance](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html)
+   *    with the [fck-nat](https://github.com/AndrewGuenther/fck-nat) AMI
+   *
+   * For `"managed"`, a NAT Gateway is created in each AZ. All the traffic from
    * the private subnets are routed to the NAT Gateway in the same AZ.
    *
    * NAT Gateways are billed per hour and per gigabyte of data processed. Each NAT Gateway
    * roughly costs $33 per month. Make sure to [review the pricing](https://aws.amazon.com/vpc/pricing/).
    *
-   * If `"ec2"` is specified, an EC2 instance of type `t4g.nano` will be launched in each AZ
+   * For `"ec2"`, an EC2 instance of type `t4g.nano` will be launched in each AZ
    * with the [fck-nat](https://github.com/AndrewGuenther/fck-nat) AMI. All the traffic from
    * the private subnets are routed to the Elastic Network Interface (ENI) of the EC2 instance
    * in the same AZ.
    *
-   * NAT instances are much cheaper than NAT Gateways, but they need to be managed manually.
+   * :::tip
+   * The `"ec2"` option uses fck-nat and is 10x cheaper than the `"managed"` NAT Gateway.
+   * :::
+   *
+   * NAT EC2 instances are much cheaper than NAT Gateways, the `t4g.nano` instance type is around
+   * $3 per month. But you'll need to scale it up manually if you need more bandwidth.
    *
    * @default NAT is disabled
    * @example
@@ -58,16 +67,54 @@ export interface VpcArgs {
    * }
    * ```
    */
-  nat?: Input<"ec2" | "managed">;
+  nat?: Input<
+    | "ec2"
+    | "managed"
+    | {
+        /**
+         * Configures the NAT EC2 instance.
+         * @default `{instance: "t4g.nano"}`
+         * @example
+         * ```ts
+         * {
+         *   nat: {
+         *     ec2: {
+         *       instance: "t4g.large"
+         *     }
+         *   }
+         * }
+         * ```
+         */
+        ec2: Input<{
+          /**
+           * The type of instance to use for the NAT.
+           *
+           * @default `"t4g.nano"`
+           */
+          instance: Input<string>;
+        }>;
+      }
+  >;
   /**
    * Configures a bastion host that can be used to connect to resources in the VPC.
    *
    * When enabled, an EC2 instance of type `t4g.nano` with the bastion AMI will be launched
    * in a public subnet. The instance will have AWS SSM (AWS Session Manager) enabled for
-   * secure access without the need for SSH key management.
+   * secure access without the need for SSH key.
    *
-   * However if `nat` is enabled and `"ec2"` is specified, a NAT instance will be used
-   * as the bastion host. No additional bastion instance will be created.
+   * It costs roughly $3 per month to run the `t4g.nano` instance.
+   *
+   * :::note
+   * If `nat: "ec2"` is enabled, the bastion host will reuse the NAT EC2 instance.
+   * :::
+   *
+   * However if `nat: "ec2"` is enabled, the EC2 instance that NAT creates will be used
+   * as the bastion host. No additional EC2 instance will be created.
+   *
+   * If you are running `sst dev`, a tunnel will be automatically created to the bastion host.
+   * This uses a network interface to forward traffic from your local machine to the bastion host.
+   *
+   * You can learn more about [`sst tunnel`](/docs/reference/cli#tunnel).
    *
    * @default Bastion is not created
    * @example
@@ -209,7 +256,11 @@ export class Vpc extends Component implements Link.Linkable {
     const _version = 2;
     super(__pulumiType, name, args, opts, {
       _version,
-      _message: `To continue using the previous version, rename "Vpc" to "Vpc.v${$cli.state.version[name]}". Or recreate this component to update - https://sst.dev/docs/component/aws/cluster#forceupgrade`,
+      _message: [
+        `There is a new version of "Vpc" that has breaking changes.`,
+        ``,
+        `To continue using the previous version, rename "Vpc" to "Vpc.v${$cli.state.version[name]}". Or recreate this component to update - https://sst.dev/docs/components/#versioning`,
+      ].join("\n"),
     });
 
     const parent = this;
@@ -264,13 +315,21 @@ export class Vpc extends Component implements Link.Linkable {
 
     function registerOutputs() {
       parent.registerOutputs({
-        _tunnel: all([parent.bastionInstance, parent.privateKeyValue]).apply(
-          ([bastion, privateKeyValue]) => {
+        _tunnel: all([
+          parent.bastionInstance,
+          parent.privateKeyValue,
+          parent._privateSubnets,
+          parent._publicSubnets,
+        ]).apply(
+          ([bastion, privateKeyValue, privateSubnets, publicSubnets]) => {
             if (!bastion) return;
             return {
               ip: bastion.publicIp,
               username: "ec2-user",
               privateKey: privateKeyValue!,
+              subnets: [...privateSubnets, ...publicSubnets].map(
+                (s) => s.cidrBlock,
+              ),
             };
           },
         ),
@@ -292,7 +351,13 @@ export class Vpc extends Component implements Link.Linkable {
     }
 
     function normalizeNat() {
-      return output(args?.nat).apply((nat) => nat);
+      return output(args?.nat).apply((nat) => {
+        if (nat === "managed") return { type: "managed" as const };
+        if (nat === "ec2")
+          return { type: "ec2" as const, ec2: { instance: "t4g.nano" } };
+        if (nat) return { type: "ec2" as const, ec2: nat.ec2 };
+        return undefined;
+      });
     }
 
     function createVpc() {
@@ -384,7 +449,7 @@ export class Vpc extends Component implements Link.Linkable {
 
     function createNatGateways() {
       const ret = all([nat, publicSubnets]).apply(([nat, subnets]) => {
-        if (nat !== "managed") return [];
+        if (nat?.type !== "managed") return [];
 
         return subnets.map((subnet, i) => {
           const elasticIp = new ec2.Eip(
@@ -421,7 +486,7 @@ export class Vpc extends Component implements Link.Linkable {
 
     function createNatInstances() {
       return nat.apply((nat) => {
-        if (nat !== "ec2") return output([]);
+        if (nat?.type !== "ec2") return output([]);
 
         const sg = new ec2.SecurityGroup(
           `${name}NatInstanceSecurityGroup`,
@@ -500,7 +565,7 @@ export class Vpc extends Component implements Link.Linkable {
             return new ec2.Instance(
               `${name}NatInstance${i + 1}`,
               {
-                instanceType: "t4g.nano",
+                instanceType: nat.ec2.instance,
                 ami: ami.id,
                 subnetId: publicSubnets[i].id,
                 vpcSecurityGroupIds: [sg.id],
@@ -780,7 +845,7 @@ export class Vpc extends Component implements Link.Linkable {
   }
 
   /**
-   * The bastion instance id.
+   * The bastion instance ID.
    */
   public get bastion() {
     return this.bastionInstance.apply((v) => {

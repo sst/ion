@@ -114,13 +114,12 @@ func (r *PythonRuntime) Build(ctx context.Context, input *runtime.BuildInput) (*
 		// Copy the file to the target directory
 		err = copyFile(file, destPath)
 		if err != nil {
-			slog.Error("Error copying file %s to %s: %v", file, destPath, err)
+			slog.Error("Error copying file", "from", file, "to", destPath, "err", err)
 			continue
 		}
 
 		slog.Info("Copied file %s to %s", file, destPath)
 	}
-
 
 	// Find the closest pyproject.toml
 	startingPath := filepath.Dir(file)
@@ -142,7 +141,7 @@ func (r *PythonRuntime) Build(ctx context.Context, input *runtime.BuildInput) (*
 
 	// We need to check if a deployment instead of dev
 	rpcBuildEnabled := false
-	if !input.Dev && rpcBuildEnabled{
+	if !input.Dev && rpcBuildEnabled {
 		// Handle zip and containers differently
 		// TODO: walln - handle container flag (not sure how the RPC call is shaped from component?)
 
@@ -172,11 +171,8 @@ func (r *PythonRuntime) Build(ctx context.Context, input *runtime.BuildInput) (*
 				ctx,
 				"uv",
 				"sync")
-
 			util.SetProcessGroupID(uvSyncCmd)
-			uvSyncCmd.Cancel = func() error {
-				return util.TerminateProcess(uvSyncCmd.Process.Pid)
-			}
+			util.SetProcessCancel(uvSyncCmd)
 
 			// use the output pyproject.toml directory as the working directory
 			workDir := filepath.Dir(filepath.Join(targetDir, filepath.Base(pyProjectFile)))
@@ -197,9 +193,7 @@ func (r *PythonRuntime) Build(ctx context.Context, input *runtime.BuildInput) (*
 				filepath.Join(workDir, ".venv", "lib", "python3.*", "site-packages", "*"),
 				filepath.Join(targetDir))
 			util.SetProcessGroupID(sitePackagesCmd)
-			sitePackagesCmd.Cancel = func() error {
-				return util.TerminateProcess(sitePackagesCmd.Process.Pid)
-			}
+			util.SetProcessCancel(sitePackagesCmd)
 
 			slog.Info("starting build site packages", "env", sitePackagesCmd.Env, "args", sitePackagesCmd.Args)
 			sitePackagesCmd.Dir = workDir
@@ -215,8 +209,8 @@ func (r *PythonRuntime) Build(ctx context.Context, input *runtime.BuildInput) (*
 				"rm",
 				"-rf",
 				filepath.Join(workDir, ".venv"))
-			
 			util.SetProcessGroupID(removeVirtualEnvCmd)
+			util.SetProcessCancel(removeVirtualEnvCmd)
 			removeVirtualEnvCmd.Cancel = func() error {
 				return util.TerminateProcess(removeVirtualEnvCmd.Process.Pid)
 			}
@@ -281,7 +275,7 @@ func (r *PythonRuntime) Run(ctx context.Context, input *runtime.RunInput) (runti
 	// Decode the TOML file
 	var pyProject PyProject
 	if _, err := toml.DecodeFile(pyprojectFile, &pyProject); err != nil {
-		slog.Error("Error decoding TOML file: %v", err)
+		slog.Error("Error decoding TOML file", "err", err)
 	}
 
 	// Extract the dependencies
@@ -349,8 +343,8 @@ func (r *PythonRuntime) Run(ctx context.Context, input *runtime.RunInput) (runti
 		ctx,
 		"uv",
 		args...)
-
 	util.SetProcessGroupID(cmd)
+	util.SetProcessCancel(cmd)
 	cmd.Cancel = func() error {
 		return util.TerminateProcess(cmd.Process.Pid)
 	}
@@ -489,13 +483,12 @@ func getPythonFiles(filePath string) ([]string, error) {
 	}
 
 	return pythonFiles, nil
-	}
-
+}
 
 func writeResourcesFile(resourcesFile string, links map[string]json.RawMessage) error {
 	jsonData, err := json.MarshalIndent(links, "", "  ")
 	if err != nil {
-			return fmt.Errorf("failed to marshal links to JSON: %v", err)
+		return fmt.Errorf("failed to marshal links to JSON: %v", err)
 	}
 
 	// determine the directory of the resources file

@@ -1,17 +1,19 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"os/user"
 	"strings"
-	"syscall"
 
 	"github.com/sst/ion/cmd/sst/cli"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
+	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/tunnel"
 	"golang.org/x/sync/errgroup"
 )
@@ -19,26 +21,96 @@ import (
 var CmdTunnel = &cli.Command{
 	Name: "tunnel",
 	Description: cli.Description{
-		Short: "",
-		Long:  strings.Join([]string{}, "\n"),
+		Short: "Start a tunnel",
+		Long: strings.Join([]string{
+			"Start a tunnel.",
+			"",
+			"```bash frame=\"none\"",
+			"sst tunnel",
+			"```",
+			"",
+			"If your app has a VPC with `bastion` enabled, you can use this to connect to it.",
+			"This will forward traffic from the following ranges over SSH:",
+			"- `10.0.4.0/22`",
+			"- `10.0.12.0/22`",
+			"- `10.0.0.0/22`",
+			"- `10.0.8.0/22`",
+			"",
+			"The tunnel allows your local machine to access resources that are in the VPC.",
+			"",
+			":::note",
+			"The tunnel is only available for apps that have a VPC with `bastion` enabled.",
+			":::",
+			"",
+			"If you are running `sst dev`, this tunnel will be started automatically under the",
+			"_Tunnel_ tab in the sidebar.",
+			"",
+			":::tip",
+			"This is automatically started when you run `sst dev`.",
+			":::",
+			"",
+			"You can start this manually if you want to connect to a different stage.",
+			"",
+			"```bash frame=\"none\"",
+			"sst tunnel --stage production",
+			"```",
+			"",
+			"This needs a network interface on your local machine. You can create this",
+			"with the `sst tunnel install` command.",
+		}, "\n"),
 	},
 	Run: func(c *cli.Cli) error {
 		proj, err := c.InitProject()
 		if err != nil {
 			return err
 		}
-		_, err = proj.GetCompleted(c.Context)
+		state, err := proj.GetCompleted(c.Context)
 		if err != nil {
 			return err
 		}
+		if len(state.Tunnels) == 0 {
+			return util.NewReadableError(nil, "No tunnels found for stage "+proj.App().Stage)
+		}
+		var tun project.Tunnel
+		for _, item := range state.Tunnels {
+			tun = item
+		}
+		subnets := strings.Join(tun.Subnets, ",")
 		// run as root
-		tunnelCmd := exec.Command("sudo", "/opt/sst/sst", "tunnel", "start")
+		tunnelCmd := exec.CommandContext(
+			c.Context,
+			"sudo", "-n", "-E",
+			tunnel.BINARY_PATH, "tunnel", "start",
+			"--subnets", subnets,
+			"--host", tun.IP,
+			"--user", tun.Username,
+		)
+		tunnelCmd.Env = append(
+			os.Environ(),
+			"SST_SKIP_LOCAL=true",
+			"SST_SKIP_DEPENDENCY_CHECK=true",
+			"SSH_PRIVATE_KEY="+tun.PrivateKey,
+		)
 		tunnelCmd.Stdout = os.Stdout
-		tunnelCmd.Stderr = os.Stderr
+		util.SetProcessGroupID(tunnelCmd)
+		util.SetProcessCancel(tunnelCmd)
+		slog.Info("starting tunnel", "cmd", tunnelCmd.Args)
+		fmt.Println(ui.TEXT_HIGHLIGHT_BOLD.Render("Tunnel"))
+		fmt.Println()
+		fmt.Print(ui.TEXT_HIGHLIGHT_BOLD.Render("➜"))
+		fmt.Println(ui.TEXT_NORMAL.Render("  Forwarding ranges"))
+		for _, subnet := range tun.Subnets {
+			fmt.Println(ui.TEXT_DIM.Render("   " + subnet))
+		}
+		fmt.Println()
+		fmt.Println(ui.TEXT_DIM.Render("Waiting for connections..."))
+		fmt.Println()
+		stderr, _ := tunnelCmd.StderrPipe()
 		tunnelCmd.Start()
-		<-c.Context.Done()
-		tunnelCmd.Process.Signal(syscall.SIGINT)
-		tunnelCmd.Wait()
+		output, _ := io.ReadAll(stderr)
+		if strings.Contains(string(output), "password is required") {
+			return util.NewReadableError(nil, "Make sure you have installed the tunnel with `sudo sst tunnel install`")
+		}
 		return nil
 	},
 	Children: []*cli.Command{
@@ -49,9 +121,14 @@ var CmdTunnel = &cli.Command{
 				Long: strings.Join([]string{
 					"Install the tunnel.",
 					"",
-					"This will install the tunnel on your system.",
+					"To be able to create a tunnel, SST needs to create a network interface on your local",
+					"machine. This needs _sudo_ access.",
 					"",
-					"This is required for the tunnel to work.",
+					"```bash \"sudo\"",
+					"sudo sst tunnel install",
+					"```",
+					"",
+					"You only need to run this once on your machine.",
 				}, "\n"),
 			},
 			Run: func(c *cli.Cli) error {
@@ -83,28 +160,37 @@ var CmdTunnel = &cli.Command{
 				}, "\n"),
 			},
 			Hidden: true,
-			Args: []cli.Argument{
+			Flags: []cli.Flag{
 				{
-					Name: "subnet",
+					Name: "subnets",
+					Type: "string",
 					Description: cli.Description{
 						Short: "The subnet to use for the tunnel",
 						Long:  "The subnet to use for the tunnel",
 					},
-					Required: true,
 				},
 				{
 					Name: "host",
+					Type: "string",
 					Description: cli.Description{
 						Short: "The host to use for the tunnel",
 						Long:  "The host to use for the tunnel",
 					},
-					Required: true,
 				},
 				{
 					Name: "port",
+					Type: "string",
 					Description: cli.Description{
 						Short: "The port to use for the tunnel",
 						Long:  "The port to use for the tunnel",
+					},
+				},
+				{
+					Name: "user",
+					Type: "string",
+					Description: cli.Description{
+						Short: "The user to use for the tunnel",
+						Long:  "The user to use for the tunnel",
 					},
 				},
 			},
@@ -113,24 +199,33 @@ var CmdTunnel = &cli.Command{
 				if err != nil {
 					return err
 				}
-				subnet := c.Positional(0)
-				host := c.Positional(1)
-				port := c.Positional(2)
-				slog.Info("starting tunnel", "subnet", subnet, "host", host, "port", port)
+				subnets := strings.Split(c.String("subnets"), ",")
+				host := c.String("host")
+				port := c.String("port")
+				user := c.String("user")
 				if port == "" {
 					port = "22"
 				}
+				slog.Info("starting tunnel", "subnet", subnets, "host", host, "port", port)
 				var wg errgroup.Group
 				wg.Go(func() error {
 					defer c.Cancel()
-					return tunnel.StartProxy(c.Context, host+":"+port, []byte(os.Getenv("SSH_PRIVATE_KEY")))
+					return tunnel.StartProxy(
+						c.Context,
+						user,
+						host+":"+port,
+						[]byte(os.Getenv("SSH_PRIVATE_KEY")),
+					)
 				})
 				wg.Go(func() error {
 					defer c.Cancel()
-					return tunnel.Start(c.Context, subnet)
+					return tunnel.Start(c.Context, subnets...)
 				})
 				slog.Info("tunnel started")
-				wg.Wait()
+				err = wg.Wait()
+				if err != nil {
+					slog.Error("failed to start tunnel", "error", err)
+				}
 				return nil
 			},
 		},

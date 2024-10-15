@@ -26,8 +26,9 @@ import { Queue } from "./queue.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { dynamodb, lambda } from "@pulumi/aws";
 import { URL_UNAVAILABLE } from "./linkable.js";
+import { getOpenNextPackage } from "../../util/compare-semver.js";
 
-const DEFAULT_OPEN_NEXT_VERSION = "3.0.8";
+const DEFAULT_OPEN_NEXT_VERSION = "3.1.4";
 const DEFAULT_CACHE_POLICY_ALLOWED_HEADERS = ["x-open-next-cache-key"];
 
 type BaseFunction = {
@@ -515,16 +516,6 @@ export class Nextjs extends Component implements Link.Linkable {
           path: sitePath,
           server: server.arn,
         },
-        _receiver: {
-          directory: sitePath,
-          links: output(args.link || [])
-            .apply(Link.build)
-            .apply((links) => links.map((link) => link.name)),
-          aws: {
-            role: server.nodes.role.arn,
-          },
-          environment: args.environment,
-        },
         _dev: {
           links: output(args.link || [])
             .apply(Link.build)
@@ -601,14 +592,13 @@ export class Nextjs extends Component implements Link.Linkable {
 
     function normalizeBuildCommand() {
       return all([args?.buildCommand, args?.openNextVersion]).apply(
-        ([buildCommand, openNextVersion]) =>
-          buildCommand ??
-          [
-            "npx",
-            "--yes",
-            `open-next@${openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION}`,
-            "build",
-          ].join(" "),
+        ([buildCommand, openNextVersion]) => {
+          if (buildCommand) return buildCommand;
+          const version = openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION;
+          const packageName = getOpenNextPackage(version);
+          
+          return `npx --yes ${packageName}@${version} build`;
+        }
       );
     }
 
