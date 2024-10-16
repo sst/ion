@@ -10,7 +10,7 @@ import {
   secret,
 } from "@pulumi/pulumi";
 import { Image, Platform } from "@pulumi/docker-build";
-import { $print, Component, transform } from "../component.js";
+import { Component, transform } from "../component.js";
 import { toGBs, toMBs } from "../size.js";
 import { toNumber } from "../cpu.js";
 import { dns as awsDns } from "./dns.js";
@@ -609,9 +609,8 @@ export class Service extends Component implements Link.Linkable {
             containerDefinitions: $jsonStringify(
               all([
                 containers,
-                args.environment ?? [],
                 Link.propertiesToEnv(Link.getProperties(args.link)),
-              ]).apply(([containers, env, linkEnvs]) =>
+              ]).apply(([containers, linkEnvs]) =>
                 containers.map((container) => {
                   return {
                     name: container.name,
@@ -628,9 +627,10 @@ export class Service extends Component implements Link.Linkable {
                         "awslogs-stream-prefix": "/service",
                       },
                     },
-                    environment: Object.entries({ ...env, ...linkEnvs }).map(
-                      ([name, value]) => ({ name, value }),
-                    ),
+                    environment: Object.entries({
+                      ...container.environment,
+                      ...linkEnvs,
+                    }).map(([name, value]) => ({ name, value })),
                     linuxParameters: {
                       initProcessEnabled: true,
                     },
@@ -688,9 +688,12 @@ export class Service extends Component implements Link.Linkable {
                           ],
                           registries: [
                             ecr
-                              .getAuthorizationTokenOutput({
-                                registryId: bootstrapData.assetEcrRegistryId,
-                              })
+                              .getAuthorizationTokenOutput(
+                                {
+                                  registryId: bootstrapData.assetEcrRegistryId,
+                                },
+                                { parent: self },
+                              )
                               .apply((authToken) => ({
                                 address: authToken.proxyEndpoint,
                                 password: secret(authToken.password),

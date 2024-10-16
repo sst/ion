@@ -1,10 +1,9 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
 /**
- * ## EC2 (using Pulumi) example
+ * ## EC2 with Pulumi
  *
- * SST allows you to use raw Pulumi when an SST abstraction is missing.
- * In this case creating an EC2 instance.
+ * Use raw Pulumi resources to create an EC2 instance.
  */
 export default $config({
   app(input) {
