@@ -286,7 +286,7 @@ export class Realtime extends Component implements Link.Linkable {
    * );
    * ```
    *
-   * Subscribe with an existing Lambda function.
+   * Or pass in the ARN of an existing Lambda function.
    *
    * ```js title="sst.config.ts"
    * server.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function", {
@@ -295,7 +295,7 @@ export class Realtime extends Component implements Link.Linkable {
    * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args: RealtimeSubscriberArgs,
   ) {
     return all([subscriber, args.filter]).apply(([subscriber, filter]) => {

@@ -111,6 +111,7 @@ export interface BucketArgs {
    * :::
    *
    * Should only be turned on if you want to host public files directly from the bucket.
+   * @deprecated Use `access` instead.
    * @default `false`
    * @example
    * ```js
@@ -120,6 +121,26 @@ export interface BucketArgs {
    * ```
    */
   public?: Input<boolean>;
+  /**
+   * Enable public read access for all the files in the bucket. By default, no access is
+   * granted.
+   *
+   * :::tip
+   * If you are using the `Router` to serve files from this bucket, you need to allow
+   * `cloudfront` access the bucket.
+   * :::
+   *
+   * This adds a statement to the bucket policy that either allows `public` access or just
+   * `cloudfront` access.
+   *
+   * @example
+   * ```js
+   * {
+   *   access: "public"
+   * }
+   * ```
+   */
+  access?: Input<"public" | "cloudfront">;
   /**
    * The CORS configuration for the bucket. Defaults to `true`, which is the same as:
    *
@@ -139,6 +160,21 @@ export interface BucketArgs {
    */
   cors?: Input<false | Prettify<BucketCorsArgs>>;
   /**
+   * Enable versioning for the bucket.
+   *
+   * Bucket versioning enables you to store multiple versions of an object, protecting
+   * against accidental deletion or overwriting.
+   *
+   * @default Versioning disabled
+   * @example
+   * ```js
+   * {
+   *   versioning: true
+   * }
+   * ```
+   */
+  versioning?: Input<true>;
+  /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
    */
@@ -155,6 +191,10 @@ export interface BucketArgs {
      * Transform the S3 Bucket Policy resource.
      */
     policy?: Transform<s3.BucketPolicyArgs>;
+    /**
+     * Transform the S3 Bucket versioning resource.
+     */
+    versioning?: Transform<s3.BucketVersioningV2Args>;
     /**
      * Transform the public access block resource that's attached to the Bucket.
      *
@@ -263,7 +303,7 @@ interface BucketRef {
  *
  * ```ts title="sst.config.ts"
  * new sst.aws.Bucket("MyBucket", {
- *   public: true
+ *   access: "public"
  * });
  * ```
  *
@@ -319,9 +359,10 @@ export class Bucket extends Component implements Link.Linkable {
     }
 
     const parent = this;
-    const publicAccess = normalizePublicAccess();
+    const access = normalizeAccess();
 
     const bucket = createBucket();
+    createVersioning();
     const publicAccessBlock = createPublicAccess();
     const policy = createBucketPolicy();
     createCorsRule();
@@ -332,8 +373,10 @@ export class Bucket extends Component implements Link.Linkable {
     // another policy is created after this one.
     this.bucket = policy.apply(() => bucket);
 
-    function normalizePublicAccess() {
-      return output(args.public).apply((v) => v ?? false);
+    function normalizeAccess() {
+      return all([args.public, args.access]).apply(([pub, access]) =>
+        pub === true ? "public" : access,
+      );
     }
 
     function createBucket() {
@@ -364,6 +407,24 @@ export class Bucket extends Component implements Link.Linkable {
       return new s3.BucketV2(...transformed);
     }
 
+    function createVersioning() {
+      if (!args.versioning) return;
+
+      return new s3.BucketVersioningV2(
+        ...transform(
+          args.transform?.versioning,
+          `${name}Versioning`,
+          {
+            bucket: bucket.bucket,
+            versioningConfiguration: {
+              status: "Enabled",
+            },
+          },
+          { parent },
+        ),
+      );
+    }
+
     function createPublicAccess() {
       if (args.transform?.publicAccessBlock === false) return;
 
@@ -374,9 +435,9 @@ export class Bucket extends Component implements Link.Linkable {
           {
             bucket: bucket.bucket,
             blockPublicAcls: true,
-            blockPublicPolicy: publicAccess.apply((v) => !v),
+            blockPublicPolicy: access.apply((v) => v !== "public"),
             ignorePublicAcls: true,
-            restrictPublicBuckets: publicAccess.apply((v) => !v),
+            restrictPublicBuckets: access.apply((v) => v !== "public"),
           },
           { parent },
         ),
@@ -384,11 +445,18 @@ export class Bucket extends Component implements Link.Linkable {
     }
 
     function createBucketPolicy() {
-      return publicAccess.apply((publicAccess) => {
+      return access.apply((access) => {
         const statements = [];
-        if (publicAccess) {
+        if (access) {
           statements.push({
-            principals: [{ type: "*", identifiers: ["*"] }],
+            principals: [
+              access === "public"
+                ? { type: "*", identifiers: ["*"] }
+                : {
+                    type: "Service",
+                    identifiers: ["cloudfront.amazonaws.com"],
+                  },
+            ],
             actions: ["s3:GetObject"],
             resources: [interpolate`${bucket.arn}/*`],
           });
@@ -569,14 +637,14 @@ export class Bucket extends Component implements Link.Linkable {
    * });
    * ```
    *
-   * Subscribe with an existing Lambda function.
+   * Or pass in the ARN of an existing Lambda function.
    *
    * ```js title="sst.config.ts"
    * bucket.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function");
    * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args?: BucketSubscriberArgs,
   ) {
     this.ensureNotSubscribed();
@@ -639,7 +707,7 @@ export class Bucket extends Component implements Link.Linkable {
    */
   public static subscribe(
     bucketArn: Input<string>,
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args?: BucketSubscriberArgs,
   ) {
     return output(bucketArn).apply((bucketArn) => {
@@ -658,7 +726,7 @@ export class Bucket extends Component implements Link.Linkable {
     name: string,
     bucketName: Input<string>,
     bucketArn: Input<string>,
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args: BucketSubscriberArgs = {},
     opts: ComponentResourceOptions = {},
   ) {
@@ -754,13 +822,13 @@ export class Bucket extends Component implements Link.Linkable {
    * You can subscribe to the bucket with the queue.
    *
    * ```js title="sst.config.ts"
-   * sst.aws.Bucket.subscribe(bucketArn, queueArn);
+   * sst.aws.Bucket.subscribeQueue(bucketArn, queueArn);
    * ```
    *
    * Subscribe to specific S3 events.
    *
    * ```js title="sst.config.ts"
-   * sst.aws.Bucket.subscribe(bucketArn, queueArn, {
+   * sst.aws.Bucket.subscribeQueue(bucketArn, queueArn, {
    *   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
    * });
    * ```
@@ -768,7 +836,7 @@ export class Bucket extends Component implements Link.Linkable {
    * Subscribe to specific S3 events from a specific folder.
    *
    * ```js title="sst.config.ts" {2}
-   * sst.aws.Bucket.subscribe(bucketArn, queueArn, {
+   * sst.aws.Bucket.subscribeQueue(bucketArn, queueArn, {
    *   filterPrefix: "images/",
    *   events: ["s3:ObjectCreated:*", "s3:ObjectRemoved:*"]
    * });

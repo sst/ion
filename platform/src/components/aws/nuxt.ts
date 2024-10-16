@@ -135,21 +135,25 @@ export interface NuxtArgs extends SsrSiteArgs {
    */
   invalidation?: SsrSiteArgs["invalidation"];
   /**
-   * Set in your Nuxt app. These are made available:
+   * Set [environment variables](https://cli.vuejs.org/guide/mode-and-env.html) in your Nuxt
+   * app. These are made available:
    *
-   * 1. In `vinxi build`, they are loaded into `process.env`.
+   * 1. In `nuxt build`, they are loaded into `process.env`.
    * 2. Locally while running through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your Nuxt app and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
    * :::
    *
+   * Recall that in Vue, you need to prefix your environment variables with `VUE_APP_` to access these in the browser. [Read more here](https://cli.vuejs.org/guide/mode-and-env.html#using-env-variables-in-client-side-code).
+   *
    * @example
    * ```js
    * {
    *   environment: {
    *     API_URL: api.url,
-   *     STRIPE_PUBLISHABLE_KEY: "pk_test_123"
+   *     // Accessible in the browser
+   *     VUE_APP_STRIPE_PUBLISHABLE_KEY: "pk_test_123"
    *   }
    * }
    * ```
@@ -362,16 +366,6 @@ export class Nuxt extends Component implements Link.Linkable {
           mode: "placeholder",
           path: sitePath,
           server: server.arn,
-        },
-        _receiver: {
-          directory: sitePath,
-          links: output(args.link || [])
-            .apply(Link.build)
-            .apply((links) => links.map((link) => link.name)),
-          aws: {
-            role: server.nodes.role.arn,
-          },
-          environment: args.environment,
         },
         _dev: {
           links: output(args.link || [])

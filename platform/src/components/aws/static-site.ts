@@ -67,45 +67,186 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
    */
   path?: BaseStaticSiteArgs["path"];
   /**
-   * Configure CloudFront Functions to customize the behavior of HTTP requests and responses at the edge locations.
+   * Configure CloudFront Functions to customize the behavior of HTTP requests and responses at the edge.
    */
   edge?: Input<{
     /**
-     * The ARN of the CloudFront function to use for the viewer request.
+     * Configure the viewer request function.
      *
-     * The viewer request function can be used to modify incoming requests before they reach your origin server. For example, you can redirect users, rewrite URLs, or add headers.
+     * The viewer request function can be used to modify incoming requests before they reach
+     * your origin server. For example, you can redirect users, rewrite URLs, or add headers.
      *
      * By default, a viewer request function is created to rewrite URLs to:
-     * - append `index.html` to the URL if the URL ends with a `/`.
-     * - append `.html` to the URL if the URL does not contain a file extension.
+     * - Append `index.html` to the URL if the URL ends with a `/`.
+     * - Append `.html` to the URL if the URL does not contain a file extension.
      *
-     * @default Uses the default viewer request function.
      * @example
+     *
+     * You can pass in the code to inject into the function. The provided code will be
+     * injected at the end of the function.
+     *
+     * ```js
+     * async function handler(event) {
+     *   // Default behavior code
+     *
+     *   // User injected code
+     *
+     *   return event.request;
+     * }
+     * ```
+     *
+     * To add a custom header to all requests.
+     *
      * ```js
      * {
      *   edge: {
-     *     viewerRequest: "arn:aws:cloudfront::1234567890:function/MyViewRequestFunction"
+     *     viewerRequest: {
+     *       injection: `event.request.headers["x-foo"] = "bar";`
+     *     }
+     *   }
+     * }
+     * ```
+     *
+     * You can use this add basic auth, [check out an example](/docs/examples/#aws-static-site-basic-auth).
+     *
+     * @example
+     *
+     * Alternatively you can pass in the ARN of an existing CloudFront function to
+     * override the default behavior.
+     *
+     * ```js
+     * {
+     *   edge: {
+     *     viewerRequest: "arn:aws:cloudfront::123456789012:function/my-function"
      *   }
      * }
      * ```
      */
-    viewerRequest?: Input<string>;
+    viewerRequest?: Input<
+      | string
+      | {
+          /**
+           * The code to inject into the viewer request function.
+           *
+           * @example
+           * To add a custom header to all requests.
+           *
+           * ```js
+           * {
+           *   edge: {
+           *     viewerRequest: {
+           *       injection: `event.request.headers["x-foo"] = "bar";`
+           *     }
+           *   }
+           * }
+           * ```
+           */
+          injection: Input<string>;
+          /**
+           * The KV stores to associate with the viewer request function.
+           *
+           * Takes a list of CloudFront KeyValueStore ARNs.
+           *
+           * @example
+           * ```js
+           * {
+           *   edge: {
+           *     viewerRequest: {
+           *       kvStores: ["arn:aws:cloudfront::123456789012:key-value-store/my-store"]
+           *     }
+           *   }
+           * }
+           * ```
+           */
+          kvStores?: Input<Input<string>[]>;
+        }
+    >;
     /**
-     * The ARN of the CloudFront function to use for the viewer response.
+     * Configure the viewer response function.
      *
-     * The viewer response function can be used to modify outgoing responses before they are sent to the client. For example, you can add security headers or change the response status code.
+     * The viewer response function can be used to modify outgoing responses before they
+     * are sent to the client. For example, you can add security headers or change the response
+     * status code.
      *
-     * @default No viewer response function is set.
+     * By default, no viewer response function is set. A new function will be created with
+     * the provided code.
+     *
      * @example
+     *
+     * You can pass in the code to inject into the function. And a CloudFront function will
+     * be created with the provided code injected into it.
+     *
+     * ```js
+     * async function handler(event) {
+     *   // User injected code
+     *
+     *   return event.response;
+     * }
+     * ```
+     *
+     * To add a custom header to all responses.
+     *
      * ```js
      * {
      *   edge: {
-     *     viewerResponse: "arn:aws:cloudfront::1234567890:function/MyViewResponseFunction"
+     *     viewerResponse: {
+     *       injection: `event.response.headers["x-foo"] = "bar";`
+     *     }
+     *   }
+     * }
+     * ```
+     *
+     * @example
+     *
+     * Alternatively you can pass in the ARN of an existing CloudFront function.
+     *
+     * ```js
+     * {
+     *   edge: {
+     *     viewerResponse: "arn:aws:cloudfront::123456789012:function/my-function"
      *   }
      * }
      * ```
      */
-    viewerResponse?: Input<string>;
+    viewerResponse?: Input<
+      | string
+      | {
+          /**
+           * The code to inject into the viewer response function.
+           *
+           * @example
+           * To add a custom header to all responses.
+           *
+           * ```js
+           * {
+           *   edge: {
+           *     viewerResponse: {
+           *       injection: `event.response.headers["x-foo"] = "bar";`
+           *     }
+           *   }
+           * }
+           * ```
+           */
+          injection: Input<string>;
+          /**
+           * The KV stores to associate with the viewer response function.
+           *
+           * Takes a list of CloudFront KeyValueStore ARNs.
+           *
+           * @example
+           * ```js
+           * {
+           *   edge: {
+           *     viewerResponse: {
+           *       kvStores: ["arn:aws:cloudfront::123456789012:key-value-store/my-store"]
+           *     }
+           *   }
+           * }
+           * ```
+           */
+          kvStores?: Input<Input<string>[]>;
+        }
+    >;
   }>;
   /**
    * Configure if your static site needs to be built. This is useful if you are using a static site generator.
@@ -197,6 +338,19 @@ export interface StaticSiteArgs extends BaseStaticSiteArgs {
        * ```
        */
       path?: Input<string>;
+      /**
+       * Configure if files from previous deployments should be purged from the bucket.
+       * @default `true`
+       * @example
+       * ```js
+       * {
+       *   assets: {
+       *     purge: false
+       *   }
+       * }
+       * ```
+       */
+      purge?: Input<boolean>;
     }
   >;
   /**
@@ -467,7 +621,6 @@ export class StaticSite extends Component implements Link.Linkable {
   ) {
     super(__pulumiType, name, args, opts);
 
-    let defaultCfFunction: cloudfront.Function;
     const parent = this;
     const { sitePath, environment, indexPage } = prepare(args);
     const dev = normalizeDev();
@@ -481,13 +634,6 @@ export class StaticSite extends Component implements Link.Linkable {
           environment,
           url: this.url,
         },
-        _receiver: all([sitePath, environment]).apply(
-          ([sitePath, environment]) => ({
-            directory: sitePath,
-            links: [],
-            environment,
-          }),
-        ),
         _dev: {
           environment,
           command: dev.command,
@@ -517,13 +663,6 @@ export class StaticSite extends Component implements Link.Linkable {
 
     this.registerOutputs({
       _hint: this.url,
-      _receiver: all([sitePath, environment]).apply(
-        ([sitePath, environment]) => ({
-          directory: sitePath,
-          links: [],
-          environment,
-        }),
-      ),
       _metadata: {
         mode: "deployed",
         path: sitePath,
@@ -553,6 +692,7 @@ export class StaticSite extends Component implements Link.Linkable {
               v.replace(/^\//, "").replace(/\/$/, ""),
             )
           : undefined,
+        purge: args.assets?.purge ?? true,
       };
     }
 
@@ -571,35 +711,7 @@ export class StaticSite extends Component implements Link.Linkable {
         ...transform(
           args.transform?.assets,
           `${name}Assets`,
-          {
-            transform: {
-              policy: (policyArgs) => {
-                const newPolicy = iam.getPolicyDocumentOutput({
-                  statements: [
-                    {
-                      principals: [
-                        {
-                          type: "Service",
-                          identifiers: ["cloudfront.amazonaws.com"],
-                        },
-                      ],
-                      actions: ["s3:GetObject"],
-                      resources: [interpolate`${bucket!.arn}/*`],
-                    },
-                  ],
-                }).json;
-                policyArgs.policy = output([
-                  policyArgs.policy,
-                  newPolicy,
-                ]).apply(([policy, newPolicy]) => {
-                  const policyJson = JSON.parse(policy as string);
-                  const newPolicyJson = JSON.parse(newPolicy as string);
-                  policyJson.Statement.push(...newPolicyJson.Statement);
-                  return JSON.stringify(policyJson);
-                });
-              },
-            },
-          },
+          { access: "cloudfront" },
           { parent, retainOnDelete: false },
         ),
       );
@@ -676,7 +788,7 @@ export class StaticSite extends Component implements Link.Linkable {
           {
             bucketName,
             files: bucketFiles,
-            purge: true,
+            purge: assets.purge,
           },
           { parent },
         );
@@ -779,14 +891,13 @@ export class StaticSite extends Component implements Link.Linkable {
               functionAssociations: output(args.edge).apply((edge) => [
                 {
                   eventType: "viewer-request",
-                  functionArn:
-                    edge?.viewerRequest ?? createCloudfrontFunction().arn,
+                  functionArn: createCloudfrontRequestFunction(),
                 },
                 ...(edge?.viewerResponse
                   ? [
                       {
                         eventType: "viewer-response",
-                        functionArn: edge.viewerResponse,
+                        functionArn: createCloudfrontResponseFunction(),
                       },
                     ]
                   : []),
@@ -801,29 +912,52 @@ export class StaticSite extends Component implements Link.Linkable {
       );
     }
 
-    function createCloudfrontFunction() {
-      defaultCfFunction =
-        defaultCfFunction ??
-        new cloudfront.Function(
+    function createCloudfrontRequestFunction() {
+      return output(args.edge).apply((edge) => {
+        if (typeof edge?.viewerRequest === "string")
+          return output(edge.viewerRequest);
+
+        return new cloudfront.Function(
           `${name}Function`,
           {
-            runtime: "cloudfront-js-1.0",
+            runtime: "cloudfront-js-2.0",
+            keyValueStoreAssociations: edge?.viewerRequest?.kvStores ?? [],
             code: `
-    function handler(event) {
-        var request = event.request;
-        var uri = request.uri;
-        if (uri.endsWith('/')) {
-          request.uri += 'index.html';
-        } else if (!uri.includes('.')) {
-          request.uri += '.html';
-        }
-        return request;
-    }`,
+async function handler(event) {
+  if (event.request.uri.endsWith('/')) {
+    event.request.uri += 'index.html';
+  } else if (!event.request.uri.includes('.')) {
+    event.request.uri += '.html';
+  }
+  ${edge?.viewerRequest?.injection ?? ""}
+  return event.request;
+}`,
           },
           { parent },
-        );
+        ).arn;
+      });
+    }
 
-      return defaultCfFunction;
+    function createCloudfrontResponseFunction() {
+      return output(args.edge).apply((edge) => {
+        if (typeof edge?.viewerResponse === "string")
+          return output(edge.viewerResponse);
+
+        return new cloudfront.Function(
+          `${name}ResponseFunction`,
+          {
+            runtime: "cloudfront-js-2.0",
+            keyValueStoreAssociations: edge?.viewerResponse?.kvStores ?? [],
+            code: `
+async function handler(event) {
+  ${edge?.viewerResponse?.injection ?? ""}
+  return event.response;
+}
+`,
+          },
+          { parent },
+        ).arn;
+      });
     }
 
     function buildInvalidation() {

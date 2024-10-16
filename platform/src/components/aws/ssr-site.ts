@@ -193,50 +193,54 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs {
      */
     layers?: Input<Input<string>[]>;
     /**
-     * Configure CloudFront Functions to customize the behavior of HTTP requests and responses at the edge locations.
+     * Configure CloudFront Functions to customize the behavior of HTTP requests and responses at the edge.
      */
     edge?: Input<{
       /**
        * Configure the viewer request function.
        *
-       * The viewer request function can be used to modify incoming requests before they reach your origin server. For example, you can redirect users, rewrite URLs, or add headers.
-       *
-       * By default, a viewer request function is created to inject the `x-forwarded-host` header. The provided code will be injected at the end of the function.
-       *
-       * ```js
-       * function handler(event) {
-       *
-       *   // Default behavior code
-       *   ...
-       *
-       *   // User injected code
-       *   ...
-       *
-       *   return request;
-       * }
-       * ```
-       *
-       * @example
-       * Add a custom header to all requests
-       * ```js
-       * {
-       *   server: {
-       *     edge: {
-       *       viewerRequest: {
-       *         injection: `request.headers["x-foo"] = "bar";`
-       *       }
-       *     }
-       *   }
-       * }
-       * ```
+       * The viewer request function can be used to modify incoming requests before they reach
+       * your origin server. For example, you can redirect users, rewrite URLs, or add headers.
        */
       viewerRequest?: Input<{
         /**
-         * Code to inject into the viewer request function.
+         * The code to inject into the viewer request function.
+         *
+         * By default, a viewer request function is created to add the `x-forwarded-host`
+         * header. The given code will be injected at the end of this function.
+         *
+         * ```js
+         * async function handler(event) {
+         *   // Default behavior code
+         *
+         *   // User injected code
+         *
+         *   return event.request;
+         * }
+         * ```
+         *
+         * @example
+         * To add a custom header to all requests.
+         *
+         * ```js
+         * {
+         *   server: {
+         *     edge: {
+         *       viewerRequest: {
+         *         injection: `event.request.headers["x-foo"] = "bar";`
+         *       }
+         *     }
+         *   }
+         * }
+         * ```
+         *
+         * You can use this add basic auth, [check out an example](/docs/examples/#aws-nextjs-basic-auth).
          */
         injection: Input<string>;
         /**
          * The KV stores to associate with the viewer request function.
+         *
+         * Takes a list of CloudFront KeyValueStore ARNs.
          *
          * @example
          * ```js
@@ -256,31 +260,45 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs {
       /**
        * Configure the viewer response function.
        *
-       * The viewer response function can be used to modify outgoing responses before they are sent to the client. For example, you can add security headers or change the response status code.
-       *
-       * By default, no viewer response function is set. A new function will be created with the provided code.
-       *
-       * @example
-       * Add a custom header to all responses
-       * ```js
-       * {
-       *   server: {
-       *     edge: {
-       *       viewerResponse: {
-       *         injection: `response.headers["x-foo"] = "bar";`
-       *       }
-       *     }
-       *   }
-       * }
-       * ```
+       * The viewer response function can be used to modify outgoing responses before they are
+       * sent to the client. For example, you can add security headers or change the response
+       * status code.
        */
       viewerResponse?: Input<{
         /**
-         * Code to inject into the viewer response function.
+         * The code to inject into the viewer response function.
+         *
+         * By default, no viewer response function is set. A new function will be created with
+         * the provided code.
+         *
+         * ```js
+         * async function handler(event) {
+         *   // User injected code
+         *
+         *   return event.response;
+         * }
+         * ```
+         *
+         * @example
+         * To add a custom header to all responses.
+         *
+         * ```js
+         * {
+         *   server: {
+         *     edge: {
+         *       viewerResponse: {
+         *         injection: `event.response.headers["x-foo"] = "bar";`
+         *       }
+         *     }
+         *   }
+         * }
+         * ```
          */
         injection: Input<string>;
         /**
          * The KV stores to associate with the viewer response function.
+         *
+         * Takes a list of CloudFront KeyValueStore ARNs.
          *
          * @example
          * ```js
@@ -398,35 +416,7 @@ export function createBucket(
       ...transform(
         args.transform?.assets,
         `${name}Assets`,
-        {
-          transform: {
-            policy: (policyArgs) => {
-              const newPolicy = iam.getPolicyDocumentOutput({
-                statements: [
-                  {
-                    principals: [
-                      {
-                        type: "Service",
-                        identifiers: ["cloudfront.amazonaws.com"],
-                      },
-                    ],
-                    actions: ["s3:GetObject"],
-                    resources: [interpolate`${bucket.arn}/*`],
-                  },
-                ],
-              }).json;
-
-              policyArgs.policy = output([policyArgs.policy, newPolicy]).apply(
-                ([policy, newPolicy]) => {
-                  const policyJson = JSON.parse(policy as string);
-                  const newPolicyJson = JSON.parse(newPolicy as string);
-                  policyJson.Statement.push(...newPolicyJson.Statement);
-                  return JSON.stringify(policyJson);
-                },
-              );
-            },
-          },
-        },
+        { access: "cloudfront" },
         { parent, retainOnDelete: false },
       ),
     );
@@ -760,9 +750,12 @@ export function createServersAndDistribution(
               ...(permissions ?? []),
               ...(props.function.permissions ?? []),
             ]),
-            injections: args.warm
-              ? [useServerFunctionWarmingInjection(props.function.streaming)]
-              : [],
+            injections: [
+              ...(args.warm
+                ? [useServerFunctionWarmingInjection(props.function.streaming)]
+                : []),
+              ...(props.function.injections || []),
+            ],
             link: output(args.link).apply((link) => [
               ...(props.function.link ?? []),
               ...(link ?? []),
@@ -925,11 +918,10 @@ export function createServersAndDistribution(
             runtime: "cloudfront-js-2.0",
             keyValueStoreAssociations: config.apply((v) => v?.kvStores ?? []),
             code: interpolate`
-function handler(event) {
-  var request = event.request;
+async function handler(event) {
   ${injections.join("\n")}
   ${config.apply((v) => v?.injection ?? "")}
-  return request;
+  return event.request;
 }`,
           },
           { parent },
@@ -1179,7 +1171,7 @@ function handler(event) {
 }
 
 export function useCloudFrontFunctionHostHeaderInjection() {
-  return `request.headers["x-forwarded-host"] = request.headers.host;`;
+  return `event.request.headers["x-forwarded-host"] = event.request.headers.host;`;
 }
 
 export function validatePlan<

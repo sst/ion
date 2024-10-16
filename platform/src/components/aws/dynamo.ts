@@ -5,7 +5,7 @@ import {
   interpolate,
   output,
 } from "@pulumi/pulumi";
-import { Component, Transform, transform } from "../component";
+import { Component, outputId, Transform, transform } from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
 import { FunctionArgs, FunctionArn } from "./function";
@@ -202,6 +202,17 @@ export interface DynamoArgs {
    * ```
    */
   ttl?: Input<string>;
+  /**
+   * Enable deletion protection for the table. When enabled, the table cannot be deleted.
+   *
+   * @example
+   * ```js
+   * {
+   *   deletionProtection: true,
+   * }
+   * ```
+   */
+  deletionProtection?: Input<true>;
   /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
@@ -421,8 +432,16 @@ export class Dynamo extends Component implements Link.Linkable {
         args.globalIndexes,
         args.localIndexes,
         args.stream,
+        args.deletionProtection,
       ]).apply(
-        ([fields, primaryIndex, globalIndexes, localIndexes, stream]) =>
+        ([
+          fields,
+          primaryIndex,
+          globalIndexes,
+          localIndexes,
+          stream,
+          deletionProtection,
+        ]) =>
           new dynamodb.Table(
             ...transform(
               args.transform?.table,
@@ -478,6 +497,7 @@ export class Dynamo extends Component implements Link.Linkable {
                         : { projectionType: "ALL" }),
                   }),
                 ),
+                deletionProtectionEnabled: deletionProtection,
               },
               { parent },
             ),
@@ -555,14 +575,14 @@ export class Dynamo extends Component implements Link.Linkable {
    * });
    * ```
    *
-   * Subscribe with an existing Lambda function.
+   * Or pass in the ARN of an existing Lambda function.
    *
    * ```js title="sst.config.ts"
    * table.subscribe("arn:aws:lambda:us-east-1:123456789012:function:my-function");
    * ```
    */
   public subscribe(
-    subscriber: string | FunctionArgs | FunctionArn,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args?: DynamoSubscriberArgs,
   ) {
     const sourceName = this.constructorName;
@@ -632,7 +652,7 @@ export class Dynamo extends Component implements Link.Linkable {
    */
   public static subscribe(
     streamArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args?: DynamoSubscriberArgs,
   ) {
     return output(streamArn).apply((streamArn) =>
@@ -647,8 +667,8 @@ export class Dynamo extends Component implements Link.Linkable {
 
   private static _subscribe(
     name: string,
-    streamArn: Input<string>,
-    subscriber: string | FunctionArgs,
+    streamArn: string | Output<string>,
+    subscriber: Input<string | FunctionArgs | FunctionArn>,
     args: DynamoSubscriberArgs = {},
     opts: ComponentResourceOptions = {},
   ) {
@@ -656,7 +676,7 @@ export class Dynamo extends Component implements Link.Linkable {
       const suffix = logicalName(
         hashStringToPrettyString(
           [
-            streamArn,
+            typeof streamArn === "string" ? streamArn : outputId,
             JSON.stringify(args.filters ?? {}),
             typeof subscriber === "string" ? subscriber : subscriber.handler,
           ].join(""),

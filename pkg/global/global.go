@@ -1,7 +1,6 @@
 package global
 
 import (
-	"archive/tar"
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
@@ -16,12 +15,12 @@ import (
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3"
+	"github.com/sst/ion/pkg/flag"
 )
 
 var PULUMI_VERSION = "v" + sdk.Version.String()
 
-const BUN_VERSION = "1.1.24"
-
+const BUN_VERSION = "1.1.29"
 const UV_VERSION = "0.3.2"
 
 var configDir = (func() string {
@@ -77,7 +76,7 @@ func InstallPulumi() error {
 	case "arm64":
 		osArch += "-arm64"
 	default:
-		return fmt.Errorf("unsupported architecture")
+		return fmt.Errorf("unsupported architecture: " + runtime.GOARCH)
 	}
 
 	fileExtension := ".tar.gz"
@@ -98,6 +97,11 @@ func InstallPulumi() error {
 		return fmt.Errorf("failed to download pulumi: HTTP status %d", resp.StatusCode)
 	}
 
+	tmp := filepath.Join(BinPath(), ".tmp")
+	err = os.MkdirAll(tmp, 0755)
+	if err != nil {
+		return err
+	}
 	switch fileExtension {
 	case ".tar.gz":
 		gzr, err := gzip.NewReader(resp.Body)
@@ -105,7 +109,7 @@ func InstallPulumi() error {
 			return err
 		}
 		defer gzr.Close()
-		err = untar(gzr, BinPath())
+		err = untar(gzr, tmp)
 		if err != nil {
 			return err
 		}
@@ -113,6 +117,18 @@ func InstallPulumi() error {
 	default:
 		panic("cannot extract zip file for pulumi")
 	}
+
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		return err
+	}
+	for _, file := range entries {
+		err = os.Rename(filepath.Join(tmp, file.Name()), filepath.Join(BinPath(), file.Name()))
+		if err != nil {
+			return err
+		}
+	}
+	os.RemoveAll(tmp)
 
 	return nil
 }
@@ -125,10 +141,6 @@ func BunPath() string {
 	return filepath.Join(BinPath(), "bun")
 }
 
-func UvPath() string {
-	return filepath.Join(BinPath(), "uv")
-}
-
 func BinPath() string {
 	return filepath.Join(configDir, "bin")
 }
@@ -137,110 +149,10 @@ func CertPath() string {
 	return filepath.Join(configDir, "cert")
 }
 
-func NeedsUv() bool {
-	path := UvPath()
-	slog.Info("checking for uv", "path", path)
-	if _, err := os.Stat(path); err != nil {
-		return true
-	}
-	cmd := exec.Command(path, "--version")
-	output, err := cmd.Output()
-	if err != nil {
-		return true
-	}
-	version := strings.Fields(strings.TrimSpace(string(output)))[1]
-	return version != UV_VERSION
-}
-
-func InstallUv() error {
-	slog.Info("uv install")
-	goos := runtime.GOOS
-	arch := runtime.GOARCH
-	uvPath := UvPath()
-
-	var filename string
-	switch {
-	case goos == "darwin" && arch == "arm64":
-		filename = "uv-aarch64-apple-darwin.tar.gz"
-	case goos == "darwin" && arch == "amd64":
-		filename = "uv-x86_64-apple-darwin.tar.gz"
-	case goos == "linux" && arch == "arm64":
-		filename = "uv-aarch64-unknown-linux-gnu.tar.gz"
-	case goos == "linux" && arch == "amd64":
-		filename = "uv-x86_64-unknown-linux-gnu.tar.gz"
-	default:
-	}
-	if filename == "" {
-		return fmt.Errorf("unsupported platform: %s %s", goos, arch)
-	}
-
-	url := "https://github.com/astral-sh/uv/releases/download/" + UV_VERSION + "/" + filename
-	slog.Info("uv downloading", "url", url)
-	response, err := http.Get(url)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("bad status: %s", response.Status)
-	}
-
-	// Read the entire response body into memory
-	bodyBytes, err := io.ReadAll(response.Body)
-	if err != nil {
-		return err
-	}
-
-	// use a buffer to extract the tar.gz file
-	gzipReader, err := gzip.NewReader(bytes.NewReader(bodyBytes))
-	if err != nil {
-		return err
-	}
-	defer gzipReader.Close()
-
-	tarReader := tar.NewReader(gzipReader)
-
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("untar: Next() failed: %v", err)
-		}
-
-		// Check if the current file is the `uv` binary
-		if filepath.Base(header.Name) == "uv" {
-			tmpFile := filepath.Join(BinPath(), "sst-uv-download")
-			outFile, err := os.Create(tmpFile)
-			if err != nil {
-				return err
-			}
-			defer outFile.Close()
-
-			if _, err := io.Copy(outFile, tarReader); err != nil {
-				return err
-			}
-
-			outFile.Close()
-
-			err = os.Rename(tmpFile, uvPath)
-			if err != nil {
-				return err
-			}
-
-			err = os.Chmod(uvPath, 0755)
-			if err != nil {
-				return err
-			}
-			break
-		}
-	}
-
-	return nil
-}
-
 func NeedsBun() bool {
+	if flag.NO_BUN {
+		return false
+	}
 	path := BunPath()
 	slog.Info("checking for bun", "path", path)
 	if _, err := os.Stat(path); err != nil {

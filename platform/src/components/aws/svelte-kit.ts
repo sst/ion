@@ -373,16 +373,6 @@ export class SvelteKit extends Component implements Link.Linkable {
           edge,
           server: server.arn,
         },
-        _receiver: {
-          directory: sitePath,
-          links: output(args.link || [])
-            .apply(Link.build)
-            .apply((links) => links.map((link) => link.name)),
-          aws: {
-            role: server.nodes.role.arn,
-          },
-          environment: args.environment,
-        },
         _dev: {
           links: output(args.link || [])
             .apply(Link.build)
@@ -633,10 +623,10 @@ function useCloudFrontFormActionInjection() {
   //       ie. POST request with query string "?/action"
   //       CloudFront does not allow query string with "/". It needs to be encoded.
   return `
-for (var key in request.querystring) {
+for (var key in event.request.querystring) {
   if (key.includes("/")) {
-    request.querystring[encodeURIComponent(key)] = request.querystring[key];
-    delete request.querystring[key];
+    event.request.querystring[encodeURIComponent(key)] = event.request.querystring[key];
+    delete event.request.querystring[key];
   }
 }`;
 }

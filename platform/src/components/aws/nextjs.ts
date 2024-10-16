@@ -26,8 +26,9 @@ import { Queue } from "./queue.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { dynamodb, lambda } from "@pulumi/aws";
 import { URL_UNAVAILABLE } from "./linkable.js";
+import { getOpenNextPackage } from "../../util/compare-semver.js";
 
-const DEFAULT_OPEN_NEXT_VERSION = "3.0.8";
+const DEFAULT_OPEN_NEXT_VERSION = "3.1.6";
 const DEFAULT_CACHE_POLICY_ALLOWED_HEADERS = ["x-open-next-cache-key"];
 
 type BaseFunction = {
@@ -231,7 +232,7 @@ export interface NextjsArgs extends SsrSiteArgs {
    * Set [environment variables](https://nextjs.org/docs/pages/building-your-application/configuring/environment-variables) in your Next.js app. These are made available:
    *
    * 1. In `next build`, they are loaded into `process.env`.
-   * 2. Locally while running `next dev` through `sst dev`.
+   * 2. Locally while running through `sst dev`.
    *
    * :::tip
    * You can also `link` resources to your Next.js app and access them in a type-safe way with the [SDK](/docs/reference/sdk/). We recommend linking since it's more secure.
@@ -515,16 +516,6 @@ export class Nextjs extends Component implements Link.Linkable {
           path: sitePath,
           server: server.arn,
         },
-        _receiver: {
-          directory: sitePath,
-          links: output(args.link || [])
-            .apply(Link.build)
-            .apply((links) => links.map((link) => link.name)),
-          aws: {
-            role: server.nodes.role.arn,
-          },
-          environment: args.environment,
-        },
         _dev: {
           links: output(args.link || [])
             .apply(Link.build)
@@ -601,14 +592,12 @@ export class Nextjs extends Component implements Link.Linkable {
 
     function normalizeBuildCommand() {
       return all([args?.buildCommand, args?.openNextVersion]).apply(
-        ([buildCommand, openNextVersion]) =>
-          buildCommand ??
-          [
-            "npx",
-            "--yes",
-            `open-next@${openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION}`,
-            "build",
-          ].join(" "),
+        ([buildCommand, openNextVersion]) => {
+          if (buildCommand) return buildCommand;
+          const version = openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION;
+          const packageName = getOpenNextPackage(version);
+          return `npx --yes ${packageName}@${version} build`;
+        },
       );
     }
 
@@ -833,6 +822,25 @@ export class Nextjs extends Component implements Link.Linkable {
                     },
                   ]
                 : []),
+            ],
+            injections: [
+              [
+                `outer:if (process.env.SST_KEY_FILE) {`,
+                `  const { readFileSync } = await import("fs")`,
+                `  const { createDecipheriv } = await import("crypto")`,
+                `  const key = Buffer.from(process.env.SST_KEY, "base64");`,
+                `  const encryptedData = readFileSync(process.env.SST_KEY_FILE);`,
+                `  const nonce = Buffer.alloc(12, 0);`,
+                `  const decipher = createDecipheriv("aes-256-gcm", key, nonce);`,
+                `  const authTag = encryptedData.slice(-16);`,
+                `  const actualCiphertext = encryptedData.slice(0, -16);`,
+                `  decipher.setAuthTag(authTag);`,
+                `  let decrypted = decipher.update(actualCiphertext);`,
+                `  decrypted = Buffer.concat([decrypted, decipher.final()]);`,
+                `  const decryptedData = JSON.parse(decrypted.toString());`,
+                `  globalThis.SST_KEY_FILE_DATA = decryptedData;`,
+                `}`,
+              ].join("\n"),
             ],
           };
 
@@ -1279,7 +1287,7 @@ export class Nextjs extends Component implements Link.Linkable {
       // accept header, and this header is not useful for the rest of the query
       return `
 function getHeader(key) {
-  var header = request.headers[key];
+  var header = event.request.headers[key];
   if (header) {
     if (header.multiValue) {
       return header.multiValue.map((header) => header.value).join(",");
@@ -1291,7 +1299,7 @@ function getHeader(key) {
   return "";
 }
 var cacheKey = "";
-if (request.uri.startsWith("/_next/image")) {
+if (event.request.uri.startsWith("/_next/image")) {
   cacheKey = getHeader("accept");
 } else {
   cacheKey =
@@ -1301,15 +1309,15 @@ if (request.uri.startsWith("/_next/image")) {
     getHeader("next-url") +
     getHeader("x-prerender-revalidate");
 }
-if (request.cookies["__prerender_bypass"]) {
-  cacheKey += request.cookies["__prerender_bypass"]
-    ? request.cookies["__prerender_bypass"].value
+if (event.request.cookies["__prerender_bypass"]) {
+  cacheKey += event.request.cookies["__prerender_bypass"]
+    ? event.request.cookies["__prerender_bypass"].value
     : "";
 }
 var crypto = require("crypto");
 
 var hashedKey = crypto.createHash("md5").update(cacheKey).digest("hex");
-request.headers["x-open-next-cache-key"] = { value: hashedKey };
+event.request.headers["x-open-next-cache-key"] = { value: hashedKey };
 `;
     }
 
@@ -1317,20 +1325,20 @@ request.headers["x-open-next-cache-key"] = { value: hashedKey };
       // Inject the CloudFront viewer country, region, latitude, and longitude headers into the request headers
       // for OpenNext to use them
       return `
-if(request.headers["cloudfront-viewer-city"]) {
-  request.headers["x-open-next-city"] = request.headers["cloudfront-viewer-city"];
+if(event.request.headers["cloudfront-viewer-city"]) {
+  event.request.headers["x-open-next-city"] = event.request.headers["cloudfront-viewer-city"];
 }
-if(request.headers["cloudfront-viewer-country"]) {
-  request.headers["x-open-next-country"] = request.headers["cloudfront-viewer-country"];
+if(event.request.headers["cloudfront-viewer-country"]) {
+  event.request.headers["x-open-next-country"] = event.request.headers["cloudfront-viewer-country"];
 }
-if(request.headers["cloudfront-viewer-region"]) {
-  request.headers["x-open-next-region"] = request.headers["cloudfront-viewer-region"];
+if(event.request.headers["cloudfront-viewer-region"]) {
+  event.request.headers["x-open-next-region"] = event.request.headers["cloudfront-viewer-region"];
 }
-if(request.headers["cloudfront-viewer-latitude"]) {
-  request.headers["x-open-next-latitude"] = request.headers["cloudfront-viewer-latitude"];
+if(event.request.headers["cloudfront-viewer-latitude"]) {
+  event.request.headers["x-open-next-latitude"] = event.request.headers["cloudfront-viewer-latitude"];
 }
-if(request.headers["cloudfront-viewer-longitude"]) {
-  request.headers["x-open-next-longitude"] = request.headers["cloudfront-viewer-longitude"];
+if(event.request.headers["cloudfront-viewer-longitude"]) {
+  event.request.headers["x-open-next-longitude"] = event.request.headers["cloudfront-viewer-longitude"];
 }
     `;
     }

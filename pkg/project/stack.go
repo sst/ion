@@ -61,22 +61,13 @@ type BuildSuccessEvent struct {
 	Files []string
 }
 
-type Receiver struct {
-	Name        string              `json:"name"`
-	Directory   string              `json:"directory"`
-	Links       []string            `json:"links"`
-	Environment map[string]string   `json:"environment"`
-	AwsRole     string              `json:"awsRole"`
-	Cloudflare  *CloudflareReceiver `json:"cloudflare"`
-	Aws         *AwsReceiver        `json:"aws"`
-}
-
 type Dev struct {
 	Name        string            `json:"name"`
 	Command     string            `json:"command"`
 	Directory   string            `json:"directory"`
 	Autostart   bool              `json:"autostart"`
 	Links       []string          `json:"links"`
+	Title       string            `json:"title"`
 	Environment map[string]string `json:"environment"`
 	Aws         *struct {
 		Role string `json:"role"`
@@ -84,18 +75,8 @@ type Dev struct {
 }
 type Devs map[string]Dev
 
-type CloudflareReceiver struct {
-}
-
-type AwsReceiver struct {
-	Role string `json:"role"`
-}
-
-type Receivers map[string]Receiver
-
 type CompleteEvent struct {
 	Links       common.Links
-	Receivers   Receivers
 	Devs        Devs
 	Outputs     map[string]interface{}
 	Hints       map[string]string
@@ -105,6 +86,14 @@ type CompleteEvent struct {
 	Old         bool
 	Resources   []apitype.ResourceV3
 	ImportDiffs map[string][]ImportDiff
+	Tunnels     map[string]Tunnel
+}
+
+type Tunnel struct {
+	IP         string   `json:"ip"`
+	Username   string   `json:"username"`
+	PrivateKey string   `json:"privateKey"`
+	Subnets    []string `json:"subnets"`
 }
 
 type ImportDiff struct {
@@ -123,8 +112,51 @@ type StackCommandEvent struct {
 }
 
 type Error struct {
-	Message string `json:"message"`
-	URN     string `json:"urn"`
+	Message string   `json:"message"`
+	URN     string   `json:"urn"`
+	Help    []string `json:"help"`
+}
+
+type CommonError struct {
+	Code    string   `json:"code"`
+	Message string   `json:"message"`
+	Short   []string `json:"short"`
+	Long    []string `json:"long"`
+}
+
+var CommonErrors = []CommonError{
+	{
+		Code:    "TooManyCacheBehaviors",
+		Message: "TooManyCacheBehaviors: Your request contains more CacheBehaviors than are allowed per distribution",
+		Short: []string{
+			"There are too many top-level files and directories inside your app's public asset directory. Move some of them inside subdirectories.",
+			"Learn more about this https://sst.dev/docs/common-errors#toomanycachebehaviors",
+		},
+		Long: []string{
+			"This error usually happens to `SvelteKit`, `SolidStart`, `Nuxt`, and `Analog` components.",
+			"",
+			"CloudFront distributions have a **limit of 25 cache behaviors** per distribution. Each top-level file or directory in your frontend app's asset directory creates a cache behavior.",
+			"",
+			"For example, in the case of SvelteKit, the static assets are in the `static/` directory. If you have a file and a directory in it, it'll create 2 cache behaviors.",
+			"",
+			"```bash frame=\"none\"",
+			"static/",
+			"├── icons/       # Cache behavior for /icons/*",
+			"└── logo.png     # Cache behavior for /logo.png",
+			"```",
+			"So if you have many of these at the top-level, you'll hit the limit. You can request a limit increase through the AWS Support.",
+			"",
+			"Alternatively, you can move some of these into subdirectories. For example, moving them to an `images/` directory, will only create 1 cache behavior.",
+			"",
+			"```bash frame=\"none\"",
+			"static/",
+			"└── images/      # Cache behavior for /images/*",
+			"    ├── icons/",
+			"    └── logo.png",
+			"```",
+			"Learn more about these [CloudFront limits](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cloudfront-limits.html#limits-web-distributions).",
+		},
+	},
 }
 
 var ErrStackRunFailed = fmt.Errorf("stack run had errors")
@@ -220,7 +252,7 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 	env["PULUMI_SKIP_UPDATE_CHECK"] = "true"
 	// env["PULUMI_DISABLE_AUTOMATIC_PLUGIN_ACQUISITION"] = "true"
 	env["NODE_OPTIONS"] = "--enable-source-maps --no-deprecation"
-	env["TMPDIR"] = p.PathLog("")
+	// env["TMPDIR"] = p.PathLog("")
 	if input.ServerPort != 0 {
 		env["SST_SERVER"] = fmt.Sprintf("http://localhost:%v", input.ServerPort)
 	}
@@ -405,9 +437,19 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 					if strings.Contains(event.DiagnosticEvent.Message, "failed to register new resource") {
 						break
 					}
+
+					// check if the error is a common error
+					help := []string{}
+					for _, commonError := range CommonErrors {
+						if strings.Contains(event.DiagnosticEvent.Message, commonError.Message) {
+							help = append(help, commonError.Short...)
+						}
+					}
+
 					errors = append(errors, Error{
 						Message: event.DiagnosticEvent.Message,
 						URN:     event.DiagnosticEvent.URN,
+						Help:    help,
 					})
 					telemetry.Track("cli.resource.error", map[string]interface{}{
 						"error": event.DiagnosticEvent.Message,
@@ -471,32 +513,6 @@ func (p *Project) Run(ctx context.Context, input *StackInput) error {
 		outputsFile, _ := os.Create(outputsFilePath)
 		defer outputsFile.Close()
 		json.NewEncoder(outputsFile).Encode(complete.Outputs)
-
-		// Generate python types if a python function exists
-		// shouldGeneratePythonTypes := false
-		// for _, w := range completed.Receivers {
-		// 	if strings.Contains(w.Handler, "python") {
-		// 		shouldGeneratePythonTypes = true
-		// 		break
-		// 	}
-		// }
-
-		// pythonTypesFileName := "sst_env.pyi"
-		// pythonTypesFilePath := filepath.Join(p.PathRoot(), pythonTypesFileName)
-		// if shouldGeneratePythonTypes {
-		// 	pythonTypesFile, _ := os.Create(pythonTypesFilePath)
-		// 	defer pythonTypesFile.Close()
-
-		// 	pythonMulti := io.MultiWriter(pythonTypesFile)
-
-		// 	pythonMulti.Write([]byte("# Automatically generated by SST\n"))
-		// 	pythonMulti.Write([]byte("# pylint: disable=all\n"))
-		// 	pythonMulti.Write([]byte("from typing import Any\n"))
-		// 	pythonMulti.Write([]byte("\nclass Resource:\n"))
-		// 	pythonMulti.Write([]byte(inferPythonTypes(complete.Links, "    ") + "\n"))
-
-		// }
-
 		types.Generate(p.PathConfig(), complete.Links)
 	}()
 
@@ -758,8 +774,8 @@ func getCompletedEvent(ctx context.Context, stack auto.Stack) (*CompleteEvent, e
 		Links:       common.Links{},
 		Versions:    map[string]int{},
 		ImportDiffs: map[string][]ImportDiff{},
-		Receivers:   Receivers{},
 		Devs:        Devs{},
+		Tunnels:     map[string]Tunnel{},
 		Hints:       map[string]string{},
 		Outputs:     map[string]interface{}{},
 		Errors:      []Error{},
@@ -788,20 +804,28 @@ func getCompletedEvent(ctx context.Context, stack auto.Stack) (*CompleteEvent, e
 				}
 			}
 		}
-		if match, ok := outputs["_receiver"].(map[string]interface{}); ok {
-			data, _ := json.Marshal(match)
-			var entry Receiver
-			json.Unmarshal(data, &entry)
-			entry.Name = resource.URN.Name()
-			complete.Receivers[entry.Directory] = entry
-		}
-
 		if match, ok := outputs["_dev"].(map[string]interface{}); ok {
 			data, _ := json.Marshal(match)
 			var entry Dev
 			json.Unmarshal(data, &entry)
 			entry.Name = resource.URN.Name()
 			complete.Devs[entry.Name] = entry
+		}
+
+		if match, ok := outputs["_tunnel"].(map[string]interface{}); ok {
+			tunnel := Tunnel{
+				IP:         match["ip"].(string),
+				Username:   match["username"].(string),
+				PrivateKey: match["privateKey"].(string),
+				Subnets:    []string{},
+			}
+			subnets, ok := match["subnets"].([]interface{})
+			if ok {
+				for _, subnet := range subnets {
+					tunnel.Subnets = append(tunnel.Subnets, subnet.(string))
+				}
+				complete.Tunnels[resource.URN.Name()] = tunnel
+			}
 		}
 
 		if hint, ok := outputs["_hint"].(string); ok {

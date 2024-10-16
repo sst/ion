@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/evanw/esbuild/pkg/api"
 	esbuild "github.com/evanw/esbuild/pkg/api"
 	"github.com/sst/ion/internal/fs"
 	"github.com/sst/ion/pkg/js"
@@ -23,6 +24,8 @@ var forceExternal = []string{
 }
 
 func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtime.BuildOutput, error) {
+	r.concurrency.Acquire(ctx, 1)
+	defer r.concurrency.Release(1)
 	var properties NodeProperties
 	json.Unmarshal(input.Properties, &properties)
 
@@ -43,8 +46,14 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 	if err != nil {
 		return nil, err
 	}
-	target := filepath.Join(input.Out(), strings.ReplaceAll(rel, filepath.Ext(rel), extension))
 
+	fileName := strings.TrimSuffix(filepath.Base(rel), filepath.Ext(rel))
+	// Lambda handler can only contain 1 dot separating the file name and function name
+	fileName = strings.ReplaceAll(fileName, ".", "-")
+	folder := filepath.Dir(rel)
+	path := filepath.Join(folder, fileName)
+	handler := path + filepath.Ext(input.Handler)
+	target := filepath.Join(input.Out(), path+extension)
 	slog.Info("loader info", "loader", properties.Loader)
 
 	loader := map[string]esbuild.Loader{}
@@ -56,14 +65,56 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 		loader[key] = mapped
 	}
 
-	plugins := []esbuild.Plugin{}
+	plugins := []esbuild.Plugin{
+		{
+			Name: "sst-version-check",
+			Setup: func(build esbuild.PluginBuild) {
+				skipResolve := struct{}{}
+				build.OnResolve(api.OnResolveOptions{Filter: `^sst$`}, func(args api.OnResolveArgs) (api.OnResolveResult, error) {
+					// avoid recursion
+					if args.PluginData == skipResolve {
+						return api.OnResolveResult{}, nil
+					}
+					pkg := build.Resolve("sst", esbuild.ResolveOptions{
+						ResolveDir: args.ResolveDir,
+						Importer:   args.Importer,
+						Kind:       args.Kind,
+						With:       args.With,
+						PluginName: "sst-version-check",
+						PluginData: skipResolve,
+						Namespace:  args.Namespace,
+					})
+					if pkg.Path != "" {
+						path, err := fs.FindUp(pkg.Path, "package.json")
+						if err != nil {
+							return api.OnResolveResult{}, err
+						}
+						var pkgjson js.PackageJson
+						data, err := os.Open(path)
+						if err != nil {
+							return api.OnResolveResult{}, err
+						}
+						err = json.NewDecoder(data).Decode(&pkgjson)
+						if err != nil {
+							return api.OnResolveResult{}, err
+						}
+						if r.version != "dev" && pkgjson.Version != r.version {
+							return api.OnResolveResult{}, fmt.Errorf("The sst package your application is importing (%v) does not match the sst cli version (%v). Make sure the version of sst in package.json is correct across your entire repo.", pkgjson.Version, r.version)
+						}
+					}
+					return api.OnResolveResult{Path: pkg.Path}, nil
+				})
+			},
+		},
+	}
+	if properties.Plugins != "" {
+		plugins = append(plugins, plugin(properties.Plugins))
+	}
 	external := append(forceExternal, properties.Install...)
 	external = append(external, properties.ESBuild.External...)
-	serializedLinks, err := json.Marshal(input.Links)
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("serialized links", "links", string(serializedLinks))
 	options := esbuild.BuildOptions{
 		EntryPoints: []string{file},
 		Platform:    esbuild.PlatformNode,
@@ -87,7 +138,6 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 				`import { fileURLToPath as topLevelFileUrlToPath, URL as topLevelURL } from "url"`,
 				`const __filename = topLevelFileUrlToPath(import.meta.url)`,
 				`const __dirname = topLevelFileUrlToPath(new topLevelURL(".", import.meta.url))`,
-				`globalThis.$SST_LINKS = ` + string(serializedLinks) + `;`,
 				properties.Banner,
 			}, "\n"),
 		},
@@ -97,12 +147,10 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 		options.Format = esbuild.FormatCommonJS
 		options.Target = esbuild.ESNext
 		options.MainFields = []string{"main"}
-		options.Banner = map[string]string{
-			"js": strings.Join([]string{
-				`globalThis.$SST_LINKS = ` + string(serializedLinks) + `;`,
-				properties.Banner,
-			}, "\n"),
-		}
+	}
+
+	if properties.ESBuild.Target != 0 {
+		options.Target = properties.ESBuild.Target
 	}
 
 	if properties.Splitting {
@@ -128,14 +176,14 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 		options.Target = properties.ESBuild.Target
 	}
 
-	buildContext, ok := r.contexts[input.FunctionID]
+	buildContext, ok := r.contexts.Load(input.FunctionID)
 	if !ok {
 		buildContext, _ = esbuild.Context(options)
-		r.contexts[input.FunctionID] = buildContext
+		r.contexts.Store(input.FunctionID, buildContext)
 	}
 
-	result := buildContext.Rebuild()
-	r.results[input.FunctionID] = result
+	result := buildContext.(esbuild.BuildContext).Rebuild()
+	r.results.Store(input.FunctionID, result)
 	errors := []string{}
 	for _, error := range result.Errors {
 		text := error.Text
@@ -223,7 +271,9 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 			if slices.Contains(installPackages, "sharp") {
 				cmd = append(cmd, "--libc=glibc")
 			}
-			err = exec.Command("npm", cmd...).Run()
+			proc := exec.Command("npm", cmd...)
+			proc.Dir = input.Out()
+			err = proc.Run()
 			if err != nil {
 				return nil, err
 			}
@@ -231,7 +281,7 @@ func (r *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 	}
 
 	return &runtime.BuildOutput{
-		Handler: input.Handler,
+		Handler: handler,
 		Errors:  errors,
 	}, nil
 }

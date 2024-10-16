@@ -2,7 +2,6 @@ import { Link } from "../components/link";
 import {
   ResourceTransformationArgs,
   interpolate,
-  mergeOptions,
   runtime,
   automation,
   output,
@@ -40,15 +39,14 @@ function addTransformationToRetainResourcesOnDelete() {
       $app.removal === "retain-all" ||
       ($app.removal === "retain" &&
         [
+          "aws:dynamodb/table:Table",
+          "aws:rds/instance:Instance",
           "aws:s3/bucket:Bucket",
           "aws:s3/bucketV2:BucketV2",
-          "aws:dynamodb/table:Table",
         ].includes(args.type))
     ) {
-      return {
-        props: args.props,
-        opts: mergeOptions({ retainOnDelete: true }, args.opts),
-      };
+      args.opts.retainOnDelete = true;
+      return args;
     }
     return undefined;
   });

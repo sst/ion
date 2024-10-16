@@ -125,7 +125,7 @@ func CmdMosaic(c *cli.Cli) error {
 	}
 
 	if os.Getenv("SST_SERVER") != "" {
-		return util.NewReadableError(nil, "The dev command for this process does not look right. Check your dev script in package.json to make sure it is simply starting your process and not running `sst dev`. More info here: https://ion.sst.dev/docs/reference/cli/#dev")
+		return util.NewReadableError(nil, "The dev command for this process does not look right. Check your dev script in package.json to make sure it is simply starting your process and not running `sst dev`. More info here: https://sst.dev/docs/reference/cli/#dev")
 	}
 
 	p, err := c.InitProject()
@@ -225,16 +225,23 @@ func CmdMosaic(c *cli.Cli) error {
 							}
 							dir := filepath.Join(cwd, d.Directory)
 							words, _ := shellquote.Split(d.Command)
+							title := d.Title
+							if title == "" {
+								title = d.Name
+							}
 							multi.AddProcess(
 								d.Name,
 								append([]string{currentExecutable, "dev", "--"}, words...),
 								"→",
-								d.Name,
+								title,
 								dir,
 								true,
 								d.Autostart,
 								append([]string{"SST_CHILD=" + d.Name}, multiEnv...)...,
 							)
+						}
+						for range evt.Tunnels {
+							multi.AddProcess("tunnel", []string{currentExecutable, "tunnel", "--stage", p.App().Stage}, "⇌", "Tunnel", "", true, true, os.Environ()...)
 						}
 						break
 					}

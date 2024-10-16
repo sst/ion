@@ -2,12 +2,14 @@ package worker
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
 	esbuild "github.com/evanw/esbuild/pkg/api"
@@ -19,6 +21,8 @@ import (
 type Runtime struct {
 	contexts map[string]esbuild.BuildContext
 	results  map[string]esbuild.BuildResult
+	lock     sync.RWMutex
+	unenv    *unenv
 }
 
 type Properties struct {
@@ -27,10 +31,22 @@ type Properties struct {
 	Build      node.NodeProperties `json:"build"`
 }
 
+type unenv struct {
+	Alias map[string]string `json:"alias"`
+}
+
+//go:embed unenv.json
+var embedded embed.FS
+
 func New() *Runtime {
+	data, _ := embedded.ReadFile("unenv.json")
+	var unenv unenv
+	json.Unmarshal(data, &unenv)
 	return &Runtime{
 		contexts: map[string]esbuild.BuildContext{},
 		results:  map[string]esbuild.BuildResult{},
+		lock:     sync.RWMutex{},
+		unenv:    &unenv,
 	}
 }
 
@@ -81,31 +97,19 @@ func (w *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 			ResolveDir: filepath.Dir(abs),
 			Loader:     esbuild.LoaderTS,
 		},
-		External:   []string{"node:*", "cloudflare:workers"},
-		Conditions: []string{"workerd", "worker", "browser"},
-		Sourcemap:  esbuild.SourceMapNone,
-		Loader:     loader,
-		KeepNames:  true,
-		Bundle:     true,
-		Splitting:  build.Splitting,
-		Metafile:   true,
-		Write:      true,
-		Plugins: []esbuild.Plugin{{
-			Name: "node-prefix",
-			Setup: func(build api.PluginBuild) {
-				build.OnResolve(esbuild.OnResolveOptions{
-					Filter: ".*",
-				}, func(ora esbuild.OnResolveArgs) (esbuild.OnResolveResult, error) {
-					if NODE_BUILTINS[ora.Path] {
-						return esbuild.OnResolveResult{
-							Path:     "node:" + ora.Path,
-							External: true,
-						}, nil
-					}
-					return esbuild.OnResolveResult{}, nil
-				})
-			},
-		}},
+		NodePaths: []string{
+			filepath.Join(path.ResolvePlatformDir(input.CfgPath), "node_modules"),
+		},
+		Alias:             w.unenv.Alias,
+		External:          []string{"node:*", "cloudflare:workers"},
+		Conditions:        []string{"workerd", "worker", "browser"},
+		Sourcemap:         esbuild.SourceMapNone,
+		Loader:            loader,
+		KeepNames:         true,
+		Bundle:            true,
+		Splitting:         build.Splitting,
+		Metafile:          true,
+		Write:             true,
 		Outfile:           target,
 		MinifyWhitespace:  build.Minify,
 		MinifySyntax:      build.Minify,
@@ -115,15 +119,21 @@ func (w *Runtime) Build(ctx context.Context, input *runtime.BuildInput) (*runtim
 		MainFields:        []string{"module", "main"},
 	}
 
+	w.lock.RLock()
 	buildContext, ok := w.contexts[input.FunctionID]
+	w.lock.RUnlock()
 	if !ok {
 		buildContext, _ = esbuild.Context(options)
+		w.lock.Lock()
 		w.contexts[input.FunctionID] = buildContext
+		w.lock.Unlock()
 	}
 
 	result := buildContext.Rebuild()
 	if len(result.Errors) == 0 {
+		w.lock.Lock()
 		w.results[input.FunctionID] = result
+		w.lock.Unlock()
 	}
 	errors := []string{}
 	for _, error := range result.Errors {
@@ -160,7 +170,9 @@ func (w *Runtime) getFile(input *runtime.BuildInput) (string, bool) {
 }
 
 func (r *Runtime) ShouldRebuild(functionID string, file string) bool {
+	r.lock.RLock()
 	result, ok := r.results[functionID]
+	r.lock.RUnlock()
 	if !ok {
 		return false
 	}
