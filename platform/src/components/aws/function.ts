@@ -436,7 +436,7 @@ export interface FunctionArgs {
    * [Link resources](/docs/linking/) to your function. This will:
    *
    * 1. Grant the permissions needed to access the resources.
-   * 2. Allow you to access it in your site using the [SDK](/docs/reference/sdk/).
+   * 2. Allow you to access it in your function using the [SDK](/docs/reference/sdk/).
    *
    * @example
    *
@@ -653,7 +653,7 @@ export interface FunctionArgs {
    */
   nodejs?: Input<{
     /**
-     * Point to a plugins.mjs file with a list of esbuild plugins.
+     * Point to a file that exports a list of esbuild plugins to use.
      *
      * @example
      * ```js
@@ -664,13 +664,17 @@ export interface FunctionArgs {
      * }
      * ```
      *
-     * @example
-     * ```js
-     * import { somePlugin } from "some-plugin"
+     * The path is relative to the location of the `sst.config.ts`.
+     *
+     * ```js title="plugins.mjs"
+     * import { somePlugin } from "some-plugin";
+     *
      * export default [
      *   somePlugin()
-     * ]
+     * ];
      * ```
+     *
+     * You'll also need to install the npm package of the plugin.
      */
     plugins?: Input<string>;
     /**
@@ -1185,7 +1189,7 @@ export class Function extends Component implements Link.Linkable {
     const runtime = normalizeRuntime();
     const timeout = normalizeTimeout();
     const memory = normalizeMemory();
-    const architectures = normalizeArchitectures();
+    const architecture = output(args.architecture).apply((v) => v ?? "x86_64");
     const environment = normalizeEnvironment();
     const streaming = normalizeStreaming();
     const logging = normalizeLogging();
@@ -1292,12 +1296,6 @@ export class Function extends Component implements Link.Linkable {
       return output(args.memory).apply((memory) => memory ?? "1024 MB");
     }
 
-    function normalizeArchitectures() {
-      return all([args.architecture]).apply(([arc]) =>
-        arc === "arm64" ? ["arm64"] : ["x86_64"],
-      );
-    }
-
     function normalizeEnvironment() {
       return all([
         args.environment,
@@ -1311,10 +1309,8 @@ export class Function extends Component implements Link.Linkable {
           name: $app.name,
           stage: $app.stage,
         });
-        if (!bundle) {
-          result.SST_KEY = key;
-          result.SST_KEY_FILE = "resource.enc";
-        }
+        result.SST_KEY = key;
+        result.SST_KEY_FILE = "resource.enc";
         if (dev) {
           result.SST_REGION = process.env.SST_AWS_REGION!;
           result.SST_FUNCTION_ID = name;
@@ -1487,13 +1483,6 @@ export class Function extends Component implements Link.Linkable {
           };
         }
 
-        if (args.bundle) {
-          return {
-            bundle: output(args.bundle),
-            handler: output(args.handler),
-          };
-        }
-
         const buildResult = buildInput.apply(async (input) => {
           const result = await rpc.call<{
             handler: string;
@@ -1537,20 +1526,8 @@ export class Function extends Component implements Link.Linkable {
           }
 
           const hasUserInjections = injections.length > 0;
-          // already injected via esbuild when bundle is undefined
-          const hasLinkInjections = args.bundle && linkData.length > 0;
 
-          if (!hasUserInjections && !hasLinkInjections) return { handler };
-
-          const linkInjection = hasLinkInjections
-            ? linkData
-                .map((item) => [
-                  `process.env["SST_RESOURCE_${item.name}"] = ${JSON.stringify(
-                    JSON.stringify(item.properties),
-                  )};\n`,
-                ])
-                .join("")
-            : "";
+          if (!hasUserInjections) return { handler };
 
           const parsed = path.posix.parse(handler);
           const handlerDir = parsed.dir;
@@ -1570,6 +1547,18 @@ export class Function extends Component implements Link.Linkable {
               `Could not find handler file "${handler}" for function "${name}"`,
             );
 
+          const split = injections.reduce(
+            (acc, item) => {
+              if (item.startsWith("outer:")) {
+                acc.outer.push(item.substring("outer:".length));
+                return acc;
+              }
+              acc.inner.push(item);
+              return acc;
+            },
+            { outer: [] as string[], inner: [] as string[] },
+          );
+
           return {
             handler: path.posix.join(
               handlerDir,
@@ -1579,17 +1568,17 @@ export class Function extends Component implements Link.Linkable {
               name: path.posix.join(handlerDir, `${newHandlerFileName}.mjs`),
               content: streaming
                 ? [
-                    linkInjection,
+                    ...split.outer,
                     `export const ${newHandlerFunction} = awslambda.streamifyResponse(async (event, responseStream, context) => {`,
-                    ...injections,
+                    ...split.inner,
                     `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
                     `  return rawHandler(event, responseStream, context);`,
                     `});`,
                   ].join("\n")
                 : [
-                    linkInjection,
+                    ...split.outer,
                     `export const ${newHandlerFunction} = async (event, context) => {`,
-                    ...injections,
+                    ...split.inner,
                     `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
                     `  return rawHandler(event, context);`,
                     `};`,
@@ -1742,7 +1731,11 @@ export class Function extends Component implements Link.Linkable {
                 inline: {},
               },
             ],
-            /// TODO: walln - enable arm64 builds by using architecture args
+            platforms: [
+              architecture.apply((v) =>
+                v === "arm64" ? "linux/arm64" : "linux/amd64",
+              ),
+            ],
             push: true,
             registries: [
               authToken.apply((authToken) => ({
@@ -1896,7 +1889,7 @@ export class Function extends Component implements Link.Linkable {
               environment: {
                 variables: environment,
               },
-              architectures,
+              architectures: [architecture],
               loggingConfig: logging && {
                 logFormat: logging.format === "json" ? "JSON" : "Text",
                 logGroup: logging.logGroup ?? logGroup!.name,
