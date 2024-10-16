@@ -1,4 +1,4 @@
-import { Prettify } from "../auth/handler.js";
+import { Prettify } from "../util/prettify.js";
 
 export module event {
   export type Definition = {
@@ -12,8 +12,8 @@ export module event {
 
   export function builder<
     Metadata extends
-      | ((type: string, properties: any) => any)
-      | Parameters<Validator>[0],
+    | ((type: string, properties: any) => any)
+    | Parameters<Validator>[0],
     Validator extends (schema: any) => (input: any) => any,
   >(input: { validator: Validator; metadata?: Metadata }) {
     const validator = input.validator;
@@ -27,7 +27,7 @@ export module event {
       ) => any
         ? ReturnType<Metadata>
         : // @ts-expect-error
-          inferParser<Metadata>["out"];
+        inferParser<Metadata>["out"];
       type Payload = Prettify<{
         type: Type;
         properties: Parsed["out"];
@@ -37,10 +37,10 @@ export module event {
       type Create = Metadata extends (type: string, properties: any) => any
         ? (properties: Parsed["in"]) => Promise<Payload>
         : (
-            properties: Parsed["in"],
-            // @ts-expect-error
-            metadata: inferParser<Metadata>["in"],
-          ) => Promise<Payload>;
+          properties: Parsed["in"],
+          // @ts-expect-error
+          metadata: inferParser<Metadata>["in"],
+        ) => Promise<Payload>;
       const validate = validator(schema);
       async function create(properties: any, metadata?: any) {
         metadata = input.metadata
@@ -125,14 +125,14 @@ export module event {
 
   export type inferParser<TParser extends Parser> =
     TParser extends ParserWithInputOutput<infer $TIn, infer $TOut>
-      ? {
-          in: $TIn;
-          out: $TOut;
-        }
-      : TParser extends ParserWithoutInput<infer $InOut>
-        ? {
-            in: $InOut;
-            out: $InOut;
-          }
-        : never;
+    ? {
+      in: $TIn;
+      out: $TOut;
+    }
+    : TParser extends ParserWithoutInput<infer $InOut>
+    ? {
+      in: $InOut;
+      out: $InOut;
+    }
+    : never;
 }
