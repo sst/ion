@@ -13,8 +13,12 @@ export default $config({
 
     const vpc = addVpc();
     const bucket = addBucket();
+    //const email = addEmail();
+    //const apiv1 = addApiV1();
+    //const apiv2 = addApiV2();
     //const app = addFunction();
     //const service = addService();
+    //const postgres = addPostgres();
     //const cron = addCron();
 
     return ret;
@@ -29,6 +33,33 @@ export default $config({
       return bucket;
     }
 
+    function addEmail() {
+      const topic = new sst.aws.SnsTopic("MyTopic");
+      topic.subscribe("functions/email/index.notification");
+
+      const email = new sst.aws.Email("MyEmail", {
+        sender: "wangfanjie@gmail.com",
+        events: [
+          {
+            name: "notif",
+            types: ["delivery"],
+            topic: topic.arn,
+          },
+        ],
+      });
+
+      const sender = new sst.aws.Function("MyApi", {
+        handler: "functions/email/index.sender",
+        link: [email],
+        url: true,
+      });
+
+      ret.emailSend = sender.url;
+      ret.email = email.sender;
+      ret.emailConfig = email.configSet;
+      return ret;
+    }
+
     function addCron() {
       const cron = new sst.aws.Cron("MyCron", {
         schedule: "rate(1 minute)",
@@ -39,6 +70,26 @@ export default $config({
       });
       ret.cron = cron.nodes.job.name;
       return cron;
+    }
+
+    function addApiV1() {
+      const api = new sst.aws.ApiGatewayV1("MyApiV1");
+      api.route("GET /", {
+        handler: "functions/apiv2/index.handler",
+        link: [bucket],
+      });
+      api.deploy();
+      return api;
+    }
+
+    function addApiV2() {
+      const api = new sst.aws.ApiGatewayV2("MyApiV2", {
+        link: [bucket],
+      });
+      api.route("GET /", {
+        handler: "functions/apiv2/index.handler",
+      });
+      return api;
     }
 
     function addFunction() {
@@ -65,6 +116,17 @@ export default $config({
       ret.service = service.url;
 
       return service;
+    }
+
+    function addPostgres() {
+      const postgres = new sst.aws.Postgres("MyPostgres", {
+        vpc,
+      });
+      ret.pgHost = postgres.host;
+      ret.pgPort = postgres.port;
+      ret.pgUsername = postgres.username;
+      ret.pgPassword = postgres.password;
+      return postgres;
     }
   },
 });
