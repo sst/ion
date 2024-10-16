@@ -375,16 +375,6 @@ export class Remix extends Component implements Link.Linkable {
           edge,
           server: server.arn,
         },
-        _receiver: {
-          directory: sitePath,
-          links: output(args.link || [])
-            .apply(Link.build)
-            .apply((links) => links.map((link) => link.name)),
-          aws: {
-            role: server.nodes.role.arn,
-          },
-          environment: args.environment,
-        },
         _dev: {
           links: output(args.link || [])
             .apply(Link.build)
@@ -472,7 +462,7 @@ export class Remix extends Component implements Link.Linkable {
 
           resolvedConfig = (await vite.resolveConfig(
             // root defaults to process.cwd(), which will be where the sst.config.ts file is located
-            // since we're invoking vite programatically. In a monorepo, this is likely incorrect, and
+            // since we're invoking vite programmatically. In a monorepo, this is likely incorrect, and
             // should be the defined sitePath.
             { ...viteConfig.config, root: viteConfig.config.root ?? sitePath },
             "build",

@@ -17,6 +17,7 @@ const sidebar = [
     label: "Get Started",
     items: [
       { label: "API", slug: "docs/start/aws/api" },
+      { label: "Bun", slug: "docs/start/aws/bun" },
       { label: "Nuxt", slug: "docs/start/aws/nuxt" },
       { label: "Solid", slug: "docs/start/aws/solid" },
       { label: "tRPC", slug: "docs/start/aws/trpc" },
@@ -27,9 +28,10 @@ const sidebar = [
       { label: "Svelte", slug: "docs/start/aws/svelte" },
       { label: "Drizzle", slug: "docs/start/aws/drizzle" },
       { label: "Next.js", slug: "docs/start/aws/nextjs" },
+      { label: "Analog", slug: "docs/start/aws/analog" },
       { label: "Angular", slug: "docs/start/aws/angular" },
+      { label: "Express", slug: "docs/start/aws/express" },
       { label: "Realtime", slug: "docs/start/aws/realtime" },
-      { label: "Container", slug: "docs/start/aws/container" },
       {
         label: "Cloudflare",
         items: [
@@ -79,6 +81,7 @@ const sidebar = [
       "docs/component/aws/queue",
       "docs/component/aws/vector",
       "docs/component/aws/router",
+      "docs/component/aws/analog",
       "docs/component/aws/bucket",
       "docs/component/aws/cluster",
       "docs/component/aws/dynamo",
@@ -160,12 +163,14 @@ const sidebar = [
     ],
   },
   { label: "Examples", slug: "docs/examples" },
+  { label: "Common Errors", slug: "docs/common-errors" },
   {
     label: "Deprecated",
     collapsed: true,
     items: [
       { label: "Vpc.v1", slug: "docs/component/aws/vpc-v1" },
       { label: "Cluster.v1", slug: "docs/component/aws/cluster-v1" },
+      { label: "Postgres.v1", slug: "docs/component/aws/postgres-v1" },
     ],
   },
 ];
@@ -191,6 +196,7 @@ export default defineConfig({
     "/install": "https://raw.githubusercontent.com/sst/ion/dev/install",
     "/discord": "https://discord.gg/sst",
     "/guide": "https://guide.sst.dev",
+    "/docs/start/aws/container": "/docs/start/aws/express",
   },
   integrations: [
     sitemap({

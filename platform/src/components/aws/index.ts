@@ -1,3 +1,4 @@
+export * from "./analog.js";
 export * from "./apigatewayv1.js";
 export * from "./apigatewayv2.js";
 export * from "./apigateway-websocket.js";
@@ -33,6 +34,7 @@ export * from "./vpc.js";
 export * from "./react.js";
 export { linkable } from "./linkable.js";
 export { permission } from "./permission.js";
+export { iamEdit } from "./iam-edit.js";
 
 // internal components
 export * from "./cdn.js";

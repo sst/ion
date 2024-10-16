@@ -1,10 +1,10 @@
 module github.com/sst/ion
 
-go 1.21.3
+go 1.23.2
 
 require (
 	github.com/Masterminds/semver/v3 v3.2.1
-	github.com/aws/aws-cdk-go/awscdk/v2 v2.151.0
+	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/aws/aws-sdk-go v1.44.298
 	github.com/aws/aws-sdk-go-v2 v1.30.3
 	github.com/aws/aws-sdk-go-v2/config v1.26.6
@@ -16,8 +16,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.42.3
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.48.1
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.44.7
-	github.com/aws/constructs-go/constructs/v10 v10.3.0
-	github.com/aws/jsii-runtime-go v1.102.0
 	github.com/briandowns/spinner v1.23.0
 	github.com/charmbracelet/huh v0.3.0
 	github.com/charmbracelet/x/ansi v0.1.2
@@ -34,25 +32,20 @@ require (
 	github.com/manifoldco/promptui v0.9.0
 	github.com/nrednav/cuid2 v1.0.0
 	github.com/posthog/posthog-go v0.0.0-20240221135834-4944045455b4
-	github.com/pulumi/pulumi/sdk/v3 v3.115.2
+	github.com/pulumi/pulumi/sdk/v3 v3.136.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
 	github.com/twitchtv/twirp v8.1.3+incompatible
 	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0
-	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8
+	golang.org/x/exp v0.0.0-20240604190554-fc45aab8b7f8
 	google.golang.org/protobuf v1.33.0
 )
 
 require (
 	github.com/catppuccin/go v0.2.0 // indirect
-	github.com/cdklabs/awscdk-asset-awscli-go/awscliv1/v2 v2.2.202 // indirect
-	github.com/cdklabs/awscdk-asset-kubectl-go/kubectlv20/v2 v2.1.2 // indirect
-	github.com/cdklabs/awscdk-asset-node-proxy-agent-go/nodeproxyagentv6/v2 v2.0.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/yuin/goldmark v1.5.2 // indirect
-	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 )
 
 require (
@@ -129,7 +122,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/term v1.1.0 // indirect
 	github.com/pulumi/appdash v0.0.0-20231130102222-75f619a67231 // indirect
-	github.com/pulumi/esc v0.8.3 // indirect
+	github.com/pulumi/esc v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
@@ -139,21 +132,20 @@ require (
 	github.com/spf13/cobra v1.8.0 // indirect
 	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a
 	github.com/texttheater/golang-levenshtein v1.0.1 // indirect
-	github.com/tweekmonster/luser v0.0.0-20161003172636-3fa38070dbd7 // indirect
 	github.com/uber/jaeger-client-go v2.30.0+incompatible // indirect
 	github.com/uber/jaeger-lib v2.4.1+incompatible // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/zclconf/go-cty v1.14.4 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/crypto v0.25.0
-	golang.org/x/mod v0.19.0 // indirect
-	golang.org/x/net v0.27.0 // indirect
-	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.22.0 // indirect
-	golang.org/x/term v0.22.0
-	golang.org/x/text v0.16.0 // indirect
+	golang.org/x/crypto v0.26.0
+	golang.org/x/mod v0.20.0 // indirect
+	golang.org/x/net v0.28.0 // indirect
+	golang.org/x/sync v0.8.0
+	golang.org/x/sys v0.23.0 // indirect
+	golang.org/x/term v0.23.0
+	golang.org/x/text v0.17.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	golang.org/x/tools v0.23.0 // indirect
+	golang.org/x/tools v0.24.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240325203815-454cdb8f5daa // indirect
 	google.golang.org/grpc v1.63.2 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect

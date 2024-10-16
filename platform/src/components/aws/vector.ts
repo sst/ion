@@ -1,7 +1,7 @@
 import path from "path";
 import { ComponentResourceOptions } from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component.js";
-import { Postgres, PostgresArgs } from "./postgres.js";
+import { Postgres, PostgresArgs } from "./postgres-v1.js";
 import { VectorTable } from "./providers/vector-table.js";
 import { Function } from "./function.js";
 import { Link } from "../link.js";
@@ -225,7 +225,7 @@ export class Vector extends Component implements Link.Linkable {
    * @param clusterID The RDS cluster id of the existing Vector database.
    *
    * @example
-   * Imagine you create a vector databse  in the `dev` stage. And in your personal stage `frank`,
+   * Imagine you create a vector database  in the `dev` stage. And in your personal stage `frank`,
    * instead of creating a new database, you want to share the same database from `dev`.
    *
    * ```ts title="sst.config.ts"

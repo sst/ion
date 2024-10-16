@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -21,6 +22,7 @@ import (
 	"github.com/sst/ion/cmd/sst/mosaic/errors"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/flag"
 	"github.com/sst/ion/pkg/global"
 	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/project/provider"
@@ -70,7 +72,10 @@ func main() {
 			}
 		} else {
 			slog.Error("exited with error", "err", err)
-			ui.Error("Unexpected error occurred. Please check the logs in .sst/log/sst.log")
+			// check if context cancelled error
+			if err != context.Canceled {
+				ui.Error("Unexpected error occurred. Please run with --print-logs or check .sst/log/sst.log if available.")
+			}
 		}
 		telemetry.Close()
 		os.Exit(1)
@@ -83,7 +88,7 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	interruptChannel := make(chan os.Signal, 1)
-	signal.Notify(interruptChannel, syscall.SIGINT)
+	signal.Notify(interruptChannel, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-interruptChannel
 		slog.Info("interrupted")
@@ -93,23 +98,30 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	spin := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	spin.Suffix = "  Updating dependencies..."
-	if global.NeedsPulumi() {
-		spin.Start()
-		err := global.InstallPulumi()
-		if err != nil {
-			return err
-		}
+	_, err = user.Current()
+	if err != nil {
+		return err
 	}
-	if global.NeedsBun() {
-		spin.Start()
-		err := global.InstallBun()
-		if err != nil {
-			return err
+
+	if !flag.SST_SKIP_DEPENDENCY_CHECK {
+		spin := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+		spin.Suffix = "  Updating dependencies..."
+		if global.NeedsPulumi() {
+			spin.Start()
+			err := global.InstallPulumi()
+			if err != nil {
+				return err
+			}
 		}
+		if global.NeedsBun() {
+			spin.Start()
+			err := global.InstallBun()
+			if err != nil {
+				return err
+			}
+		}
+		spin.Stop()
 	}
-	spin.Stop()
 	return c.Run()
 }
 
@@ -206,6 +218,12 @@ var root = &cli.Command{
 					":::tip",
 					"Changing the stage will redeploy your app to a new stage with new resources. The old resources will still be around in the old stage.",
 					":::",
+					"",
+					"You can also use the `SST_STAGE` environment variable.",
+					"```bash frame=\"none\"",
+					"SST_STAGE=dev sst [command]",
+					"```",
+					"This can also be declared in a `.env` file or in the CLI session.",
 					"",
 					"If the stage is not passed in, then the CLI will:",
 					"",
@@ -341,7 +359,8 @@ var root = &cli.Command{
 					"",
 					"1. Watch your `sst.config.ts` and deploy your app",
 					"2. Run your functions [Live](/docs/live/) and logs their invocations",
-					"3. Run the dev mode for components that have `dev.autostart` enabled",
+					"3. Start a [`sst tunnel`](#tunnel) session if your app has a VPC with `bastion` enabled",
+					"4. Run the dev mode for components that have `dev.autostart` enabled",
 					"   - Components like `Service` and frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.",
 					"   - It starts their `dev.command` in a separate pane",
 					"   - And loads any [linked resources](/docs/linking) in the environment",
@@ -469,8 +488,8 @@ var root = &cli.Command{
 				{
 					Name: "target",
 					Description: cli.Description{
-						Short: "Comma seperated list of target URNs",
-						Long:  "Comma seperated list of target URNs.",
+						Short: "Comma separated list of target URNs",
+						Long:  "Comma separated list of target URNs.",
 					},
 				},
 			},
@@ -501,7 +520,7 @@ var root = &cli.Command{
 					"This is useful for cases when you pull some changes from a teammate and want to",
 					"see what will be deployed; before doing the actual deploy.",
 					"",
-					"Optionall, you can diff a specific set of resources by passing in a list of their URNs.",
+					"Optionally, you can diff a specific set of resources by passing in a list of their URNs.",
 					"",
 					"```bash frame=\"none\"",
 					"sst diff --target urn:pulumi:prod::www::sst:aws:Astro::Astro,urn:pulumi:prod::www::sst:aws:Bucket::Assets",
@@ -522,8 +541,8 @@ var root = &cli.Command{
 				{
 					Name: "target",
 					Description: cli.Description{
-						Short: "Comma seperated list of target URNs",
-						Long:  "Comma seperated list of target URNs.",
+						Short: "Comma separated list of target URNs",
+						Long:  "Comma separated list of target URNs.",
 					},
 				},
 				{
@@ -591,6 +610,12 @@ var root = &cli.Command{
 					"```",
 					"",
 					"You'll need to run `sst install` if you update the `providers` in your config.",
+					"",
+					"By default, these packages are fetched from the NPM registry. If you want to use a different registry, you can set the `NPM_REGISTRY` environment variable.",
+					"",
+					"```bash frame=\"none\"",
+					"NPM_REGISTRY=https://my-registry.com sst add aws",
+					"```",
 				}, "\n"),
 			},
 			Args: []cli.Argument{
@@ -852,8 +877,8 @@ var root = &cli.Command{
 					Name: "target",
 					Type: "string",
 					Description: cli.Description{
-						Short: "Comma seperated list of target URNs",
-						Long:  "Comma seperated list of target URNs.",
+						Short: "Comma separated list of target URNs",
+						Long:  "Comma separated list of target URNs.",
 					},
 				},
 			},
@@ -924,6 +949,8 @@ var root = &cli.Command{
 					"- General machine information, like the number of CPUs, OS, CI/CD environment, etc.",
 					"",
 					"This is completely optional and can be disabled at any time.",
+					"",
+					"You can also opt-out by setting an environment variable: `SST_TELEMETRY_DISABLED=1` or `DO_NOT_TRACK=1`.",
 				}, "\n"),
 			},
 			Children: []*cli.Command{
@@ -962,6 +989,18 @@ var root = &cli.Command{
 			},
 		},
 		{
+			Name:   "common-errors",
+			Hidden: true,
+			Run: func(cli *cli.Cli) error {
+				data, err := json.MarshalIndent(project.CommonErrors, "", "  ")
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(data))
+				return nil
+			},
+		},
+		{
 			Name: "refresh",
 			Description: cli.Description{
 				Short: "Refresh the local app state",
@@ -991,8 +1030,8 @@ var root = &cli.Command{
 					Name: "target",
 					Type: "string",
 					Description: cli.Description{
-						Short: "Comma seperated list of target URNs",
-						Long:  "Comma seperated list of target URNs.",
+						Short: "Comma separated list of target URNs",
+						Long:  "Comma separated list of target URNs.",
 					},
 				},
 			},
@@ -1058,6 +1097,7 @@ var root = &cli.Command{
 			},
 		},
 		CmdCert,
+		CmdTunnel,
 		CmdDiagnostic,
 	},
 }

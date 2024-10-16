@@ -232,6 +232,14 @@ export interface SvelteKitArgs extends SsrSiteArgs {
    */
   assets?: SsrSiteArgs["assets"];
   /**
+   * Configure where the [server function](#nodes-server) is deployed.
+   *
+   * By default, it's deployed to AWS Lambda in a single region. Enable this option if you want to instead deploy it to Lambda@Edge.
+   * @default `false`
+   * @internal
+   */
+  edge?: Input<boolean>;
+  /**
    * Configure the [server function](#nodes-server) in your SvelteKit app to connect
    * to private subnets in a virtual private cloud or VPC. This allows your app to
    * access private resources.
@@ -351,6 +359,7 @@ export class SvelteKit extends Component implements Link.Linkable {
     super(__pulumiType, name, args, opts);
 
     const parent = this;
+    const edge = normalizeEdge();
     const { sitePath, partition } = prepare(parent, args);
     const dev = normalizeDev();
 
@@ -361,17 +370,8 @@ export class SvelteKit extends Component implements Link.Linkable {
         _metadata: {
           mode: "placeholder",
           path: sitePath,
+          edge,
           server: server.arn,
-        },
-        _receiver: {
-          directory: sitePath,
-          links: output(args.link || [])
-            .apply(Link.build)
-            .apply((links) => links.map((link) => link.name)),
-          aws: {
-            role: server.nodes.role.arn,
-          },
-          environment: args.environment,
         },
         _dev: {
           links: output(args.link || [])
@@ -416,6 +416,7 @@ export class SvelteKit extends Component implements Link.Linkable {
         mode: "deployed",
         path: sitePath,
         url: distribution.apply((d) => d.domainUrl ?? d.url),
+        edge,
         server: serverFunction.arn,
       },
     });
@@ -433,11 +434,15 @@ export class SvelteKit extends Component implements Link.Linkable {
       };
     }
 
+    function normalizeEdge() {
+      return output(args?.edge).apply((edge) => edge ?? false);
+    }
+
     function loadBuildMetadata() {
       const serverPath = ".svelte-kit/svelte-kit-sst/server";
       const assetsPath = ".svelte-kit/svelte-kit-sst/client";
 
-      return outputPath.apply(() => {
+      return outputPath.apply((outputPath) => {
         let basePath = "";
         try {
           const manifest = fs
@@ -457,95 +462,117 @@ export class SvelteKit extends Component implements Link.Linkable {
           prerenderedPath: ".svelte-kit/svelte-kit-sst/prerendered",
           assetsPath,
           assetsVersionedSubDir: "_app",
+          // create 1 behaviour for each top level asset file/folder
+          staticRoutes: fs
+            .readdirSync(path.join(outputPath, assetsPath), {
+              withFileTypes: true,
+            })
+            .map((item) =>
+              item.isDirectory()
+                ? `${basePath}${item.name}/*`
+                : `${basePath}${item.name}`,
+            ),
         };
       });
     }
 
     function buildPlan() {
-      return all([outputPath, buildMeta]).apply(([outputPath, buildMeta]) => {
-        const serverConfig = {
-          handler: path.join(
-            outputPath,
-            buildMeta.serverPath,
-            "lambda-handler",
-            "index.handler",
-          ),
-          nodejs: {
-            esbuild: {
-              minify: process.env.SST_DEBUG ? false : true,
-              sourcemap: process.env.SST_DEBUG ? ("inline" as const) : false,
-              define: {
-                "process.env.SST_DEBUG": process.env.SST_DEBUG
-                  ? "true"
-                  : "false",
+      return all([outputPath, edge, buildMeta]).apply(
+        ([outputPath, edge, buildMeta]) => {
+          const serverConfig = {
+            handler: path.join(
+              outputPath,
+              buildMeta.serverPath,
+              "lambda-handler",
+              "index.handler",
+            ),
+            nodejs: {
+              esbuild: {
+                minify: process.env.SST_DEBUG ? false : true,
+                sourcemap: process.env.SST_DEBUG ? ("inline" as const) : false,
+                define: {
+                  "process.env.SST_DEBUG": process.env.SST_DEBUG
+                    ? "true"
+                    : "false",
+                },
               },
             },
-          },
-          copyFiles: buildMeta.serverFiles
-            ? [
-                {
-                  from: path.join(outputPath, buildMeta.serverFiles),
-                  to: "prerendered",
-                },
-              ]
-            : undefined,
-        };
+            copyFiles: buildMeta.serverFiles
+              ? [
+                  {
+                    from: path.join(outputPath, buildMeta.serverFiles),
+                    to: "prerendered",
+                  },
+                ]
+              : undefined,
+          };
 
-        return validatePlan({
-          edge: false,
-          cloudFrontFunctions: {
-            serverCfFunction: {
-              injections: [
-                useCloudFrontFunctionHostHeaderInjection(),
-                useCloudFrontFormActionInjection(),
-              ],
-            },
-          },
-          origins: {
-            server: {
-              server: { function: serverConfig },
-            },
-            s3: {
-              s3: {
-                copy: [
-                  {
-                    from: buildMeta.assetsPath,
-                    to: buildMeta.basePath,
-                    cached: true,
-                    versionedSubDir: buildMeta.assetsVersionedSubDir,
-                  },
-                  {
-                    from: buildMeta.prerenderedPath,
-                    to: buildMeta.basePath,
-                    cached: false,
-                  },
+          return validatePlan({
+            edge,
+            cloudFrontFunctions: {
+              serverCfFunction: {
+                injections: [
+                  useCloudFrontFunctionHostHeaderInjection(),
+                  useCloudFrontFormActionInjection(),
                 ],
               },
             },
-            fallthrough: {
-              group: {
-                primaryOriginName: "s3",
-                fallbackOriginName: "server",
-                fallbackStatusCodes: [403, 404],
+            edgeFunctions: edge
+              ? {
+                  server: { function: serverConfig },
+                }
+              : undefined,
+            origins: {
+              ...(edge
+                ? {}
+                : {
+                    server: {
+                      server: { function: serverConfig },
+                    },
+                  }),
+              s3: {
+                s3: {
+                  copy: [
+                    {
+                      from: buildMeta.assetsPath,
+                      to: buildMeta.basePath,
+                      cached: true,
+                      versionedSubDir: buildMeta.assetsVersionedSubDir,
+                    },
+                    {
+                      from: buildMeta.prerenderedPath,
+                      to: buildMeta.basePath,
+                      cached: false,
+                    },
+                  ],
+                },
               },
             },
-          },
-          behaviors: [
-            {
-              cacheType: "server",
-              cfFunction: "serverCfFunction",
-              origin: "server",
-            },
-            {
-              pattern: "*",
-              cacheType: "server",
-              cfFunction: "serverCfFunction",
-              origin: "fallthrough",
-              allowedMethods: ["GET", "HEAD", "OPTIONS"],
-            },
-          ],
-        });
-      });
+            behaviors: [
+              edge
+                ? {
+                    cacheType: "server",
+                    cfFunction: "serverCfFunction",
+                    edgeFunction: "server",
+                    origin: "s3",
+                  }
+                : {
+                    cacheType: "server",
+                    cfFunction: "serverCfFunction",
+                    origin: "server",
+                  },
+              ...buildMeta.staticRoutes.map(
+                (route) =>
+                  ({
+                    cacheType: "static",
+                    pattern: route,
+                    origin: "s3",
+                  }) as const,
+              ),
+            ],
+          });
+        },
+      );
     }
   }
 

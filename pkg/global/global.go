@@ -15,12 +15,12 @@ import (
 	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3"
+	"github.com/sst/ion/pkg/flag"
 )
 
 var PULUMI_VERSION = "v" + sdk.Version.String()
 
-const BUN_VERSION = "1.1.24"
-
+const BUN_VERSION = "1.1.29"
 const UV_VERSION = "0.3.2"
 
 var configDir = (func() string {
@@ -76,7 +76,7 @@ func InstallPulumi() error {
 	case "arm64":
 		osArch += "-arm64"
 	default:
-		return fmt.Errorf("unsupported architecture")
+		return fmt.Errorf("unsupported architecture: " + runtime.GOARCH)
 	}
 
 	fileExtension := ".tar.gz"
@@ -97,6 +97,11 @@ func InstallPulumi() error {
 		return fmt.Errorf("failed to download pulumi: HTTP status %d", resp.StatusCode)
 	}
 
+	tmp := filepath.Join(BinPath(), ".tmp")
+	err = os.MkdirAll(tmp, 0755)
+	if err != nil {
+		return err
+	}
 	switch fileExtension {
 	case ".tar.gz":
 		gzr, err := gzip.NewReader(resp.Body)
@@ -104,7 +109,7 @@ func InstallPulumi() error {
 			return err
 		}
 		defer gzr.Close()
-		err = untar(gzr, BinPath())
+		err = untar(gzr, tmp)
 		if err != nil {
 			return err
 		}
@@ -112,6 +117,18 @@ func InstallPulumi() error {
 	default:
 		panic("cannot extract zip file for pulumi")
 	}
+
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		return err
+	}
+	for _, file := range entries {
+		err = os.Rename(filepath.Join(tmp, file.Name()), filepath.Join(BinPath(), file.Name()))
+		if err != nil {
+			return err
+		}
+	}
+	os.RemoveAll(tmp)
 
 	return nil
 }
@@ -133,6 +150,9 @@ func CertPath() string {
 }
 
 func NeedsBun() bool {
+	if flag.NO_BUN {
+		return false
+	}
 	path := BunPath()
 	slog.Info("checking for bun", "path", path)
 	if _, err := os.Stat(path); err != nil {

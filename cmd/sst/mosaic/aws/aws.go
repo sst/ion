@@ -13,6 +13,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -224,6 +226,45 @@ func Start(
 	}
 
 	slog.Info("connected to iot")
+
+	go func() {
+		evts := bus.Subscribe(&FunctionLogEvent{}, &FunctionInvokedEvent{}, &FunctionResponseEvent{}, &FunctionErrorEvent{}, &FunctionBuildEvent{})
+		logs := map[string]*os.File{}
+
+		getLog := func(functionID string, requestID string) *os.File {
+			log, ok := logs[requestID]
+			if !ok {
+				path := p.PathLog("lambda/" + functionID + "/" + requestID)
+				os.MkdirAll(filepath.Dir(path), 0755)
+				log, _ = os.Create(path)
+				logs[requestID] = log
+			}
+			return log
+		}
+
+		for range evts {
+			for evt := range evts {
+				switch evt := evt.(type) {
+				case *FunctionInvokedEvent:
+					log := getLog(evt.FunctionID, evt.RequestID)
+					log.WriteString("invocation " + evt.RequestID + "\n")
+					log.WriteString(string(evt.Input))
+					log.WriteString("\n")
+				case *FunctionLogEvent:
+					getLog(evt.FunctionID, evt.RequestID).WriteString(evt.Line + "\n")
+				case *FunctionResponseEvent:
+					log := getLog(evt.FunctionID, evt.RequestID)
+					log.WriteString("response " + evt.RequestID + "\n")
+					log.WriteString(string(evt.Output))
+					log.WriteString("\n")
+					delete(logs, evt.RequestID)
+				case *FunctionErrorEvent:
+					getLog(evt.FunctionID, evt.RequestID).WriteString(evt.ErrorType + ": " + evt.ErrorMessage + "\n")
+					delete(logs, evt.RequestID)
+				}
+			}
+		}
+	}()
 
 	go func() {
 		workers := map[string]*WorkerInfo{}
