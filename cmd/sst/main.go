@@ -22,6 +22,7 @@ import (
 	"github.com/sst/ion/cmd/sst/mosaic/errors"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
+	"github.com/sst/ion/pkg/flag"
 	"github.com/sst/ion/pkg/global"
 	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/project/provider"
@@ -71,7 +72,10 @@ func main() {
 			}
 		} else {
 			slog.Error("exited with error", "err", err)
-			ui.Error("Unexpected error occurred. Please check the logs in .sst/log/sst.log")
+			// check if context cancelled error
+			if err != context.Canceled {
+				ui.Error("Unexpected error occurred. Please run with --print-logs or check .sst/log/sst.log if available.")
+			}
 		}
 		telemetry.Close()
 		os.Exit(1)
@@ -84,7 +88,7 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	interruptChannel := make(chan os.Signal, 1)
-	signal.Notify(interruptChannel, syscall.SIGINT)
+	signal.Notify(interruptChannel, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-interruptChannel
 		slog.Info("interrupted")
@@ -94,12 +98,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	currentUser, err := user.Current()
+	_, err = user.Current()
 	if err != nil {
 		return err
 	}
 
-	if currentUser.Uid != "0" {
+	if !flag.SST_SKIP_DEPENDENCY_CHECK {
 		spin := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 		spin.Suffix = "  Updating dependencies..."
 		if global.NeedsPulumi() {
@@ -214,6 +218,12 @@ var root = &cli.Command{
 					":::tip",
 					"Changing the stage will redeploy your app to a new stage with new resources. The old resources will still be around in the old stage.",
 					":::",
+					"",
+					"You can also use the `SST_STAGE` environment variable.",
+					"```bash frame=\"none\"",
+					"SST_STAGE=dev sst [command]",
+					"```",
+					"This can also be declared in a `.env` file or in the CLI session.",
 					"",
 					"If the stage is not passed in, then the CLI will:",
 					"",
@@ -349,7 +359,8 @@ var root = &cli.Command{
 					"",
 					"1. Watch your `sst.config.ts` and deploy your app",
 					"2. Run your functions [Live](/docs/live/) and logs their invocations",
-					"3. Run the dev mode for components that have `dev.autostart` enabled",
+					"3. Start a [`sst tunnel`](#tunnel) session if your app has a VPC with `bastion` enabled",
+					"4. Run the dev mode for components that have `dev.autostart` enabled",
 					"   - Components like `Service` and frontends like `Nextjs`, `Remix`, `Astro`, `StaticSite`, etc.",
 					"   - It starts their `dev.command` in a separate pane",
 					"   - And loads any [linked resources](/docs/linking) in the environment",
@@ -938,6 +949,8 @@ var root = &cli.Command{
 					"- General machine information, like the number of CPUs, OS, CI/CD environment, etc.",
 					"",
 					"This is completely optional and can be disabled at any time.",
+					"",
+					"You can also opt-out by setting an environment variable: `SST_TELEMETRY_DISABLED=1` or `DO_NOT_TRACK=1`.",
 				}, "\n"),
 			},
 			Children: []*cli.Command{

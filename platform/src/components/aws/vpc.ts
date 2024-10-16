@@ -1,16 +1,24 @@
-import { ComponentResourceOptions, Output, all, output } from "@pulumi/pulumi";
+import {
+  ComponentResourceOptions,
+  Output,
+  all,
+  interpolate,
+  output,
+} from "@pulumi/pulumi";
 import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
 import {
-  autoscaling,
   ec2,
   getAvailabilityZonesOutput,
   iam,
+  route53,
   servicediscovery,
+  ssm,
 } from "@pulumi/aws";
 import { Vpc as VpcV1 } from "./vpc-v1";
 import { Link } from "../link";
 import { VisibleError } from "../error";
+import { PrivateKey } from "@pulumi/tls";
 export type { VpcArgs as VpcV1Args } from "./vpc-v1";
 
 export interface VpcArgs {
@@ -29,18 +37,28 @@ export interface VpcArgs {
   /**
    * Configures NAT. Enabling NAT allows resources in private subnets to connect to the internet.
    *
-   * If `"managed"` is specified, a NAT Gateway is created in each AZ. All the traffic from
+   * There are two NAT options:
+   * 1. `"managed"` creates a [NAT Gateway](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html)
+   * 2. `"ec2"` creates an [EC2 instance](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-nat-gateway.html)
+   *    with the [fck-nat](https://github.com/AndrewGuenther/fck-nat) AMI
+   *
+   * For `"managed"`, a NAT Gateway is created in each AZ. All the traffic from
    * the private subnets are routed to the NAT Gateway in the same AZ.
    *
    * NAT Gateways are billed per hour and per gigabyte of data processed. Each NAT Gateway
    * roughly costs $33 per month. Make sure to [review the pricing](https://aws.amazon.com/vpc/pricing/).
    *
-   * If `"ec2"` is specified, an EC2 instance of type `t4g.nano` will be launched in each AZ
+   * For `"ec2"`, an EC2 instance of type `t4g.nano` will be launched in each AZ
    * with the [fck-nat](https://github.com/AndrewGuenther/fck-nat) AMI. All the traffic from
    * the private subnets are routed to the Elastic Network Interface (ENI) of the EC2 instance
    * in the same AZ.
    *
-   * NAT instances are much cheaper than NAT Gateways, but they need to be managed manually.
+   * :::tip
+   * The `"ec2"` option uses fck-nat and is 10x cheaper than the `"managed"` NAT Gateway.
+   * :::
+   *
+   * NAT EC2 instances are much cheaper than NAT Gateways, the `t4g.nano` instance type is around
+   * $3 per month. But you'll need to scale it up manually if you need more bandwidth.
    *
    * @default NAT is disabled
    * @example
@@ -50,16 +68,54 @@ export interface VpcArgs {
    * }
    * ```
    */
-  nat?: Input<"ec2" | "managed">;
+  nat?: Input<
+    | "ec2"
+    | "managed"
+    | {
+        /**
+         * Configures the NAT EC2 instance.
+         * @default `{instance: "t4g.nano"}`
+         * @example
+         * ```ts
+         * {
+         *   nat: {
+         *     ec2: {
+         *       instance: "t4g.large"
+         *     }
+         *   }
+         * }
+         * ```
+         */
+        ec2: Input<{
+          /**
+           * The type of instance to use for the NAT.
+           *
+           * @default `"t4g.nano"`
+           */
+          instance: Input<string>;
+        }>;
+      }
+  >;
   /**
    * Configures a bastion host that can be used to connect to resources in the VPC.
    *
    * When enabled, an EC2 instance of type `t4g.nano` with the bastion AMI will be launched
    * in a public subnet. The instance will have AWS SSM (AWS Session Manager) enabled for
-   * secure access without the need for SSH key management.
+   * secure access without the need for SSH key.
    *
-   * However if `nat` is enabled and `"ec2"` is specified, a NAT instance will be used
-   * as the bastion host. No additional bastion instance will be created.
+   * It costs roughly $3 per month to run the `t4g.nano` instance.
+   *
+   * :::note
+   * If `nat: "ec2"` is enabled, the bastion host will reuse the NAT EC2 instance.
+   * :::
+   *
+   * However if `nat: "ec2"` is enabled, the EC2 instance that NAT creates will be used
+   * as the bastion host. No additional EC2 instance will be created.
+   *
+   * If you are running `sst dev`, a tunnel will be automatically created to the bastion host.
+   * This uses a network interface to forward traffic from your local machine to the bastion host.
+   *
+   * You can learn more about [`sst tunnel`](/docs/reference/cli#tunnel).
    *
    * @default Bastion is not created
    * @example
@@ -136,6 +192,7 @@ interface VpcRef {
   elasticIps: Output<ec2.Eip[]>;
   bastionInstance: Output<ec2.Instance | undefined>;
   cloudmapNamespace: servicediscovery.PrivateDnsNamespace;
+  privateKeyValue: Output<string | undefined>;
 }
 
 /**
@@ -193,14 +250,21 @@ export class Vpc extends Component implements Link.Linkable {
   private privateRouteTables: Output<ec2.RouteTable[]>;
   private bastionInstance: Output<ec2.Instance | undefined>;
   private cloudmapNamespace: servicediscovery.PrivateDnsNamespace;
+  private privateKeyValue: Output<string | undefined>;
   public static v1 = VpcV1;
 
   constructor(name: string, args?: VpcArgs, opts?: ComponentResourceOptions) {
     const _version = 2;
     super(__pulumiType, name, args, opts, {
       _version,
-      _message: `To continue using the previous version, rename "Vpc" to "Vpc.v${$cli.state.version[name]}". Or recreate this component to update - https://sst.dev/docs/component/aws/cluster#forceupgrade`,
+      _message: [
+        `There is a new version of "Vpc" that has breaking changes.`,
+        ``,
+        `To continue using the previous version, rename "Vpc" to "Vpc.v${$cli.state.version[name]}". Or recreate this component to update - https://sst.dev/docs/components/#versioning`,
+      ].join("\n"),
     });
+
+    const parent = this;
 
     if (args && "ref" in args) {
       const ref = args as VpcRef;
@@ -216,14 +280,16 @@ export class Vpc extends Component implements Link.Linkable {
       this.elasticIps = ref.elasticIps;
       this.bastionInstance = ref.bastionInstance;
       this.cloudmapNamespace = ref.cloudmapNamespace;
+      this.privateKeyValue = ref.privateKeyValue;
+      registerOutputs();
       return;
     }
-    const parent = this;
 
     const zones = normalizeAz();
     const nat = normalizeNat();
 
     const vpc = createVpc();
+    const { keyPair, privateKeyValue } = createKeyPair();
     const internetGateway = createInternetGateway();
     const securityGroup = createSecurityGroup();
     const { publicSubnets, publicRouteTables } = createPublicSubnets();
@@ -245,6 +311,31 @@ export class Vpc extends Component implements Link.Linkable {
     this.privateRouteTables = privateRouteTables;
     this.bastionInstance = output(bastionInstance);
     this.cloudmapNamespace = cloudmapNamespace;
+    this.privateKeyValue = output(privateKeyValue);
+    registerOutputs();
+
+    function registerOutputs() {
+      parent.registerOutputs({
+        _tunnel: all([
+          parent.bastionInstance,
+          parent.privateKeyValue,
+          parent._privateSubnets,
+          parent._publicSubnets,
+        ]).apply(
+          ([bastion, privateKeyValue, privateSubnets, publicSubnets]) => {
+            if (!bastion) return;
+            return {
+              ip: bastion.publicIp,
+              username: "ec2-user",
+              privateKey: privateKeyValue!,
+              subnets: [...privateSubnets, ...publicSubnets].map(
+                (s) => s.cidrBlock,
+              ),
+            };
+          },
+        ),
+      });
+    }
 
     function normalizeAz() {
       const zones = getAvailabilityZonesOutput(
@@ -261,7 +352,13 @@ export class Vpc extends Component implements Link.Linkable {
     }
 
     function normalizeNat() {
-      return output(args?.nat).apply((nat) => nat);
+      return output(args?.nat).apply((nat) => {
+        if (nat === "managed") return { type: "managed" as const };
+        if (nat === "ec2")
+          return { type: "ec2" as const, ec2: { instance: "t4g.nano" } };
+        if (nat) return { type: "ec2" as const, ec2: nat.ec2 };
+        return undefined;
+      });
     }
 
     function createVpc() {
@@ -277,6 +374,35 @@ export class Vpc extends Component implements Link.Linkable {
           { parent },
         ),
       );
+    }
+
+    function createKeyPair() {
+      if (!args?.bastion) return {};
+
+      const tlsPrivateKey = new PrivateKey(
+        `${name}TlsPrivateKey`,
+        {
+          algorithm: "RSA",
+          rsaBits: 4096,
+        },
+        { parent },
+      );
+
+      new ssm.Parameter(`${name}PrivateKey`, {
+        name: interpolate`/sst/vpc/${vpc.id}/private-key`,
+        type: ssm.ParameterType.SecureString,
+        value: tlsPrivateKey.privateKeyOpenssh,
+      });
+
+      const keyPair = new ec2.KeyPair(
+        `${name}KeyPair`,
+        {
+          publicKey: tlsPrivateKey.publicKeyOpenssh,
+        },
+        { parent },
+      );
+
+      return { keyPair, privateKeyValue: tlsPrivateKey.privateKeyOpenssh };
     }
 
     function createInternetGateway() {
@@ -324,7 +450,7 @@ export class Vpc extends Component implements Link.Linkable {
 
     function createNatGateways() {
       const ret = all([nat, publicSubnets]).apply(([nat, subnets]) => {
-        if (nat !== "managed") return [];
+        if (nat?.type !== "managed") return [];
 
         return subnets.map((subnet, i) => {
           const elasticIp = new ec2.Eip(
@@ -361,7 +487,7 @@ export class Vpc extends Component implements Link.Linkable {
 
     function createNatInstances() {
       return nat.apply((nat) => {
-        if (nat !== "ec2") return output([]);
+        if (nat?.type !== "ec2") return output([]);
 
         const sg = new ec2.SecurityGroup(
           `${name}NatInstanceSecurityGroup`,
@@ -440,12 +566,13 @@ export class Vpc extends Component implements Link.Linkable {
             return new ec2.Instance(
               `${name}NatInstance${i + 1}`,
               {
-                instanceType: "t4g.nano",
+                instanceType: nat.ec2.instance,
                 ami: ami.id,
                 subnetId: publicSubnets[i].id,
                 vpcSecurityGroupIds: [sg.id],
                 iamInstanceProfile: instanceProfile.name,
                 sourceDestCheck: false,
+                keyName: keyPair?.keyName,
                 tags: {
                   Name: `${name} NAT Instance`,
                   "sst:lookup-type": "nat",
@@ -579,7 +706,7 @@ export class Vpc extends Component implements Link.Linkable {
     }
 
     function createBastion() {
-      if (!args?.bastion) return output(undefined);
+      if (!args?.bastion) return undefined;
 
       return natInstances.apply((natInstances) => {
         if (natInstances.length) return natInstances[0];
@@ -663,6 +790,7 @@ export class Vpc extends Component implements Link.Linkable {
               subnetId: publicSubnets.apply((v) => v[0].id),
               vpcSecurityGroupIds: [sg.id],
               iamInstanceProfile: instanceProfile.name,
+              keyName: keyPair?.keyName,
               tags: {
                 "sst:lookup-type": "bastion",
               },
@@ -718,7 +846,7 @@ export class Vpc extends Component implements Link.Linkable {
   }
 
   /**
-   * The bastion instance id.
+   * The bastion instance ID.
    */
   public get bastion() {
     return this.bastionInstance.apply((v) => {
@@ -796,7 +924,7 @@ export class Vpc extends Component implements Link.Linkable {
    * :::
    *
    * @param name The name of the component.
-   * @param vpcID The ID of the existing VPC.
+   * @param vpcId The ID of the existing VPC.
    *
    * @example
    * Imagine you create a VPC in the `dev` stage. And in your personal stage `frank`,
@@ -817,8 +945,8 @@ export class Vpc extends Component implements Link.Linkable {
    * };
    * ```
    */
-  public static get(name: string, vpcID: Input<string>) {
-    const vpc = ec2.Vpc.get(`${name}Vpc`, vpcID);
+  public static get(name: string, vpcId: Input<string>) {
+    const vpc = ec2.Vpc.get(`${name}Vpc`, vpcId);
     const internetGateway = ec2.InternetGateway.get(
       `${name}InstanceGateway`,
       ec2.getInternetGatewayOutput({
@@ -836,7 +964,7 @@ export class Vpc extends Component implements Link.Linkable {
         })
         .ids.apply((ids) => {
           if (!ids.length)
-            throw new VisibleError(`Security group not found in VPC ${vpcID}`);
+            throw new VisibleError(`Security group not found in VPC ${vpcId}`);
           return ids[0];
         }),
     );
@@ -924,15 +1052,45 @@ export class Vpc extends Component implements Link.Linkable {
           : undefined,
       );
 
-    const namespaceId = servicediscovery.getDnsNamespaceOutput({
-      name: "sst",
-      type: "DNS_PRIVATE",
-    }).id;
+    // Note: can also use servicediscovery.getDnsNamespaceOutput() here, ie.
+    // ```ts
+    // const namespaceId = servicediscovery.getDnsNamespaceOutput({
+    //   name: "sst",
+    //   type: "DNS_PRIVATE",
+    // }).id;
+    // ```
+    // but if user deployed multiple VPCs into the same account. This will error because
+    // there are multiple results. Even though `getDnsNamespaceOutput()` takes tags in args,
+    // the tags are not used for lookup.
+    const zone = output(vpcId).apply((vpcId) =>
+      route53.getZone({
+        name: "sst",
+        privateZone: true,
+        vpcId,
+      }),
+    );
+    const namespaceId = zone.linkedServiceDescription.apply((description) => {
+      const match = description.match(/:namespace\/(ns-[a-z1-9]*)/)?.[1];
+      if (!match)
+        throw new VisibleError(
+          `Cloud Map namespace not found for VPC ${vpcId}`,
+        );
+      return match;
+    });
     const cloudmapNamespace = servicediscovery.PrivateDnsNamespace.get(
       `${name}CloudmapNamespace`,
       namespaceId,
-      { vpc: vpcID },
+      { vpc: vpcId },
     );
+
+    const privateKeyValue = bastionInstance.apply((v) => {
+      if (!v) return;
+      const param = ssm.Parameter.get(
+        `${name}PrivateKey`,
+        interpolate`/sst/vpc/${vpc.id}/private-key`,
+      );
+      return param.value;
+    });
 
     return new Vpc(name, {
       ref: true,
@@ -948,6 +1106,7 @@ export class Vpc extends Component implements Link.Linkable {
       elasticIps,
       bastionInstance,
       cloudmapNamespace,
+      privateKeyValue: output(privateKeyValue),
     } satisfies VpcRef as VpcArgs);
   }
 

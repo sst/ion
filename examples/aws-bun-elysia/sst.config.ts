@@ -35,11 +35,11 @@
  * This example lets you upload a file to S3 and then download it.
  *
  * ```bash
- * curl --F file=@elysia.png http://localhost:3000/
+ * curl -F file=@elysia.png http://localhost:3000/
  * curl http://localhost:3000/latest
  * ```
  *
- * Finally, you can deploy it using `bun sst deploy`.
+ * Finally, you can deploy it using `bun sst deploy --stage production`.
  */
 export default $config({
   app(input) {

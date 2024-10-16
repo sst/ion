@@ -1,69 +1,116 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"io"
 	"log/slog"
-	"net"
 	"os"
 	"os/exec"
 	"os/user"
 	"strings"
-	"sync"
-	"syscall"
-	"time"
 
-	"github.com/armon/go-socks5"
-	"github.com/songgao/water"
 	"github.com/sst/ion/cmd/sst/cli"
 	"github.com/sst/ion/cmd/sst/mosaic/ui"
 	"github.com/sst/ion/internal/util"
 	"github.com/sst/ion/pkg/global"
+	"github.com/sst/ion/pkg/project"
 	"github.com/sst/ion/pkg/tunnel"
-	"golang.org/x/crypto/ssh"
-)
-
-type WaterTun struct {
-	*water.Interface
-}
-
-func (w *WaterTun) Name() (string, error) {
-	return w.Interface.Name(), nil
-}
-
-func (w *WaterTun) File() *os.File {
-	return nil
-}
-
-const (
-	MTU = 1500
-)
-
-type connection struct {
-	conn       net.Conn
-	lastActive time.Time
-}
-
-var (
-	connectionsMutex sync.Mutex
-	connections      = make(map[string]*connection)
+	"golang.org/x/sync/errgroup"
 )
 
 var CmdTunnel = &cli.Command{
 	Name: "tunnel",
 	Description: cli.Description{
-		Short: "",
-		Long:  strings.Join([]string{}, "\n"),
+		Short: "Start a tunnel",
+		Long: strings.Join([]string{
+			"Start a tunnel.",
+			"",
+			"```bash frame=\"none\"",
+			"sst tunnel",
+			"```",
+			"",
+			"If your app has a VPC with `bastion` enabled, you can use this to connect to it.",
+			"This will forward traffic from the following ranges over SSH:",
+			"- `10.0.4.0/22`",
+			"- `10.0.12.0/22`",
+			"- `10.0.0.0/22`",
+			"- `10.0.8.0/22`",
+			"",
+			"The tunnel allows your local machine to access resources that are in the VPC.",
+			"",
+			":::note",
+			"The tunnel is only available for apps that have a VPC with `bastion` enabled.",
+			":::",
+			"",
+			"If you are running `sst dev`, this tunnel will be started automatically under the",
+			"_Tunnel_ tab in the sidebar.",
+			"",
+			":::tip",
+			"This is automatically started when you run `sst dev`.",
+			":::",
+			"",
+			"You can start this manually if you want to connect to a different stage.",
+			"",
+			"```bash frame=\"none\"",
+			"sst tunnel --stage production",
+			"```",
+			"",
+			"This needs a network interface on your local machine. You can create this",
+			"with the `sst tunnel install` command.",
+		}, "\n"),
 	},
 	Run: func(c *cli.Cli) error {
+		proj, err := c.InitProject()
+		if err != nil {
+			return err
+		}
+		state, err := proj.GetCompleted(c.Context)
+		if err != nil {
+			return err
+		}
+		if len(state.Tunnels) == 0 {
+			return util.NewReadableError(nil, "No tunnels found for stage "+proj.App().Stage)
+		}
+		var tun project.Tunnel
+		for _, item := range state.Tunnels {
+			tun = item
+		}
+		subnets := strings.Join(tun.Subnets, ",")
 		// run as root
-		tunnelCmd := exec.Command("sudo", "/opt/sst/sst", "tunnel", "start", "--print-logs")
+		tunnelCmd := exec.CommandContext(
+			c.Context,
+			"sudo", "-n", "-E",
+			tunnel.BINARY_PATH, "tunnel", "start",
+			"--subnets", subnets,
+			"--host", tun.IP,
+			"--user", tun.Username,
+		)
+		tunnelCmd.Env = append(
+			os.Environ(),
+			"SST_SKIP_LOCAL=true",
+			"SST_SKIP_DEPENDENCY_CHECK=true",
+			"SSH_PRIVATE_KEY="+tun.PrivateKey,
+		)
 		tunnelCmd.Stdout = os.Stdout
-		tunnelCmd.Stderr = os.Stderr
+		util.SetProcessGroupID(tunnelCmd)
+		util.SetProcessCancel(tunnelCmd)
+		slog.Info("starting tunnel", "cmd", tunnelCmd.Args)
+		fmt.Println(ui.TEXT_HIGHLIGHT_BOLD.Render("Tunnel"))
+		fmt.Println()
+		fmt.Print(ui.TEXT_HIGHLIGHT_BOLD.Render("➜"))
+		fmt.Println(ui.TEXT_NORMAL.Render("  Forwarding ranges"))
+		for _, subnet := range tun.Subnets {
+			fmt.Println(ui.TEXT_DIM.Render("   " + subnet))
+		}
+		fmt.Println()
+		fmt.Println(ui.TEXT_DIM.Render("Waiting for connections..."))
+		fmt.Println()
+		stderr, _ := tunnelCmd.StderrPipe()
 		tunnelCmd.Start()
-		<-c.Context.Done()
-		tunnelCmd.Process.Signal(syscall.SIGINT)
-		tunnelCmd.Wait()
+		output, _ := io.ReadAll(stderr)
+		if strings.Contains(string(output), "password is required") {
+			return util.NewReadableError(nil, "Make sure you have installed the tunnel with `sudo sst tunnel install`")
+		}
 		return nil
 	},
 	Children: []*cli.Command{
@@ -74,9 +121,14 @@ var CmdTunnel = &cli.Command{
 				Long: strings.Join([]string{
 					"Install the tunnel.",
 					"",
-					"This will install the tunnel on your system.",
+					"To be able to create a tunnel, SST needs to create a network interface on your local",
+					"machine. This needs _sudo_ access.",
 					"",
-					"This is required for the tunnel to work.",
+					"```bash \"sudo\"",
+					"sudo sst tunnel install",
+					"```",
+					"",
+					"You only need to run this once on your machine.",
 				}, "\n"),
 			},
 			Run: func(c *cli.Cli) error {
@@ -107,13 +159,38 @@ var CmdTunnel = &cli.Command{
 					"This is required for the tunnel to work.",
 				}, "\n"),
 			},
+			Hidden: true,
 			Flags: []cli.Flag{
 				{
-					Name: "print-logs",
-					Type: "bool",
+					Name: "subnets",
+					Type: "string",
 					Description: cli.Description{
-						Short: "Print logs to stderr",
-						Long:  "Print the logs to the screen. These are logs that are written to the `.sst/log/tun2socks.log` file.",
+						Short: "The subnet to use for the tunnel",
+						Long:  "The subnet to use for the tunnel",
+					},
+				},
+				{
+					Name: "host",
+					Type: "string",
+					Description: cli.Description{
+						Short: "The host to use for the tunnel",
+						Long:  "The host to use for the tunnel",
+					},
+				},
+				{
+					Name: "port",
+					Type: "string",
+					Description: cli.Description{
+						Short: "The port to use for the tunnel",
+						Long:  "The port to use for the tunnel",
+					},
+				},
+				{
+					Name: "user",
+					Type: "string",
+					Description: cli.Description{
+						Short: "The user to use for the tunnel",
+						Long:  "The user to use for the tunnel",
 					},
 				},
 			},
@@ -122,63 +199,33 @@ var CmdTunnel = &cli.Command{
 				if err != nil {
 					return err
 				}
-				slog.Info("creating interface")
-				err = tunnel.CreateInterface(
-					"10.0.4.0/22",
-					"10.0.12.0/22",
-					"10.0.0.0/22",
-					"10.0.8.0/22",
-				)
-				if err != nil {
-					return err
+				subnets := strings.Split(c.String("subnets"), ",")
+				host := c.String("host")
+				port := c.String("port")
+				user := c.String("user")
+				if port == "" {
+					port = "22"
 				}
-				defer tunnel.DestroyInterface()
-				slog.Info("getting ssh key")
-				key, err := os.ReadFile("/home/thdxr/.ssh/id_rsa")
-				if err != nil {
-					return err
-				}
-				signer, err := ssh.ParsePrivateKey(key)
-				if err != nil {
-					return err
-				}
-				// ssh -vvv -D 1080 -N ec2-user@54.89.220.51
-				config := &ssh.ClientConfig{
-					User: "ec2-user",
-					Auth: []ssh.AuthMethod{
-						ssh.PublicKeys(signer),
-					},
-					HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-				}
-				sshClient, err := ssh.Dial("tcp", "54.89.220.51:22", config)
-				if err != nil {
-					return err
-				}
-				defer sshClient.Close()
-
-				server, err := socks5.New(&socks5.Config{
-					Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
-						fmt.Println("Dialing", network, addr)
-						// 50/50 random
-						if true {
-							return sshClient.Dial(network, addr)
-						}
-						return net.Dial(network, addr)
-					},
+				slog.Info("starting tunnel", "subnet", subnets, "host", host, "port", port)
+				var wg errgroup.Group
+				wg.Go(func() error {
+					defer c.Cancel()
+					return tunnel.StartProxy(
+						c.Context,
+						user,
+						host+":"+port,
+						[]byte(os.Getenv("SSH_PRIVATE_KEY")),
+					)
 				})
-				if err != nil {
-					return err
-				}
-				go server.ListenAndServe("tcp", fmt.Sprintf("%s:%d", "127.0.0.1", 1080))
+				wg.Go(func() error {
+					defer c.Cancel()
+					return tunnel.Start(c.Context, subnets...)
+				})
 				slog.Info("tunnel started")
-
-				socksCmd := exec.CommandContext(c.Context, "tun2socks", "-device", "sst", "-proxy", "socks5://127.0.0.1:1080")
-				socksCmd.Stdout = os.Stdout
-				socksCmd.Stderr = os.Stderr
-				socksCmd.Start()
-				<-c.Context.Done()
-				socksCmd.Process.Kill()
-				socksCmd.Wait()
+				err = wg.Wait()
+				if err != nil {
+					slog.Error("failed to start tunnel", "error", err)
+				}
 				return nil
 			},
 		},

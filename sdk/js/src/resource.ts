@@ -1,4 +1,6 @@
 import { env } from "process";
+import { readFileSync } from "fs";
+import crypto from "crypto";
 
 export interface Resource {
   App: {
@@ -23,6 +25,26 @@ for (const [key, value] of Object.entries(environment)) {
   }
 }
 
+// @ts-expect-error
+if (env.SST_KEY_FILE && env.SST_KEY && !globalThis.SST_KEY_FILE_DATA) {
+  const key = Buffer.from(env.SST_KEY, "base64");
+  const encryptedData = readFileSync(env.SST_KEY_FILE);
+  const nonce = Buffer.alloc(12, 0);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, nonce);
+  const authTag = encryptedData.subarray(-16);
+  const actualCiphertext = encryptedData.subarray(0, -16);
+  decipher.setAuthTag(authTag);
+  let decrypted = decipher.update(actualCiphertext);
+  decrypted = Buffer.concat([decrypted, decipher.final()]);
+  const decryptedData = JSON.parse(decrypted.toString());
+  Object.assign(raw, decryptedData);
+}
+
+// @ts-expect-error
+if (globalThis.SST_KEY_FILE_DATA) {
+  // @ts-expect-error
+  Object.assign(raw, globalThis.SST_KEY_FILE_DATA);
+}
 export function fromCloudflareEnv(input: any) {
   for (let [key, value] of Object.entries(input)) {
     if (typeof value === "string") {

@@ -829,7 +829,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
    */
   public route(
     route: string,
-    handler: string | FunctionArgs | Input<FunctionArn>,
+    handler: Input<string | FunctionArgs | FunctionArn>,
     args: ApiGatewayV1RouteArgs = {},
   ) {
     const { method, path } = this.parseRoute(route);
@@ -1197,7 +1197,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
                 "method.response.header.Access-Control-Allow-Origin": "'*'",
               },
             },
-            { parent },
+            { parent, dependsOn: [integration] },
           );
 
           return { method, methodResponse, integration, integrationResponse };
@@ -1235,6 +1235,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
       const resources = all([corsRoutes, corsResponses]).apply(
         ([corsRoutes, corsResponses]) =>
           [
+            api,
             corsRoutes.map((v) => Object.values(v)),
             corsResponses,
             routes.map((route) => [
