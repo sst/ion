@@ -292,7 +292,7 @@ export interface DynamoSubscriberArgs {
 
 interface DynamoRef {
   ref: boolean;
-  table: Input<dynamodb.Table>;
+  table: dynamodb.Table;
 }
 
 /**
@@ -705,12 +705,12 @@ export class Dynamo extends Component implements Link.Linkable {
    *
    * ```ts title=sst.config.ts"
    * const table = $app.stage === "frank"
-   *  ? sst.aws.Dynamo.get("MyTable", "app-dev-table-12345678")
+   *  ? sst.aws.Dynamo.get("MyTable", "app-dev-mytable")
    *  : new sst.aws.Dynamo("MyTable");
    * ```
    *
-   * Here `app-dev-table-12345678` is the auto-generated table name for the table created
-   * in the `dev` stage. You can find this by outputting the table name in the `dev` stage.
+   * Here `app-dev-mytable` is the name of the DynamoDB Table created in the `dev` stage.
+   * You can find this by outputting the table name in the `dev` stage.
    *
    * ```ts title="sst.config.ts"
    * return {
@@ -722,7 +722,7 @@ export class Dynamo extends Component implements Link.Linkable {
     return new Dynamo(name, {
       ref: true,
       table: dynamodb.Table.get(`${name}Table`, tableName),
-    } as unknown as DynamoArgs);
+    } satisfies DynamoRef as unknown as DynamoArgs);
   }
 
   /** @internal */
