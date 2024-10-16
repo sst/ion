@@ -10,7 +10,7 @@ import Section from '../../../../src/components/tsdoc/Section.astro';
 import NestedTitle from '../../../../src/components/tsdoc/NestedTitle.astro';
 import InlineSection from '../../../../src/components/tsdoc/InlineSection.astro';
 
-Below are a collection of example SST apps. These are available in the [`examples/`](https://github.com/sst/ion/tree/dev/examples) directory of the repo.
+Below is a collection of example SST apps. These are available in the [`examples/`](https://github.com/sst/ion/tree/dev/examples) directory of the repo.
 
 :::tip
 This doc is best viewed through the site search or through the _AI_.
@@ -127,16 +127,15 @@ Create an S3 bucket and transform its bucket policy.
 const bucket = new sst.aws.Bucket("MyBucket", {
   transform: {
     policy: (args) => {
-      // use $jsonParse and $jsonStringify helper functions to manipulate JSON strings
+      // use sst.aws.iamEdit helper function to manipulate IAM policy
       // containing Output values from components
-      args.policy = $jsonParse(args.policy).apply((policy) => {
+      args.policy = sst.aws.iamEdit(args.policy, (policy) => {
         policy.Statement.push({
           Effect: "Allow",
           Principal: { Service: "ses.amazonaws.com" },
           Action: "s3:PutObject",
           Resource: $interpolate`arn:aws:s3:::${args.bucket}/*`,
         });
-        return $jsonStringify(policy);
       });
     },
   },
@@ -213,6 +212,125 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-bucket-
 
 
 ---
+## AWS Bun Elysia container
+
+Deploys a Bun [Elysia](https://elysiajs.com/) API to AWS.
+
+You can get started by running.
+
+```bash
+bun create elysia aws-bun-elysia
+cd aws-bun-elysia
+bunx sst init
+```
+
+Now you can add a service.
+
+```ts title="sst.config.ts"
+cluster.addService("MyService", {
+  public: {
+    ports: [{ listen: "80/http", forward: "3000/http" }],
+  },
+  dev: {
+    command: "bun dev",
+  },
+});
+```
+
+Start your app locally.
+
+```bash
+bun sst dev
+```
+
+This example lets you upload a file to S3 and then download it.
+
+```bash
+curl -F file=@elysia.png http://localhost:3000/
+curl http://localhost:3000/latest
+```
+
+Finally, you can deploy it using `bun sst deploy --stage production`.
+```ts title="sst.config.ts"
+const bucket = new sst.aws.Bucket("MyBucket");
+const vpc = new sst.aws.Vpc("MyVpc");
+
+const cluster = new sst.aws.Cluster("MyCluster", { vpc });
+cluster.addService("MyService", {
+  public: {
+    ports: [{ listen: "80/http", forward: "3000/http" }],
+  },
+  dev: {
+    command: "bun dev",
+  },
+  link: [bucket],
+});
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-bun-elysia).
+
+
+---
+## AWS Bun file upload
+
+Deploys an Bun app to AWS.
+
+You can get started by running.
+
+```bash
+mkdir aws-bun-file-upload && cd aws-bun-file-upload
+bun init -y
+bunx sst init
+```
+
+Now you can add a service.
+
+```ts title="sst.config.ts"
+cluster.addService("MyService", {
+  public: {
+    ports: [{ listen: "80/http", forward: "3000/http" }],
+  },
+  dev: {
+    command: "bun dev",
+  },
+  link: [bucket],
+});
+```
+
+Start your app locally.
+
+```bash
+bun sst dev
+```
+
+This example lets you upload a file to S3 and then download it.
+
+```bash
+curl -F file=@package.json http://localhost:3000/
+curl http://localhost:3000/latest
+```
+
+Finally, you can deploy it using `bun sst deploy --stage production`.
+```ts title="sst.config.ts"
+const bucket = new sst.aws.Bucket("MyBucket");
+const vpc = new sst.aws.Vpc("MyVpc");
+
+const cluster = new sst.aws.Cluster("MyCluster", { vpc });
+cluster.addService("MyService", {
+  public: {
+    ports: [{ listen: "80/http", forward: "3000/http" }],
+  },
+  dev: {
+    command: "bun dev",
+  },
+  link: [bucket],
+});
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-bun-file-upload).
+
+
+---
 ## Subscribe to queues
 
 Create an SQS queue, subscribe to it, and publish to it from a function.
@@ -282,6 +400,135 @@ return {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-dynamo).
+
+
+---
+## EC2 with Pulumi
+
+Use raw Pulumi resources to create an EC2 instance.
+```ts title="sst.config.ts"
+<reference path="./.sst/platform/config.d.ts" />
+
+
+# EC2 with Pulumi
+
+se raw Pulumi resources to create an EC2 instance.
+
+rt default $config({
+(input) {
+turn {
+ame: "aws-ec2-pulumi",
+ome: "aws",
+emoval: input?.stage === "production" ? "retain" : "remove",
+
+
+nc run() {
+ Notice you don't need to import pulumi, it is already part of sst.
+nst securityGroup = new aws.ec2.SecurityGroup("web-secgrp", {
+ngress: [
+{
+	protocol: "tcp",
+	fromPort: 80,
+	toPort: 80,
+	cidrBlocks: ["0.0.0.0/0"],
+},
+,
+;
+
+ Find the latest Ubuntu AMI
+nst ami = aws.ec2.getAmi({
+ilters: [
+{
+	name: "name",
+	values: ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"],
+},
+,
+ostRecent: true,
+wners: ["099720109477"], // Canonical
+;
+
+ User data to set up a simple web server
+nst userData = `#!/bin/bash
+ho "Hello, World!" > index.html
+hup python3 -m http.server 80 &`;
+
+ Create an EC2 instance
+nst server = new aws.ec2.Instance("web-server", {
+nstanceType: "t2.micro",
+mi: ami.then((ami) => ami.id),
+serData: userData,
+pcSecurityGroupIds: [securityGroup.id],
+ssociatePublicIpAddress: true,
+;
+
+turn {
+pp: server.publicIp,
+
+
+
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-ec2-pulumi).
+
+
+---
+## AWS Express file upload
+
+Deploys an Express app to AWS.
+
+You can get started by running.
+
+```bash
+mkdir aws-express-file-upload && cd aws-express-file-upload
+npm init -y
+npm install express
+npx sst@latest init
+```
+
+Now you can add a service.
+
+```ts title="sst.config.ts"
+cluster.addService("MyService", {
+  public: {
+    ports: [{ listen: "80/http", forward: "3000/http" }],
+  },
+  dev: {
+    command: "node --watch index.mjs",
+  },
+});
+```
+
+Start your app locally.
+
+```bash
+npx sst dev
+```
+
+This example lets you upload a file to S3 and then download it.
+
+```bash
+curl -F file=@package.json http://localhost:80/
+curl http://localhost:80/latest
+```
+
+Finally, you can deploy it using `npx sst deploy --stage production`.
+```ts title="sst.config.ts"
+const bucket = new sst.aws.Bucket("MyBucket");
+const vpc = new sst.aws.Vpc("MyVpc");
+
+const cluster = new sst.aws.Cluster("MyCluster", { vpc });
+cluster.addService("MyService", {
+  public: {
+    ports: [{ listen: "80/http" }],
+  },
+  dev: {
+    command: "node --watch index.mjs",
+  },
+  link: [bucket],
+});
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-express-file-upload).
 
 
 ---
@@ -609,6 +856,64 @@ return {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-lambda-stream).
+
+
+---
+## AWS Lambda in a VPC
+
+You can use SST to locally work on Lambda functions that are in a VPC. To do so, you'll
+need to enable `bastion` and `nat` on the `Vpc` component.
+
+```ts title="sst.config.ts"
+new sst.aws.Vpc("MyVpc", { bastion: true, nat: "managed" });
+```
+
+The NAT gateway is necessary to allow your Lambda function to connect to the internet. While,
+the bastion host is necessary for your local machine to be able to tunnel to the VPC.
+
+You'll need to install the tunnel, if you haven't done this before.
+
+```bash "sudo"
+sudo sst tunnel install
+```
+
+This needs _sudo_ to create the network interface on your machine. You'll only need to do
+this once.
+
+Now you can run `sst dev`, your function can access resources in the VPC. For example, here
+we are connecting to a Redis cluster.
+
+```ts title="index.ts"
+const redis = new Cluster(
+  [{ host: Resource.MyRedis.host, port: Resource.MyRedis.port }],
+  {
+    dnsLookup: (address, callback) => callback(null, address),
+    redisOptions: {
+      tls: {},
+      username: Resource.MyRedis.username,
+      password: Resource.MyRedis.password,
+    },
+  }
+);
+```
+
+The Redis cluster is in the same VPC as the function.
+```ts title="sst.config.ts"
+const vpc = new sst.aws.Vpc("MyVpc", { bastion: true, nat: "managed" });
+const redis = new sst.aws.Redis("MyRedis", { vpc });
+const api = new sst.aws.Function("MyFunction", {
+  vpc,
+  url: true,
+  link: [redis],
+  handler: "index.handler"
+});
+
+return {
+  url: api.url,
+};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-lambda-vpc).
 
 
 ---
@@ -1144,6 +1449,48 @@ View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-sharp).
 
 
 ---
+## AWS SolidStart WebSocket endpoint
+
+Deploys a SolidStart app with a [WebSocket endpoint](https://docs.solidjs.com/solid-start/advanced/websocket)
+in a container to AWS.
+
+Uses the experimental WebSocket support in Nitro.
+
+```ts title="app.config.ts" {4}
+export default defineConfig({
+  server: {
+    experimental: {
+      websocket: true,
+    },
+  },
+}).addRouter({
+  name: "ws",
+  type: "http",
+  handler: "./src/ws.ts",
+  target: "server",
+  base: "/ws",
+});
+```
+
+Once deployed you can test the `/ws` endpoint and it'll send a message back after a 3s delay.
+```ts title="sst.config.ts"
+const vpc = new sst.aws.Vpc("MyVpc", { bastion: true });
+const cluster = new sst.aws.Cluster("MyCluster", { vpc });
+
+cluster.addService("MyService", {
+  public: {
+    ports: [{ listen: "80/http", forward: "3000/http" }],
+  },
+  dev: {
+    command: "npm run dev",
+  },
+});
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-solid-container-ws).
+
+
+---
 ## AWS static site basic auth
 
 This deploys a simple static site and adds basic auth to it.
@@ -1443,6 +1790,22 @@ new sst.aws.StaticSite("Web", {
 ```
 
 View the [full example](https://github.com/sst/ion/tree/dev/examples/aws-vite).
+
+
+---
+## Cloudflare Cron
+
+This example creates a Cloudflare Worker that runs on a schedule.
+```ts title="sst.config.ts"
+const cron = new sst.cloudflare.Cron("Cron", {
+  job: "index.ts",
+  schedules: ["* * * * *"]
+});
+
+return {};
+```
+
+View the [full example](https://github.com/sst/ion/tree/dev/examples/cloudflare-cron).
 
 
 ---

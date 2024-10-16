@@ -1,12 +1,19 @@
 import {
   ComponentResourceOptions,
   Output,
+  Resource,
   all,
   interpolate,
   jsonStringify,
   output,
 } from "@pulumi/pulumi";
-import { Component, Prettify, Transform, transform } from "../component";
+import {
+  Component,
+  outputId,
+  Prettify,
+  Transform,
+  transform,
+} from "../component";
 import { Link } from "../link";
 import type { Input } from "../input";
 import { FunctionArgs, FunctionArn } from "./function";
@@ -228,6 +235,18 @@ export interface ApiGatewayV1Args {
      */
     vpcEndpointIds?: Input<Input<string>[]>;
   }>;
+  /**
+   * Enable the CORS (Cross-origin resource sharing) settings for your REST API.
+   * @default `true`
+   * @example
+   * Disable CORS.
+   * ```js
+   * {
+   *   cors: false
+   * }
+   * ```
+   */
+  cors?: Input<boolean>;
   /**
    * Configure the [API Gateway logs](https://docs.aws.amazon.com/apigateway/latest/developerguide/view-cloudwatch-log-events-in-cloudwatch-console.html) in CloudWatch. By default, access logs are enabled and kept forever.
    * @default `{retention: "forever"}`
@@ -499,6 +518,10 @@ export interface ApiGatewayV1RouteArgs {
    */
   transform?: {
     /**
+     * Transform the API Gateway REST API method resource.
+     */
+    method?: Transform<apigateway.MethodArgs>;
+    /**
      * Transform the API Gateway REST API integration resource.
      */
     integration?: Transform<apigateway.IntegrationArgs>;
@@ -620,10 +643,9 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
   private constructorArgs: ApiGatewayV1Args;
   private constructorOpts: ComponentResourceOptions;
   private api: apigateway.RestApi;
-  private apigDomain?: apigateway.DomainName;
+  private apigDomain?: Output<apigateway.DomainName>;
   private apiMapping?: Output<apigateway.BasePathMapping>;
   private region: Output<string>;
-  private triggers: Record<string, Output<string>> = {};
   private resources: Record<string, Output<string>> = {};
   private routes: (ApiGatewayV1LambdaRoute | ApiGatewayV1IntegrationRoute)[] =
     [];
@@ -807,15 +829,11 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
    */
   public route(
     route: string,
-    handler: string | FunctionArgs | FunctionArn,
+    handler: Input<string | FunctionArgs | FunctionArn>,
     args: ApiGatewayV1RouteArgs = {},
   ) {
     const { method, path } = this.parseRoute(route);
     this.createResource(path);
-    this.triggers[`${method}${path}`] = jsonStringify({
-      handler: typeof handler === "string" ? handler : handler.handler,
-      args,
-    });
 
     const transformed = transform(
       this.constructorArgs.transform?.route?.args,
@@ -882,7 +900,6 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
   ) {
     const { method, path } = this.parseRoute(route);
     this.createResource(path);
-    this.triggers[`${method}${path}`] = jsonStringify({ integration, args });
 
     const transformed = transform(
       this.constructorArgs.transform?.route?.args,
@@ -946,7 +963,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
 
   private buildRouteId(method: string, path: string) {
     const suffix = logicalName(
-      hashStringToPrettyString([this.api.id, method, path].join(""), 6),
+      hashStringToPrettyString([outputId, method, path].join(""), 6),
     );
     return `${this.constructorName}Route${suffix}`;
   }
@@ -972,6 +989,7 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
           },
           { parent: this },
         );
+
         this.resources[subPath] = resource.id;
       }
     }
@@ -1055,11 +1073,12 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
     const args = this.constructorArgs;
     const parent = this;
     const api = this.api;
-    const triggers = this.triggers;
     const routes = this.routes;
     const endpointType = this.endpointType;
     const accessLog = normalizeAccessLog();
     const domain = normalizeDomain();
+    const corsRoutes = createCorsRoutes();
+    const corsResponses = createCorsResponses();
     const deployment = createDeployment();
     const logGroup = createLogGroup();
     const stage = createStage();
@@ -1110,16 +1129,149 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
       });
     }
 
+    function createCorsRoutes() {
+      const resourceIds = routes.map(
+        (route) => route.nodes.integration.resourceId,
+      );
+
+      return all([args.cors, resourceIds]).apply(([cors, resourceIds]) => {
+        if (cors === false) return [];
+
+        // filter unique resource ids
+        const uniqueResourceIds = [...new Set(resourceIds)];
+
+        // create cors integrations for the paths
+        return uniqueResourceIds.map((resourceId) => {
+          const method = new apigateway.Method(
+            `${name}CorsMethod${resourceId}`,
+            {
+              restApi: api.id,
+              resourceId,
+              httpMethod: "OPTIONS",
+              authorization: "NONE",
+            },
+            { parent },
+          );
+
+          const methodResponse = new apigateway.MethodResponse(
+            `${name}CorsMethodResponse${resourceId}`,
+            {
+              restApi: api.id,
+              resourceId,
+              httpMethod: method.httpMethod,
+              statusCode: "204",
+              responseParameters: {
+                "method.response.header.Access-Control-Allow-Headers": true,
+                "method.response.header.Access-Control-Allow-Methods": true,
+                "method.response.header.Access-Control-Allow-Origin": true,
+              },
+            },
+            { parent },
+          );
+
+          const integration = new apigateway.Integration(
+            `${name}CorsIntegration${resourceId}`,
+            {
+              restApi: api.id,
+              resourceId,
+              httpMethod: method.httpMethod,
+              type: "MOCK",
+              requestTemplates: {
+                "application/json": "{ statusCode: 200 }",
+              },
+            },
+            { parent },
+          );
+
+          const integrationResponse = new apigateway.IntegrationResponse(
+            `${name}CorsIntegrationResponse${resourceId}`,
+            {
+              restApi: api.id,
+              resourceId,
+              httpMethod: method.httpMethod,
+              statusCode: methodResponse.statusCode,
+              responseParameters: {
+                "method.response.header.Access-Control-Allow-Headers": "'*'",
+                "method.response.header.Access-Control-Allow-Methods":
+                  "'OPTIONS,GET,PUT,POST,DELETE,PATCH,HEAD'",
+                "method.response.header.Access-Control-Allow-Origin": "'*'",
+              },
+            },
+            { parent, dependsOn: [integration] },
+          );
+
+          return { method, methodResponse, integration, integrationResponse };
+        });
+      });
+    }
+
+    function createCorsResponses() {
+      return output(args.cors).apply((cors) => {
+        if (cors === false) return [];
+
+        return ["4XX", "5XX"].map(
+          (type) =>
+            new apigateway.Response(
+              `${name}Cors${type}Response`,
+              {
+                restApiId: api.id,
+                responseType: `DEFAULT_${type}`,
+                responseParameters: {
+                  "gatewayresponse.header.Access-Control-Allow-Origin": "'*'",
+                  "gatewayresponse.header.Access-Control-Allow-Headers": "'*'",
+                },
+                responseTemplates: {
+                  "application/json":
+                    '{"message":$context.error.messageString}',
+                },
+              },
+              { parent },
+            ),
+        );
+      });
+    }
+
     function createDeployment() {
+      const resources = all([corsRoutes, corsResponses]).apply(
+        ([corsRoutes, corsResponses]) =>
+          [
+            api,
+            corsRoutes.map((v) => Object.values(v)),
+            corsResponses,
+            routes.map((route) => [
+              route.nodes.integration,
+              route.nodes.method,
+            ]),
+          ].flat(3),
+      );
+
+      // filter serializable output values
+      const resourcesSanitized = all([resources]).apply(([resources]) =>
+        resources.map((resource) =>
+          Object.fromEntries(
+            Object.entries(resource).filter(
+              ([k, v]) => !k.startsWith("_") && typeof v !== "function",
+            ),
+          ),
+        ),
+      );
+
       return new apigateway.Deployment(
         ...transform(
           args.transform?.deployment,
           `${name}Deployment`,
           {
             restApi: api.id,
-            triggers,
+            triggers: all([resourcesSanitized]).apply(([resources]) =>
+              Object.fromEntries(
+                resources.map((resource) => [
+                  resource.urn,
+                  JSON.stringify(resource),
+                ]),
+              ),
+            ),
           },
-          { parent, dependsOn: routes.map((route) => route.nodes.integration) },
+          { parent },
         ),
       );
     }
@@ -1198,17 +1350,22 @@ export class ApiGatewayV1 extends Component implements Link.Linkable {
     function createDomainName() {
       if (!domain || !certificateArn) return;
 
-      return new apigateway.DomainName(
-        ...transform(
-          args.transform?.domainName,
-          `${name}DomainName`,
-          {
-            domainName: domain?.name,
-            certificateArn,
-            endpointConfiguration: { types: endpointType },
-          },
-          { parent },
-        ),
+      return endpointType.apply(
+        (endpointType) =>
+          new apigateway.DomainName(
+            ...transform(
+              args.transform?.domainName,
+              `${name}DomainName`,
+              {
+                domainName: domain?.name,
+                endpointConfiguration: { types: endpointType },
+                ...(endpointType === "REGIONAL"
+                  ? { regionalCertificateArn: certificateArn }
+                  : { certificateArn }),
+              },
+              { parent },
+            ),
+          ),
       );
     }
 

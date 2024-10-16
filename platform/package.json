@@ -27,8 +27,8 @@
     "@pulumi/aws": "6.51.0",
     "@pulumi/cloudflare": "5.37.1",
     "@pulumi/docker-build": "0.0.6",
-    "@pulumi/pulumi": "3.115.2",
-    "@pulumi/random": "4.15.0",
+    "@pulumi/pulumi": "3.134.1",
+    "@pulumi/random": "^4.16.6",
     "@pulumi/tls": "5.0.1",
     "@smithy/smithy-client": "2.1.18",
     "@tsconfig/node18": "18.2.2",
@@ -43,7 +43,8 @@
     "path-to-regexp": "6.2.1",
     "prettier": "3.1.1",
     "typescript": "5.3.3",
-    "undici": "^6.19.5"
+    "undici": "^6.19.5",
+    "unenv": "^1.10.0"
   },
   "devDependencies": {
     "@aws-sdk/client-iot": "3.501.0",

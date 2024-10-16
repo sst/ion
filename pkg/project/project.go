@@ -107,7 +107,7 @@ func New(input *ProjectConfig) (*Project, error) {
 		env:     map[string]string{},
 		Runtime: runtime.NewCollection(
 			input.Config,
-			node.New(),
+			node.New(input.Version),
 			worker.New(),
 			python.New(),
 		),
@@ -263,7 +263,7 @@ func (proj *Project) LoadHome() error {
 		}
 		err := match.Init(proj.app.Name, proj.app.Stage, args.(map[string]interface{}))
 		if err != nil {
-			return err
+			return util.NewReadableError(err, err.Error())
 		}
 		env, err := match.Env()
 		if err != nil {
@@ -340,12 +340,10 @@ func (p *Project) Provider(name string) (provider.Provider, bool) {
 }
 
 func (p *Project) Cleanup() error {
-	if !flag.SST_NO_CLEANUP {
+	if flag.SST_NO_CLEANUP {
 		return nil
 	}
-	return os.RemoveAll(
-		filepath.Join(p.PathWorkingDir(), "artifacts"),
-	)
+	return nil
 }
 
 func (p *Project) PathLog(name string) string {

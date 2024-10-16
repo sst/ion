@@ -254,109 +254,38 @@ export interface ClusterServiceArgs {
    * Instead of deploying your service, this starts it locally. It's run
    * as a separate process in the `sst dev` multiplexer. Read more about
    * [`sst dev`](/docs/reference/cli/#dev).
+   *
+   * To disable dev mode, pass in `false`.
    */
-  dev?: {
-    /**
-     * The `url` when this is running in dev mode.
-     *
-     * Since this component is not deployed in `sst dev`, there is no real URL. But if you are
-     * using this component's `url` or linking to this component's `url`, it can be useful to
-     * have a placeholder URL. It avoids having to handle it being `undefined`.
-     * @default `"http://url-unavailable-in-dev.mode"`
-     */
-    url?: Input<string>;
-    /**
-     * The command that `sst dev` runs to start this in dev mode. This is the command you run
-     * when you want to run your service locally.
-     */
-    command?: Input<string>;
-    /**
-     * Configure if you want to automatically start this when `sst dev` starts. You can still
-     * start it manually later.
-     * @default `true`
-     */
-    autostart?: Input<boolean>;
-    /**
-     * Change the directory from where the `command` is run.
-     * @default Uses the `image.dockerfile` path
-     */
-    directory?: Input<string>;
-  };
-  /**
-   * Configure the docker build command for building the image or specify a pre-built image.
-   *
-   * @default Build a docker image from the Dockerfile in the root directory.
-   * @example
-   *
-   * Building a docker image.
-   *
-   * Prior to building the image, SST will automatically add the `.sst` directory
-   * to the `.dockerignore` if not already present.
-   *
-   * ```js
-   * {
-   *   image: {
-   *     context: "./app",
-   *     dockerfile: "Dockerfile",
-   *     args: {
-   *       MY_VAR: "value"
-   *     }
-   *   }
-   * }
-   * ```
-   *
-   * Alternatively, you can pass in a pre-built image.
-   *
-   * ```js
-   * {
-   *   image: "nginxdemos/hello:plain-text"
-   * }
-   * ```
-   */
-  image?: Input<
-    | string
+  dev?:
+    | false
     | {
         /**
-         * The path to the [Docker build context](https://docs.docker.com/build/building/context/#local-context). The path is relative to your project's `sst.config.ts`.
-         * @default `"."`
-         * @example
+         * The `url` when this is running in dev mode.
          *
-         * To change where the docker build context is located.
-         *
-         * ```js
-         * {
-         *   context: "./app"
-         * }
-         * ```
+         * Since this component is not deployed in `sst dev`, there is no real URL. But if you are
+         * using this component's `url` or linking to this component's `url`, it can be useful to
+         * have a placeholder URL. It avoids having to handle it being `undefined`.
+         * @default `"http://url-unavailable-in-dev.mode"`
          */
-        context?: Input<string>;
+        url?: Input<string>;
         /**
-         * The path to the [Dockerfile](https://docs.docker.com/reference/cli/docker/image/build/#file).
-         * The path is relative to the build `context`.
-         * @default `"Dockerfile"`
-         * @example
-         * To use a different Dockerfile.
-         * ```js
-         * {
-         *   dockerfile: "Dockerfile.prod"
-         * }
-         * ```
+         * The command that `sst dev` runs to start this in dev mode. This is the command you run
+         * when you want to run your service locally.
          */
-        dockerfile?: Input<string>;
+        command?: Input<string>;
         /**
-         * Key-value pairs of [build args](https://docs.docker.com/build/guide/build-args/) to pass to the docker build command.
-         * @example
-         * ```js
-         * {
-         *   args: {
-         *     MY_VAR: "value"
-         *   }
-         * }
-         * ```
+         * Configure if you want to automatically start this when `sst dev` starts. You can still
+         * start it manually later.
+         * @default `true`
          */
-        args?: Input<Record<string, Input<string>>>;
-      }
-  >;
+        autostart?: Input<boolean>;
+        /**
+         * Change the directory from where the `command` is run.
+         * @default Uses the `image.dockerfile` path
+         */
+        directory?: Input<string>;
+      };
   /**
    * Configure a public endpoint for the service. When configured, a load balancer
    * will be created to route traffic to the containers. By default, the endpoint is an
@@ -554,6 +483,20 @@ export interface ClusterServiceArgs {
      *   }
      * }
      * ```
+     *
+     * If multiple containers are configured via the `containers` argument, you need to
+     * specify which container the traffic should be forwarded to.
+     *
+     * ```js
+     * {
+     *   public: {
+     *     ports: [
+     *       { listen: "80/http", container: "app" },
+     *       { listen: "8000/http", container: "admin" },
+     *     ]
+     *   }
+     * }
+     * ```
      */
     ports: Input<
       {
@@ -567,6 +510,17 @@ export interface ClusterServiceArgs {
          * @default The same port and protocol as `listen`.
          */
         forward?: Input<Port>;
+        /**
+         * The name of the container to forward the traffic to.
+         *
+         * If there is only one container, this is not needed. The traffic is automatically
+         * forwarded to the container.
+         *
+         * If there is more than one container, this is required.
+         *
+         * @default The container name when there is only one container.
+         */
+        container?: Input<string>;
       }[]
     >;
   }>;
@@ -695,43 +649,6 @@ export interface ClusterServiceArgs {
    */
   permissions?: FunctionArgs["permissions"];
   /**
-   * Key-value pairs of values that are set as [container environment variables](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/taskdef-envfiles.html).
-   * The keys need to:
-   * - Start with a letter
-   * - Be at least 2 characters long
-   * - Contain only letters, numbers, or underscores
-   *
-   * @example
-   *
-   * ```js
-   * {
-   *   environment: {
-   *     DEBUG: "true"
-   *   }
-   * }
-   * ```
-   */
-  environment?: FunctionArgs["environment"];
-  /**
-   * Configure the service's logs in CloudWatch.
-   * @default `{ retention: "forever" }`
-   * @example
-   * ```js
-   * {
-   *   logging: {
-   *     retention: "1 week"
-   *   }
-   * }
-   * ```
-   */
-  logging?: Input<{
-    /**
-     * The duration the logs are kept in CloudWatch.
-     * @default `"forever"`
-     */
-    retention?: Input<keyof typeof RETENTION>;
-  }>;
-  /**
    * Configure the service to automatically scale up or down based on the CPU or memory
    * utilization of a container. By default, scaling is disabled and the service will run
    * in a single container.
@@ -807,6 +724,297 @@ export interface ClusterServiceArgs {
     memoryUtilization?: Input<number>;
   }>;
   /**
+   * Configure the Docker build command for building the image or specify a pre-built image.
+   *
+   * @default Build a Docker image from the Dockerfile in the root directory.
+   * @example
+   *
+   * Building a Docker image.
+   *
+   * Prior to building the image, SST will automatically add the `.sst` directory
+   * to the `.dockerignore` if not already present.
+   *
+   * ```js
+   * {
+   *   image: {
+   *     context: "./app",
+   *     dockerfile: "Dockerfile",
+   *     args: {
+   *       MY_VAR: "value"
+   *     }
+   *   }
+   * }
+   * ```
+   *
+   * Alternatively, you can pass in a pre-built image.
+   *
+   * ```js
+   * {
+   *   image: "nginxdemos/hello:plain-text"
+   * }
+   * ```
+   */
+  image?: Input<
+    | string
+    | {
+        /**
+         * The path to the [Docker build context](https://docs.docker.com/build/building/context/#local-context). The path is relative to your project's `sst.config.ts`.
+         * @default `"."`
+         * @example
+         *
+         * To change where the Docker build context is located.
+         *
+         * ```js
+         * {
+         *   context: "./app"
+         * }
+         * ```
+         */
+        context?: Input<string>;
+        /**
+         * The path to the [Dockerfile](https://docs.docker.com/reference/cli/docker/image/build/#file).
+         * The path is relative to the build `context`.
+         * @default `"Dockerfile"`
+         * @example
+         * To use a different Dockerfile.
+         * ```js
+         * {
+         *   dockerfile: "Dockerfile.prod"
+         * }
+         * ```
+         */
+        dockerfile?: Input<string>;
+        /**
+         * Key-value pairs of [build args](https://docs.docker.com/build/guide/build-args/) to pass to the Docker build command.
+         * @example
+         * ```js
+         * {
+         *   args: {
+         *     MY_VAR: "value"
+         *   }
+         * }
+         * ```
+         */
+        args?: Input<Record<string, Input<string>>>;
+      }
+  >;
+  /**
+   * The command to override the default command in the container.
+   * @example
+   * ```js
+   * {
+   *   command: ["npm", "run", "start"]
+   * }
+   * ```
+   */
+  command?: Input<string[]>;
+  /**
+   * The entrypoint to override the default entrypoint in the container.
+   * @example
+   * ```js
+   * {
+   *   entrypoint: ["/usr/bin/my-entrypoint"]
+   * }
+   * ```
+   */
+  entrypoint?: Input<string[]>;
+  /**
+   * Key-value pairs of values that are set as [container environment variables](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/taskdef-envfiles.html).
+   * The keys need to:
+   * - Start with a letter
+   * - Be at least 2 characters long
+   * - Contain only letters, numbers, or underscores
+   *
+   * @example
+   *
+   * ```js
+   * {
+   *   environment: {
+   *     DEBUG: "true"
+   *   }
+   * }
+   * ```
+   */
+  environment?: FunctionArgs["environment"];
+  /**
+   * Configure the service's logs in CloudWatch.
+   * @default `{ retention: "forever" }`
+   * @example
+   * ```js
+   * {
+   *   logging: {
+   *     retention: "1 week"
+   *   }
+   * }
+   * ```
+   */
+  logging?: Input<{
+    /**
+     * The duration the logs are kept in CloudWatch.
+     * @default `"forever"`
+     */
+    retention?: Input<keyof typeof RETENTION>;
+  }>;
+  /**
+   * The containers to run in the service.
+   *
+   * :::tip
+   * You can optiionally run multiple containers in a service.
+   * :::
+   *
+   * By default this starts a single container. To add multiple containers in the service, pass
+   * in an array of containers args.
+   *
+   * ```ts
+   * {
+   *   containers: [
+   *     {
+   *       name: "app",
+   *       image: "nginxdemos/hello:plain-text"
+   *     },
+   *     {
+   *       name: "admin",
+   *       image: {
+   *         context: "./admin",
+   *         dockerfile: "Dockerfile"
+   *       }
+   *     }
+   *   ]
+   * }
+   * ```
+   *
+   * If you sepcify `containers`, you cannot list the above args at the top-level. For example,
+   * you **cannot** pass in `image` at the top level.
+   *
+   * ```diff lang="ts"
+   * {
+   * -  image: "nginxdemos/hello:plain-text",
+   *   containers: [
+   *     {
+   *       name: "app",
+   *       image: "nginxdemos/hello:plain-text"
+   *     },
+   *     {
+   *       name: "admin",
+   *       image: "nginxdemos/hello:plain-text"
+   *     }
+   *   ]
+   * }
+   * ```
+   *
+   * You will need to pass in `image` as a part of the `containers`.
+   */
+  containers?: Input<{
+    /**
+     * The name of the container.
+     *
+     * This is used as the `--name` option in the Docker run command.
+     */
+    name: Input<string>;
+    /**
+     * Configure the Docker image for the container. Same as the top-level [`image`](#image).
+     */
+    image?: Input<
+      | string
+      | {
+          /**
+           * The path to the Docker build context. Same as the top-level
+           * [`image.context`](#image-context).
+           */
+          context?: Input<string>;
+          /**
+           * The path to the Dockerfile. Same as the top-level
+           * [`image.dockerfile`](#image-dockerfile).
+           */
+          dockerfile?: Input<string>;
+          /**
+           * Key-value pairs of build args. Same as the top-level [`image.args`](#image-args).
+           */
+          args?: Input<Record<string, Input<string>>>;
+        }
+    >;
+    /**
+     * The command to override the default command in the container. Same as the top-level
+     * [`command`](#command).
+     */
+    command?: Input<string[]>;
+    /**
+     * The entrypoint to override the default entrypoint in the container. Same as the top-level
+     * [`entrypoint`](#entrypoint).
+     */
+    entrypoint?: Input<string[]>;
+    /**
+     * Key-value pairs of values that are set as container environment variables. Same as the
+     * top-level [`environment`](#environment).
+     */
+    environment?: FunctionArgs["environment"];
+    /**
+     * Configure the service's logs in CloudWatch. Same as the top-level [`logging`](#logging).
+     */
+    logging?: Input<{
+      /**
+       * The duration the logs are kept in CloudWatch. Same as the top-level
+       * [`logging.retention`](#logging-retention).
+       */
+      retention?: Input<keyof typeof RETENTION>;
+    }>;
+    /**
+     * Configure how this container works in `sst dev`. Same as the top-level
+     * [`dev`](#dev).
+     */
+    dev?: {
+      /**
+       * The command that `sst dev` runs to start this in dev mode. Same as the top-level
+       * [`dev.command`](#dev-command).
+       */
+      command?: Input<string>;
+      /**
+       * Configure if you want to automatically start this when `sst dev` starts. Same as the
+       * top-level [`dev.autostart`](#dev-autostart).
+       */
+      autostart?: Input<boolean>;
+      /**
+       * Change the directory from where the `command` is run. Same as the top-level
+       * [`dev.directory`](#dev-directory).
+       */
+      directory?: Input<string>;
+    };
+  }>[];
+  /**
+   * Assigns the given IAM role name to the containers running in the service. This allows you to pass in a previously created role.
+   *
+   * :::caution
+   * When you pass in a role, the service will not update it if you add `permissions` or `link` resources.
+   * :::
+   *
+   * By default, the service creates a new IAM role when it's created. It'll update this role if you add `permissions` or `link` resources.
+   *
+   * However, if you pass in a role, you'll need to update it manually if you add `permissions` or `link` resources.
+   *
+   * @default Creates a new role
+   * @example
+   * ```js
+   * {
+   *   taskRole: "my-task-role"
+   * }
+   * ```
+   */
+  taskRole?: Input<string>;
+  /**
+   * Assigns the given IAM role name to AWS ECS to launch and manage the containers in the service. This allows you to pass in a previously created role.
+   *
+   * By default, the service creates a new IAM role when it's created.
+   *
+   * @default Creates a new role
+   * @example
+   * ```js
+   * {
+   *   executionRole: "my-execution-role"
+   * }
+   * ```
+   */
+  executionRole?: Input<string>;
+  /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
    */
@@ -819,6 +1027,10 @@ export interface ClusterServiceArgs {
      * Transform the ECS Service resource.
      */
     service?: Transform<ecs.ServiceArgs>;
+    /**
+     * Transform the ECS Execution IAM Role resource.
+     */
+    executionRole?: Transform<iam.RoleArgs>;
     /**
      * Transform the ECS Task IAM Role resource.
      */
@@ -919,19 +1131,21 @@ export interface ClusterServiceArgs {
  * ```
  */
 export class Cluster extends Component {
-  private args: ClusterArgs;
+  private constructorArgs: ClusterArgs;
+  private constructorOpts: ComponentResourceOptions;
   private cluster: ecs.Cluster;
   public static v1 = ClusterV1;
 
   constructor(
     name: string,
     args: ClusterArgs,
-    opts?: ComponentResourceOptions,
+    opts: ComponentResourceOptions = {},
   ) {
     const _version = 2;
     super(__pulumiType, name, args, opts, {
       _version,
       _message: [
+        `There is a new version of "Cluster" that has breaking changes.`,
         ``,
         `What changed:`,
         `  - In the old version, load balancers were deployed in public subnets, and services were deployed in private subnets. The VPC was required to have NAT gateways.`,
@@ -941,7 +1155,7 @@ export class Cluster extends Component {
         `  - Set \`forceUpgrade: "v${_version}"\` on the "Cluster" component. Learn more https://sst.dev/docs/component/aws/cluster#forceupgrade`,
         ``,
         `To continue using v${$cli.state.version[name]}:`,
-        `  - Rename "Cluster" to "Cluster.v${$cli.state.version[name]}". Learn more about versioning - https://ion.sst.dev/docs/components/#versioning`,
+        `  - Rename "Cluster" to "Cluster.v${$cli.state.version[name]}". Learn more about versioning - https://sst.dev/docs/components/#versioning`,
       ].join("\n"),
       _forceUpgrade: args.forceUpgrade,
     });
@@ -950,7 +1164,8 @@ export class Cluster extends Component {
 
     const cluster = createCluster();
 
-    this.args = args;
+    this.constructorArgs = args;
+    this.constructorOpts = opts;
     this.cluster = cluster;
 
     function createCluster() {
@@ -984,7 +1199,7 @@ export class Cluster extends Component {
    * cluster.addService("MyService");
    * ```
    *
-   * Set a custom domain for the service.
+   * You can also configure the service. For example, set a custom domain.
    *
    * ```js {2} title="sst.config.ts"
    * cluster.addService("MyService", {
@@ -992,7 +1207,7 @@ export class Cluster extends Component {
    * });
    * ```
    *
-   * #### Enable auto-scaling
+   * Enable auto-scaling.
    *
    * ```ts title="sst.config.ts"
    * cluster.addService("MyService", {
@@ -1004,17 +1219,44 @@ export class Cluster extends Component {
    *   }
    * });
    * ```
+   *
+   * By default this starts a single container. To add multiple containers in the service, pass in an array of containers args.
+   *
+   * ```ts title="sst.config.ts"
+   * cluster.addService("MyService", {
+   *   architecture: "arm64",
+   *   containers: [
+   *     {
+   *       name: "app",
+   *       image: "nginxdemos/hello:plain-text"
+   *     },
+   *     {
+   *       name: "admin",
+   *       image: {
+   *         context: "./admin",
+   *         dockerfile: "Dockerfile"
+   *       }
+   *     }
+   *   ]
+   * });
+   * ```
+   *
+   * This is useful for running sidecar containers.
    */
   public addService(name: string, args?: ClusterServiceArgs) {
     // Do not prefix the service to allow `Resource.MyService` to work.
-    return new Service(name, {
-      cluster: {
-        name: this.cluster.name,
-        arn: this.cluster.arn,
+    return new Service(
+      name,
+      {
+        cluster: {
+          name: this.cluster.name,
+          arn: this.cluster.arn,
+        },
+        vpc: this.constructorArgs.vpc,
+        ...args,
       },
-      vpc: this.args.vpc,
-      ...args,
-    });
+      { provider: this.constructorOpts.provider },
+    );
   }
 }
 

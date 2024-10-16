@@ -60,9 +60,14 @@ if (!cmd || cmd === "components") {
 
   for (const component of components) {
     const sourceFile = component.sources![0].fileName;
-    if (sourceFile === "platform/src/global-config.d.ts")
-      await generateGlobalConfigDoc(component);
-    else if (sourceFile === "platform/src/config.ts")
+    // Skip - generated into the global-config doc
+    if (sourceFile.endsWith("/aws/iam-edit.ts")) continue;
+    else if (sourceFile === "platform/src/global-config.d.ts") {
+      const iamEditComponent = components.find((c) =>
+        c.sources![0].fileName.endsWith("/aws/iam-edit.ts")
+      );
+      await generateGlobalConfigDoc(component, iamEditComponent!);
+    } else if (sourceFile === "platform/src/config.ts")
       await generateConfigDoc(component);
     else if (sourceFile.endsWith("/dns.ts")) await generateDnsDoc(component);
     else if (
@@ -316,7 +321,10 @@ function generateCommonErrorsDoc() {
   fs.writeFileSync(
     outputFilePath,
     [
-      renderHeader("Common Errors", "A list of CLI error messages and how to fix them."),
+      renderHeader(
+        "Common Errors",
+        "A list of CLI error messages and how to fix them."
+      ),
       renderSourceMessage("cmd/sst/main.go"),
       renderImports(outputFilePath),
       renderBodyBegin(),
@@ -354,7 +362,7 @@ function generateCommonErrorsDoc() {
         ``,
         `> ${error.message}`,
         ``,
-        ...error.long,
+        ...error.long
       );
     }
     return lines;
@@ -416,7 +424,8 @@ async function generateExamplesDocs() {
           renderTdComment(module.children![0].comment?.summary!),
           ...renderRunFunction(module),
           ``,
-          `View the [full example](${config.github}/tree/dev/examples/${module.name.split("/")[0]
+          `View the [full example](${config.github}/tree/dev/examples/${
+            module.name.split("/")[0]
           }).`,
           ``,
         ];
@@ -458,7 +467,10 @@ async function generateExamplesDocs() {
   }
 }
 
-async function generateGlobalConfigDoc(module: TypeDoc.DeclarationReflection) {
+async function generateGlobalConfigDoc(
+  module: TypeDoc.DeclarationReflection,
+  iamEditComponent: TypeDoc.DeclarationReflection
+) {
   console.info(`Generating Global...`);
   const outputFilePath = `src/content/docs/docs/reference/global.mdx`;
   fs.writeFileSync(
@@ -472,6 +484,9 @@ async function generateGlobalConfigDoc(module: TypeDoc.DeclarationReflection) {
       renderVariables(module),
       renderFunctions(module, useModuleFunctions(module), {
         title: "Functions",
+      }),
+      renderFunctions(module, useModuleFunctions(iamEditComponent), {
+        title: "AWS",
       }),
       renderBodyEnd(),
     ]
@@ -629,23 +644,23 @@ async function generateComponentDoc(
             : []),
           ...(sdk
             ? renderFunctions(
-              sdk,
-              useModuleFunctions(sdk),
-              sdk.name === "realtime" ? { prefix: sdk.name } : undefined
-            )
+                sdk,
+                useModuleFunctions(sdk),
+                sdk.name === "realtime" ? { prefix: sdk.name } : undefined
+              )
             : []),
           ...(sdk ? renderInterfacesAtH3Level(sdk) : []),
         ];
         return lines.length
           ? [
-            ``,
-            `## SDK`,
-            ``,
-            `Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.`,
-            ``,
-            `---`,
-            ...lines,
-          ]
+              ``,
+              `## SDK`,
+              ``,
+              `Use the [SDK](/docs/reference/sdk/) in your runtime to interact with your infrastructure.`,
+              ``,
+              `---`,
+              ...lines,
+            ]
           : [];
       })(),
       renderMethods(component),
@@ -793,8 +808,8 @@ function renderType(
   function renderArrayType(type: TypeDoc.ArrayType) {
     return type.elementType.type === "union"
       ? `<code class="symbol">(</code>${renderSomeType(
-        type.elementType
-      )}<code class="symbol">)[]</code>`
+          type.elementType
+        )}<code class="symbol">)[]</code>`
       : `${renderSomeType(type.elementType)}<code class="symbol">[]</code>`;
   }
   function renderTypescriptType(type: TypeDoc.ReferenceType) {
@@ -869,8 +884,9 @@ function renderType(
     }
     // types in the same doc (links to an interface)
     if (useModuleInterfaces(module).find((i) => i.name === type.name)) {
-      return `[<code class="type">${type.name
-        }</code>](#${type.name.toLowerCase()})`;
+      return `[<code class="type">${
+        type.name
+      }</code>](#${type.name.toLowerCase()})`;
     }
     // types in different doc
     const externalModule = {
@@ -927,8 +943,9 @@ function renderType(
   function renderSstSdkType(type: TypeDoc.ReferenceType) {
     // types in the same doc (links to an interface)
     if (useModuleInterfaces(module).find((i) => i.name === type.name)) {
-      return `[<code class="type">${type.name
-        }</code>](#${type.name.toLowerCase()})`;
+      return `[<code class="type">${
+        type.name
+      }</code>](#${type.name.toLowerCase()})`;
     } else if (type.name === "T") {
       return `<code class="primitive">string</code>`;
     }
@@ -1014,8 +1031,9 @@ function renderType(
         console.error(type);
         throw new Error(`Unsupported @pulumi provider input type`);
       }
-      return `[<code class="type">${type.name
-        }</code>](https://www.pulumi.com/registry/packages/${provider}/api-docs/${link}/#${type.name.toLowerCase()})`;
+      return `[<code class="type">${
+        type.name
+      }</code>](https://www.pulumi.com/registry/packages/${provider}/api-docs/${link}/#${type.name.toLowerCase()})`;
     } else if (cls.startsWith("types/")) {
       console.error(type);
       throw new Error(`Unsupported @pulumi provider class type`);
@@ -1151,7 +1169,8 @@ function renderVariables(module: TypeDoc.DeclarationReflection) {
       // nested props (ie. `.nodes`)
       ...useNestedTypes(v.type!, v.name).flatMap(
         ({ depth, prefix, subType }) => [
-          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${depth === 0 ? "h4" : "h5"
+          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${
+            depth === 0 ? "h4" : "h5"
           }" parent="${prefix}.">${renderName(subType)}</NestedTitle>`,
           `<Segment>`,
           `<Section type="parameters">`,
@@ -1188,7 +1207,7 @@ function renderFunctions(
       `<Section type="signature">`,
       "```ts",
       (opts?.prefix ? `${opts.prefix}.` : "") +
-      renderSignature(f.signatures![0]),
+        renderSignature(f.signatures![0]),
       "```",
       `</Section>`
     );
@@ -1326,7 +1345,7 @@ function renderMethod(
     `<Section type="signature">`,
     "```ts",
     (method.flags.isStatic ? `${useClassName(module)}.` : "") +
-    renderSignature(method.signatures![0]),
+      renderSignature(method.signatures![0]),
     "```",
     `</Section>`
   );
@@ -1381,14 +1400,16 @@ function renderProperties(module: TypeDoc.DeclarationReflection) {
       // nested props (ie. `.nodes`)
       ...useNestedTypes(g.getSignature!.type!, g.name).flatMap(
         ({ depth, prefix, subType }) => [
-          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${depth === 0 ? "h4" : "h5"
+          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${
+            depth === 0 ? "h4" : "h5"
           }" parent="${prefix}.">${renderName(subType)}</NestedTitle>`,
           `<Segment>`,
           `<Section type="parameters">`,
           `<InlineSection>`,
-          `**Type** ${subType.kind === TypeDoc.ReflectionKind.Property
-            ? renderType(module, subType.type!)
-            : renderType(module, subType.getSignature!.type!)
+          `**Type** ${
+            subType.kind === TypeDoc.ReflectionKind.Property
+              ? renderType(module, subType.type!)
+              : renderType(module, subType.getSignature!.type!)
           }`,
           `</InlineSection>`,
           `</Section>`,
@@ -1454,7 +1475,7 @@ function renderLinks(module: TypeDoc.DeclarationReflection) {
         linkType = link.type;
         linkType.types = linkType.types.map((t) =>
           t.type === "reference" &&
-            (t.name === "Output" || t.name === "OutputInstance")
+          (t.name === "Output" || t.name === "OutputInstance")
             ? t.typeArguments![0]
             : t
         );
@@ -1574,33 +1595,35 @@ function renderInterfacesAtH2Level(
             ({ depth, prefix, subType }) => {
               return subType.kind === TypeDoc.ReflectionKind.Method
                 ? renderMethod(module, subType, {
-                  methodTitle: `<NestedTitle id="${useLinkHashes(module).get(
-                    subType
-                  )}" Tag="${depth === 0 ? "h4" : "h5"
+                    methodTitle: `<NestedTitle id="${useLinkHashes(module).get(
+                      subType
+                    )}" Tag="${
+                      depth === 0 ? "h4" : "h5"
                     }" parent="${prefix}.">${renderName(
                       subType
                     )}</NestedTitle>`,
-                  parametersTitle: `**Parameters**`,
-                })
+                    parametersTitle: `**Parameters**`,
+                  })
                 : [
-                  `<NestedTitle id="${useLinkHashes(module).get(
-                    subType
-                  )}" Tag="${depth === 0 ? "h4" : "h5"
-                  }" parent="${prefix}.">${renderName(
-                    subType
-                  )}</NestedTitle>`,
-                  `<Segment>`,
-                  `<Section type="parameters">`,
-                  `<InlineSection>`,
-                  `**Type** ${renderType(module, subType.type!)}`,
-                  `</InlineSection>`,
-                  `</Section>`,
-                  ...renderDefaultTag(module, subType),
-                  ...renderDescription(subType),
-                  ``,
-                  ...renderExamples(subType),
-                  `</Segment>`,
-                ];
+                    `<NestedTitle id="${useLinkHashes(module).get(
+                      subType
+                    )}" Tag="${
+                      depth === 0 ? "h4" : "h5"
+                    }" parent="${prefix}.">${renderName(
+                      subType
+                    )}</NestedTitle>`,
+                    `<Segment>`,
+                    `<Section type="parameters">`,
+                    `<InlineSection>`,
+                    `**Type** ${renderType(module, subType.type!)}`,
+                    `</InlineSection>`,
+                    `</Section>`,
+                    ...renderDefaultTag(module, subType),
+                    ...renderDescription(subType),
+                    ``,
+                    ...renderExamples(subType),
+                    `</Segment>`,
+                  ];
             }
           )
         );
@@ -1608,8 +1631,9 @@ function renderInterfacesAtH2Level(
         console.debug(`   - interface method ${prop.name}`);
         lines.push(
           ...renderMethod(module, prop, {
-            methodTitle: `### ${prop.flags.isStatic ? "static " : ""
-              }${renderName(prop)}`,
+            methodTitle: `### ${
+              prop.flags.isStatic ? "static " : ""
+            }${renderName(prop)}`,
             parametersTitle: `#### Parameters`,
           })
         );
@@ -1648,7 +1672,8 @@ function renderInterfacesAtH3Level(module: TypeDoc.DeclarationReflection) {
       // nested props (ie. `.domain`, `.transform`)
       ...useNestedTypes(int.type!, int.name).flatMap(
         ({ depth, prefix, subType }) => [
-          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${depth === 0 ? "h4" : "h5"
+          `<NestedTitle id="${useLinkHashes(module).get(subType)}" Tag="${
+            depth === 0 ? "h4" : "h5"
           }" parent="${prefix}.">${renderName(subType)}</NestedTitle>`,
           `<Segment>`,
           `<Section type="parameters">`,
@@ -1701,11 +1726,11 @@ function renderDescription(
   const str = renderTdComment(prop.comment?.summary);
   return opts?.indent
     ? [
-      str
-        .split("\n")
-        .map((line) => `  ${line}`)
-        .join("\n"),
-    ]
+        str
+          .split("\n")
+          .map((line) => `  ${line}`)
+          .join("\n"),
+      ]
     : [str];
 }
 
@@ -1724,12 +1749,12 @@ function renderDefaultTag(
     // Otherwise render it as a comment ie. No domains configured
     defaultTag.content.length === 1 && defaultTag.content[0].kind === "code"
       ? `**Default** ${renderType(module, {
-        type: "intrinsic",
-        name: defaultTag.content[0].text
-          .replace(/`/g, "")
-          .replace(/{/g, "&lcub;")
-          .replace(/}/g, "&rcub;"),
-      } as TypeDoc.SomeType)}`
+          type: "intrinsic",
+          name: defaultTag.content[0].text
+            .replace(/`/g, "")
+            .replace(/{/g, "&lcub;")
+            .replace(/}/g, "&rcub;"),
+        } as TypeDoc.SomeType)}`
       : `**Default** ${renderTdComment(defaultTag.content)}`,
     `</InlineSection>`,
   ];
@@ -1903,9 +1928,9 @@ function useClassGetters(module: TypeDoc.DeclarationReflection) {
 function useInterfaceProps(i: TypeDoc.DeclarationReflection) {
   if (!i.children?.length) throw new Error(`Interface ${i.name} has no props`);
 
-  return i.children.filter(
-    (child) => !child.comment?.modifierTags.has("@internal")
-  );
+  return i.children
+    .filter((c) => !c.comment?.modifierTags.has("@internal"))
+    .filter((c) => !c.comment?.blockTags.find((t) => t.tag === "@deprecated"));
 }
 function useNestedTypes(
   type: TypeDoc.SomeType,
@@ -1934,10 +1959,10 @@ function useNestedTypes(
         : []),
       ...(subType.kind === TypeDoc.ReflectionKind.Accessor
         ? useNestedTypes(
-          subType.getSignature?.type!,
-          `${prefix}.${subType.name}`,
-          depth + 1
-        )
+            subType.getSignature?.type!,
+            `${prefix}.${subType.name}`,
+            depth + 1
+          )
         : []),
     ]);
 
@@ -1950,7 +1975,7 @@ function useNestedTypes(
 
 function configureLogger() {
   if (process.env.DEBUG) return;
-  console.debug = () => { };
+  console.debug = () => {};
 }
 
 function patchCode() {
@@ -1999,9 +2024,9 @@ function patchCode() {
         /include\?\: \{[^}]*\}/,
         `include?: (AwsPermission | CloudflareBinding)`
       ) +
-    "\ntype Constructor = {};\n" +
-    "\ntype AwsPermission = {};\n" +
-    "\ntype CloudflareBinding = {};\n"
+      "\ntype Constructor = {};\n" +
+      "\ntype AwsPermission = {};\n" +
+      "\ntype CloudflareBinding = {};\n"
   );
 }
 
@@ -2066,6 +2091,7 @@ async function buildComponents() {
       "../platform/src/components/aws/email.ts",
       "../platform/src/components/aws/function.ts",
       "../platform/src/components/aws/postgres.ts",
+      "../platform/src/components/aws/postgres-v1.ts",
       "../platform/src/components/aws/vector.ts",
       "../platform/src/components/aws/astro.ts",
       "../platform/src/components/aws/nextjs.ts",
@@ -2097,6 +2123,7 @@ async function buildComponents() {
       "../platform/src/components/cloudflare/dns.ts",
       "../platform/src/components/vercel/dns.ts",
       "../platform/src/components/aws/cdn.ts",
+      "../platform/src/components/aws/iam-edit.ts",
       "../platform/src/components/aws/permission.ts",
       "../platform/src/components/cloudflare/binding.ts",
     ],

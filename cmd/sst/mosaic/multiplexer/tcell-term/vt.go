@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"runtime/debug"
@@ -460,8 +461,9 @@ func (vt *VT) Close() {
 	vt.mu.Lock()
 	defer vt.mu.Unlock()
 	if vt.cmd != nil && vt.cmd.Process != nil {
-		vt.cmd.Process.Kill()
-		vt.cmd.Wait()
+		slog.Info("killing process", "pid", vt.cmd.Process.Pid)
+		vt.cmd.Process.Signal(syscall.SIGTERM)
+		slog.Info("process killed")
 	}
 	vt.pty.Close()
 }
