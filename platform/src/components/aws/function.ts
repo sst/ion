@@ -1521,7 +1521,7 @@ export class Function extends Component implements Link.Linkable {
           runtime,
         ]) => {
           if (dev) return { handler };
-          if (runtime.startsWith("python")) {
+          if (!runtime.startsWith("nodejs")) {
             return { handler };
           }
 
