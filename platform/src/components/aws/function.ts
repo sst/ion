@@ -261,13 +261,14 @@ export interface FunctionArgs {
    * ```
    */
   runtime?: Input<
-    | "nodejs18.x"
-    | "nodejs20.x"
-    | "provided.al2023"
-    | "python3.9"
-    | "python3.10"
-    | "python3.11"
-    | "python3.12"
+  | "nodejs18.x"
+  | "nodejs20.x"
+  | "provided.al2023"
+  | "provided.al2"
+  | "python3.9"
+  | "python3.10"
+  | "python3.11"
+  | "python3.12"
   >;
   /**
    * Path to the source code directory for the function. By default, the handler is
@@ -1059,6 +1060,11 @@ export interface FunctionArgs {
    * @internal
    */
   _skipMetadata?: boolean;
+
+  /**
+   * If enabled, it does not create an lambda wrapper which makes it possible to use with different custom runtimes like PHP
+   */
+  skipHandlerWrapper?: Input<boolean>
 }
 
 /**
@@ -1521,7 +1527,7 @@ export class Function extends Component implements Link.Linkable {
           runtime,
         ]) => {
           if (dev) return { handler };
-          if (runtime.startsWith("python")) {
+          if (runtime.startsWith("python") || args.skipHandlerWrapper) {
             return { handler };
           }
 
