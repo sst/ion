@@ -10,7 +10,7 @@ import {
   secret,
 } from "@pulumi/pulumi";
 import { Image, Platform } from "@pulumi/docker-build";
-import { $print, Component, transform } from "../component.js";
+import { Component, transform } from "../component.js";
 import { toGBs, toMBs } from "../size.js";
 import { toNumber } from "../cpu.js";
 import { dns as awsDns } from "./dns.js";
@@ -42,6 +42,7 @@ import { Permission } from "./permission.js";
 import { Vpc } from "./vpc.js";
 import { Vpc as VpcV1 } from "./vpc-v1";
 import { DevCommand } from "../experimental/dev-command.js";
+import { Efs } from "./efs.js";
 
 export interface ServiceArgs extends ClusterServiceArgs {
   /**
@@ -238,9 +239,12 @@ export class Service extends Component implements Link.Linkable {
     }
 
     function normalizeContainers() {
-      if (args.containers && (args.image || args.logging || args.environment)) {
+      if (
+        args.containers &&
+        (args.image || args.logging || args.environment || args.volumes)
+      ) {
         throw new VisibleError(
-          `You cannot provide both "containers" and "image", "logging", or "environment".`,
+          `You cannot provide both "containers" and "image", "logging", "environment" or "volumes".`,
         );
       }
 
@@ -251,6 +255,7 @@ export class Service extends Component implements Link.Linkable {
           image: args.image,
           logging: args.logging,
           environment: args.environment,
+          volumes: args.volumes,
           command: args.command,
           entrypoint: args.entrypoint,
           dev: args.dev,
@@ -262,9 +267,20 @@ export class Service extends Component implements Link.Linkable {
         containers.map((v) => {
           return {
             ...v,
+            volumes: normalizeVolumes(),
             image: normalizeImage(),
             logging: normalizeLogging(),
           };
+
+          function normalizeVolumes() {
+            return output(v.volumes).apply(
+              (volumes) =>
+                volumes?.map((volume) => ({
+                  path: volume.path,
+                  efs: volume.efs instanceof Efs ? volume.efs.id : volume.efs,
+                })),
+            );
+          }
 
           function normalizeImage() {
             return all([v.image, architecture]).apply(
@@ -606,12 +622,27 @@ export class Service extends Component implements Link.Linkable {
             },
             executionRoleArn: executionRole.arn,
             taskRoleArn: taskRole.arn,
+            volumes: output(containers).apply((containers) => {
+              const uniqueFileSystemIds: Set<string> = new Set();
+              return containers.flatMap((container) =>
+                (container.volumes ?? []).flatMap((volume) => {
+                  if (uniqueFileSystemIds.has(volume.efs)) return [];
+                  uniqueFileSystemIds.add(volume.efs);
+                  return {
+                    name: volume.efs,
+                    efsVolumeConfiguration: {
+                      fileSystemId: volume.efs,
+                      transitEncryption: "ENABLED",
+                    },
+                  };
+                }),
+              );
+            }),
             containerDefinitions: $jsonStringify(
               all([
                 containers,
-                args.environment ?? [],
                 Link.propertiesToEnv(Link.getProperties(args.link)),
-              ]).apply(([containers, env, linkEnvs]) =>
+              ]).apply(([containers, linkEnvs]) =>
                 containers.map((container) => {
                   return {
                     name: container.name,
@@ -628,12 +659,17 @@ export class Service extends Component implements Link.Linkable {
                         "awslogs-stream-prefix": "/service",
                       },
                     },
-                    environment: Object.entries({ ...env, ...linkEnvs }).map(
-                      ([name, value]) => ({ name, value }),
-                    ),
+                    environment: Object.entries({
+                      ...container.environment,
+                      ...linkEnvs,
+                    }).map(([name, value]) => ({ name, value })),
                     linuxParameters: {
                       initProcessEnabled: true,
                     },
+                    mountPoints: container.volumes?.map((volume) => ({
+                      sourceVolume: volume.efs,
+                      containerPath: volume.path,
+                    })),
                   };
 
                   function createImage() {
@@ -688,9 +724,12 @@ export class Service extends Component implements Link.Linkable {
                           ],
                           registries: [
                             ecr
-                              .getAuthorizationTokenOutput({
-                                registryId: bootstrapData.assetEcrRegistryId,
-                              })
+                              .getAuthorizationTokenOutput(
+                                {
+                                  registryId: bootstrapData.assetEcrRegistryId,
+                                },
+                                { parent: self },
+                              )
                               .apply((authToken) => ({
                                 address: authToken.proxyEndpoint,
                                 password: secret(authToken.password),

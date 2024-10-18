@@ -203,6 +203,17 @@ export interface DynamoArgs {
    */
   ttl?: Input<string>;
   /**
+   * Enable deletion protection for the table. When enabled, the table cannot be deleted.
+   *
+   * @example
+   * ```js
+   * {
+   *   deletionProtection: true,
+   * }
+   * ```
+   */
+  deletionProtection?: Input<true>;
+  /**
    * [Transform](/docs/components#transform) how this component creates its underlying
    * resources.
    */
@@ -288,6 +299,11 @@ export interface DynamoSubscriberArgs {
      */
     eventSourceMapping?: Transform<lambda.EventSourceMappingArgs>;
   };
+}
+
+interface DynamoRef {
+  ref: boolean;
+  table: dynamodb.Table;
 }
 
 /**
@@ -404,13 +420,19 @@ export class Dynamo extends Component implements Link.Linkable {
     opts: ComponentResourceOptions = {},
   ) {
     super(__pulumiType, name, args, opts);
+    this.constructorName = name;
+    this.constructorOpts = opts;
+
+    if (args && "ref" in args) {
+      const ref = args as unknown as DynamoRef;
+      this.table = output(ref.table);
+      return;
+    }
 
     const parent = this;
 
     const table = createTable();
 
-    this.constructorName = name;
-    this.constructorOpts = opts;
     this.table = table;
     this.isStreamEnabled = Boolean(args.stream);
 
@@ -421,8 +443,16 @@ export class Dynamo extends Component implements Link.Linkable {
         args.globalIndexes,
         args.localIndexes,
         args.stream,
+        args.deletionProtection,
       ]).apply(
-        ([fields, primaryIndex, globalIndexes, localIndexes, stream]) =>
+        ([
+          fields,
+          primaryIndex,
+          globalIndexes,
+          localIndexes,
+          stream,
+          deletionProtection,
+        ]) =>
           new dynamodb.Table(
             ...transform(
               args.transform?.table,
@@ -478,6 +508,7 @@ export class Dynamo extends Component implements Link.Linkable {
                         : { projectionType: "ALL" }),
                   }),
                 ),
+                deletionProtectionEnabled: deletionProtection,
               },
               { parent },
             ),
@@ -674,6 +705,44 @@ export class Dynamo extends Component implements Link.Linkable {
         opts,
       );
     });
+  }
+
+  /**
+   * Reference an existing DynamoDB Table with the given table name. This is useful when you
+   * create a table in one stage and want to share it in another stage. It avoid having to
+   * create a new table in the other stage.
+   *
+   * :::tip
+   * You can use the `static get` method to share a table across stages.
+   * :::
+   *
+   * @param name The name of the component.
+   * @param tableName The name of the DynamoDB Table.
+   *
+   * @example
+   * Imagine you create a table in the `dev` stage. And in your personal stage `frank`,
+   * instead of creating a new table, you want to share the table from `dev`.
+   *
+   * ```ts title=sst.config.ts"
+   * const table = $app.stage === "frank"
+   *  ? sst.aws.Dynamo.get("MyTable", "app-dev-mytable")
+   *  : new sst.aws.Dynamo("MyTable");
+   * ```
+   *
+   * Here `app-dev-mytable` is the name of the DynamoDB Table created in the `dev` stage.
+   * You can find this by outputting the table name in the `dev` stage.
+   *
+   * ```ts title="sst.config.ts"
+   * return {
+   *   table: table.name
+   * };
+   * ```
+   */
+  public static get(name: string, tableName: Input<string>) {
+    return new Dynamo(name, {
+      ref: true,
+      table: dynamodb.Table.get(`${name}Table`, tableName),
+    } satisfies DynamoRef as unknown as DynamoArgs);
   }
 
   /** @internal */

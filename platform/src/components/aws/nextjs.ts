@@ -19,15 +19,15 @@ import { Cdn } from "./cdn.js";
 import { Bucket } from "./bucket.js";
 import { Component } from "../component.js";
 import { Link } from "../link.js";
-import { DevArgs } from "../dev.js";
 import { VisibleError } from "../error.js";
 import type { Input } from "../input.js";
 import { Queue } from "./queue.js";
 import { buildApp } from "../base/base-ssr-site.js";
 import { dynamodb, lambda } from "@pulumi/aws";
 import { URL_UNAVAILABLE } from "./linkable.js";
+import { getOpenNextPackage } from "../../util/compare-semver.js";
 
-const DEFAULT_OPEN_NEXT_VERSION = "3.0.8";
+const DEFAULT_OPEN_NEXT_VERSION = "3.1.6";
 const DEFAULT_CACHE_POLICY_ALLOWED_HEADERS = ["x-open-next-cache-key"];
 
 type BaseFunction = {
@@ -104,7 +104,7 @@ export interface NextjsArgs extends SsrSiteArgs {
    *
    * To disable dev mode, pass in `false`.
    */
-  dev?: false | DevArgs["dev"];
+  dev?: SsrSiteArgs["dev"];
   /**
    * Permissions and the resources that the [server function](#nodes-server) in your Next.js app needs to access. These permissions are used to create the function's IAM role.
    *
@@ -591,14 +591,12 @@ export class Nextjs extends Component implements Link.Linkable {
 
     function normalizeBuildCommand() {
       return all([args?.buildCommand, args?.openNextVersion]).apply(
-        ([buildCommand, openNextVersion]) =>
-          buildCommand ??
-          [
-            "npx",
-            "--yes",
-            `open-next@${openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION}`,
-            "build",
-          ].join(" "),
+        ([buildCommand, openNextVersion]) => {
+          if (buildCommand) return buildCommand;
+          const version = openNextVersion ?? DEFAULT_OPEN_NEXT_VERSION;
+          const packageName = getOpenNextPackage(version);
+          return `npx --yes ${packageName}@${version} build`;
+        },
       );
     }
 
@@ -789,40 +787,59 @@ export class Nextjs extends Component implements Link.Linkable {
               },
               ...(revalidationQueueArn
                 ? [
-                    {
-                      actions: [
-                        "sqs:SendMessage",
-                        "sqs:GetQueueAttributes",
-                        "sqs:GetQueueUrl",
-                      ],
-                      resources: [revalidationQueueArn],
-                    },
-                  ]
+                  {
+                    actions: [
+                      "sqs:SendMessage",
+                      "sqs:GetQueueAttributes",
+                      "sqs:GetQueueUrl",
+                    ],
+                    resources: [revalidationQueueArn],
+                  },
+                ]
                 : []),
               ...(revalidationTableArn
                 ? [
-                    {
-                      actions: [
-                        "dynamodb:BatchGetItem",
-                        "dynamodb:GetRecords",
-                        "dynamodb:GetShardIterator",
-                        "dynamodb:Query",
-                        "dynamodb:GetItem",
-                        "dynamodb:Scan",
-                        "dynamodb:ConditionCheckItem",
-                        "dynamodb:BatchWriteItem",
-                        "dynamodb:PutItem",
-                        "dynamodb:UpdateItem",
-                        "dynamodb:DeleteItem",
-                        "dynamodb:DescribeTable",
-                      ],
-                      resources: [
-                        revalidationTableArn,
-                        `${revalidationTableArn}/*`,
-                      ],
-                    },
-                  ]
+                  {
+                    actions: [
+                      "dynamodb:BatchGetItem",
+                      "dynamodb:GetRecords",
+                      "dynamodb:GetShardIterator",
+                      "dynamodb:Query",
+                      "dynamodb:GetItem",
+                      "dynamodb:Scan",
+                      "dynamodb:ConditionCheckItem",
+                      "dynamodb:BatchWriteItem",
+                      "dynamodb:PutItem",
+                      "dynamodb:UpdateItem",
+                      "dynamodb:DeleteItem",
+                      "dynamodb:DescribeTable",
+                    ],
+                    resources: [
+                      revalidationTableArn,
+                      `${revalidationTableArn}/*`,
+                    ],
+                  },
+                ]
                 : []),
+            ],
+            injections: [
+              [
+                `outer:if (process.env.SST_KEY_FILE) {`,
+                `  const { readFileSync } = await import("fs")`,
+                `  const { createDecipheriv } = await import("crypto")`,
+                `  const key = Buffer.from(process.env.SST_KEY, "base64");`,
+                `  const encryptedData = readFileSync(process.env.SST_KEY_FILE);`,
+                `  const nonce = Buffer.alloc(12, 0);`,
+                `  const decipher = createDecipheriv("aes-256-gcm", key, nonce);`,
+                `  const authTag = encryptedData.slice(-16);`,
+                `  const actualCiphertext = encryptedData.slice(0, -16);`,
+                `  decipher.setAuthTag(authTag);`,
+                `  let decrypted = decipher.update(actualCiphertext);`,
+                `  decrypted = Buffer.concat([decrypted, decipher.final()]);`,
+                `  const decryptedData = JSON.parse(decrypted.toString());`,
+                `  globalThis.SST_KEY_FILE_DATA = decryptedData;`,
+                `}`,
+              ].join("\n"),
             ],
           };
 

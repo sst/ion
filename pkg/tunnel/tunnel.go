@@ -9,16 +9,26 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/xjasonlyu/tun2socks/v2/engine"
+
 	"github.com/sst/ion/internal/util"
 )
 
-var BINARY_PATH = "/opt/sst/sst"
+var BINARY_PATH = "/opt/sst/sst" + "1"
+
+func NeedsInstall() bool {
+	if _, err := os.Stat(BINARY_PATH); err == nil {
+		return false
+	}
+	return true
+}
 
 func Install() error {
 	sourcePath, err := os.Executable()
 	if err != nil {
 		return err
 	}
+	os.RemoveAll(filepath.Dir(BINARY_PATH))
 	os.MkdirAll(filepath.Dir(BINARY_PATH), 0755)
 	sourceFile, err := os.Open(sourcePath)
 	if err != nil {
@@ -37,8 +47,10 @@ func Install() error {
 	err = os.Chmod(BINARY_PATH, 0755)
 	user := os.Getenv("SUDO_USER")
 	sudoersPath := "/etc/sudoers.d/sst-" + user
+	slog.Info("creating sudoers file", "path", sudoersPath)
 	command := BINARY_PATH + " tunnel start *"
 	sudoersEntry := fmt.Sprintf("%s ALL=(ALL) NOPASSWD:SETENV: %s\n", user, command)
+	slog.Info("sudoers entry", "entry", sudoersEntry)
 	err = os.WriteFile(sudoersPath, []byte(sudoersEntry), 0440)
 	if err != nil {
 		return err
@@ -49,8 +61,10 @@ func Install() error {
 	} else {
 		cmd = exec.Command("visudo", "-c", "-f", sudoersPath)
 	}
+	slog.Info("running visudo", "cmd", cmd.Args)
 	err = cmd.Run()
 	if err != nil {
+		slog.Error("failed to run visudo", "error", err)
 		os.Remove(sudoersPath)
 		return util.NewReadableError(err, "Error validating sudoers file")
 	}
@@ -68,4 +82,17 @@ func runCommands(cmds [][]string) error {
 		}
 	}
 	return nil
+}
+
+func tun2socks(name string) {
+	key := new(engine.Key)
+	key.Device = name
+	key.Proxy = "socks5://127.0.0.1:1080"
+	engine.Insert(key)
+	engine.Start()
+}
+
+func Stop() {
+	engine.Stop()
+	destroy()
 }

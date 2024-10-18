@@ -60,9 +60,14 @@ if (!cmd || cmd === "components") {
 
   for (const component of components) {
     const sourceFile = component.sources![0].fileName;
-    if (sourceFile === "platform/src/global-config.d.ts")
-      await generateGlobalConfigDoc(component);
-    else if (sourceFile === "platform/src/config.ts")
+    // Skip - generated into the global-config doc
+    if (sourceFile.endsWith("/aws/iam-edit.ts")) continue;
+    else if (sourceFile === "platform/src/global-config.d.ts") {
+      const iamEditComponent = components.find((c) =>
+        c.sources![0].fileName.endsWith("/aws/iam-edit.ts")
+      );
+      await generateGlobalConfigDoc(component, iamEditComponent!);
+    } else if (sourceFile === "platform/src/config.ts")
       await generateConfigDoc(component);
     else if (sourceFile.endsWith("/dns.ts")) await generateDnsDoc(component);
     else if (
@@ -462,7 +467,10 @@ async function generateExamplesDocs() {
   }
 }
 
-async function generateGlobalConfigDoc(module: TypeDoc.DeclarationReflection) {
+async function generateGlobalConfigDoc(
+  module: TypeDoc.DeclarationReflection,
+  iamEditComponent: TypeDoc.DeclarationReflection
+) {
   console.info(`Generating Global...`);
   const outputFilePath = `src/content/docs/docs/reference/global.mdx`;
   fs.writeFileSync(
@@ -476,6 +484,9 @@ async function generateGlobalConfigDoc(module: TypeDoc.DeclarationReflection) {
       renderVariables(module),
       renderFunctions(module, useModuleFunctions(module), {
         title: "Functions",
+      }),
+      renderFunctions(module, useModuleFunctions(iamEditComponent), {
+        title: "AWS",
       }),
       renderBodyEnd(),
     ]
@@ -901,6 +912,7 @@ function renderType(
       CognitoIdentityProvider: "cognito-identity-provider",
       CognitoUserPoolClient: "cognito-user-pool-client",
       DynamoLambdaSubscriber: "dynamo-lambda-subscriber",
+      Efs: "efs",
       Function: "function",
       FunctionArgs: "function",
       FunctionPermissionArgs: "function",
@@ -2046,6 +2058,7 @@ async function buildComponents() {
     entryPoints: [
       "../platform/src/config.ts",
       "../platform/src/global-config.d.ts",
+      "../platform/src/components/experimental/dev-command.ts",
       "../platform/src/components/linkable.ts",
       "../platform/src/components/secret.ts",
       "../platform/src/components/aws/analog.ts",
@@ -2077,6 +2090,7 @@ async function buildComponents() {
       "../platform/src/components/aws/cron.ts",
       "../platform/src/components/aws/dynamo.ts",
       "../platform/src/components/aws/dynamo-lambda-subscriber.ts",
+      "../platform/src/components/aws/efs.ts",
       "../platform/src/components/aws/email.ts",
       "../platform/src/components/aws/function.ts",
       "../platform/src/components/aws/postgres.ts",
@@ -2112,6 +2126,7 @@ async function buildComponents() {
       "../platform/src/components/cloudflare/dns.ts",
       "../platform/src/components/vercel/dns.ts",
       "../platform/src/components/aws/cdn.ts",
+      "../platform/src/components/aws/iam-edit.ts",
       "../platform/src/components/aws/permission.ts",
       "../platform/src/components/cloudflare/binding.ts",
     ],

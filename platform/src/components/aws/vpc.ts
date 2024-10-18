@@ -5,13 +5,13 @@ import {
   interpolate,
   output,
 } from "@pulumi/pulumi";
-import { $print, Component, Transform, transform } from "../component";
+import { Component, Transform, transform } from "../component";
 import { Input } from "../input";
 import {
-  autoscaling,
   ec2,
   getAvailabilityZonesOutput,
   iam,
+  route53,
   servicediscovery,
   ssm,
 } from "@pulumi/aws";
@@ -68,7 +68,34 @@ export interface VpcArgs {
    * }
    * ```
    */
-  nat?: Input<"ec2" | "managed">;
+  nat?: Input<
+    | "ec2"
+    | "managed"
+    | {
+        /**
+         * Configures the NAT EC2 instance.
+         * @default `{instance: "t4g.nano"}`
+         * @example
+         * ```ts
+         * {
+         *   nat: {
+         *     ec2: {
+         *       instance: "t4g.large"
+         *     }
+         *   }
+         * }
+         * ```
+         */
+        ec2: Input<{
+          /**
+           * The type of instance to use for the NAT.
+           *
+           * @default `"t4g.nano"`
+           */
+          instance: Input<string>;
+        }>;
+      }
+  >;
   /**
    * Configures a bastion host that can be used to connect to resources in the VPC.
    *
@@ -325,7 +352,13 @@ export class Vpc extends Component implements Link.Linkable {
     }
 
     function normalizeNat() {
-      return output(args?.nat).apply((nat) => nat);
+      return output(args?.nat).apply((nat) => {
+        if (nat === "managed") return { type: "managed" as const };
+        if (nat === "ec2")
+          return { type: "ec2" as const, ec2: { instance: "t4g.nano" } };
+        if (nat) return { type: "ec2" as const, ec2: nat.ec2 };
+        return undefined;
+      });
     }
 
     function createVpc() {
@@ -417,7 +450,7 @@ export class Vpc extends Component implements Link.Linkable {
 
     function createNatGateways() {
       const ret = all([nat, publicSubnets]).apply(([nat, subnets]) => {
-        if (nat !== "managed") return [];
+        if (nat?.type !== "managed") return [];
 
         return subnets.map((subnet, i) => {
           const elasticIp = new ec2.Eip(
@@ -454,7 +487,7 @@ export class Vpc extends Component implements Link.Linkable {
 
     function createNatInstances() {
       return nat.apply((nat) => {
-        if (nat !== "ec2") return output([]);
+        if (nat?.type !== "ec2") return output([]);
 
         const sg = new ec2.SecurityGroup(
           `${name}NatInstanceSecurityGroup`,
@@ -533,7 +566,7 @@ export class Vpc extends Component implements Link.Linkable {
             return new ec2.Instance(
               `${name}NatInstance${i + 1}`,
               {
-                instanceType: "t4g.nano",
+                instanceType: nat.ec2.instance,
                 ami: ami.id,
                 subnetId: publicSubnets[i].id,
                 vpcSecurityGroupIds: [sg.id],
@@ -891,7 +924,7 @@ export class Vpc extends Component implements Link.Linkable {
    * :::
    *
    * @param name The name of the component.
-   * @param vpcID The ID of the existing VPC.
+   * @param vpcId The ID of the existing VPC.
    *
    * @example
    * Imagine you create a VPC in the `dev` stage. And in your personal stage `frank`,
@@ -912,8 +945,8 @@ export class Vpc extends Component implements Link.Linkable {
    * };
    * ```
    */
-  public static get(name: string, vpcID: Input<string>) {
-    const vpc = ec2.Vpc.get(`${name}Vpc`, vpcID);
+  public static get(name: string, vpcId: Input<string>) {
+    const vpc = ec2.Vpc.get(`${name}Vpc`, vpcId);
     const internetGateway = ec2.InternetGateway.get(
       `${name}InstanceGateway`,
       ec2.getInternetGatewayOutput({
@@ -931,7 +964,7 @@ export class Vpc extends Component implements Link.Linkable {
         })
         .ids.apply((ids) => {
           if (!ids.length)
-            throw new VisibleError(`Security group not found in VPC ${vpcID}`);
+            throw new VisibleError(`Security group not found in VPC ${vpcId}`);
           return ids[0];
         }),
     );
@@ -1019,14 +1052,35 @@ export class Vpc extends Component implements Link.Linkable {
           : undefined,
       );
 
-    const namespaceId = servicediscovery.getDnsNamespaceOutput({
-      name: "sst",
-      type: "DNS_PRIVATE",
-    }).id;
+    // Note: can also use servicediscovery.getDnsNamespaceOutput() here, ie.
+    // ```ts
+    // const namespaceId = servicediscovery.getDnsNamespaceOutput({
+    //   name: "sst",
+    //   type: "DNS_PRIVATE",
+    // }).id;
+    // ```
+    // but if user deployed multiple VPCs into the same account. This will error because
+    // there are multiple results. Even though `getDnsNamespaceOutput()` takes tags in args,
+    // the tags are not used for lookup.
+    const zone = output(vpcId).apply((vpcId) =>
+      route53.getZone({
+        name: "sst",
+        privateZone: true,
+        vpcId,
+      }),
+    );
+    const namespaceId = zone.linkedServiceDescription.apply((description) => {
+      const match = description.match(/:namespace\/(ns-[a-z1-9]*)/)?.[1];
+      if (!match)
+        throw new VisibleError(
+          `Cloud Map namespace not found for VPC ${vpcId}`,
+        );
+      return match;
+    });
     const cloudmapNamespace = servicediscovery.PrivateDnsNamespace.get(
       `${name}CloudmapNamespace`,
       namespaceId,
-      { vpc: vpcID },
+      { vpc: vpcId },
     );
 
     const privateKeyValue = bastionInstance.apply((v) => {

@@ -40,6 +40,7 @@ import { rpc } from "../rpc/rpc.js";
 import { parseRoleArn } from "./helpers/arn.js";
 import { RandomBytes } from "@pulumi/random";
 import { lazy } from "../../util/lazy.js";
+import { Efs } from "./efs.js";
 
 /**
  * Helper type to define function ARN type
@@ -436,7 +437,7 @@ export interface FunctionArgs {
    * [Link resources](/docs/linking/) to your function. This will:
    *
    * 1. Grant the permissions needed to access the resources.
-   * 2. Allow you to access it in your site using the [SDK](/docs/reference/sdk/).
+   * 2. Allow you to access it in your function using the [SDK](/docs/reference/sdk/).
    *
    * @example
    *
@@ -653,7 +654,7 @@ export interface FunctionArgs {
    */
   nodejs?: Input<{
     /**
-     * Point to a plugins.mjs file with a list of esbuild plugins.
+     * Point to a file that exports a list of esbuild plugins to use.
      *
      * @example
      * ```js
@@ -664,13 +665,17 @@ export interface FunctionArgs {
      * }
      * ```
      *
-     * @example
-     * ```js
-     * import { somePlugin } from "some-plugin"
+     * The path is relative to the location of the `sst.config.ts`.
+     *
+     * ```js title="plugins.mjs"
+     * import { somePlugin } from "some-plugin";
+     *
      * export default [
      *   somePlugin()
-     * ]
+     * ];
      * ```
+     *
+     * You'll also need to install the npm package of the plugin.
      */
     plugins?: Input<string>;
     /**
@@ -993,6 +998,59 @@ export interface FunctionArgs {
    */
   layers?: Input<Input<string>[]>;
   /**
+   * Mount an EFS file system to the function.
+   *
+   * @example
+   * Create an EFS file system.
+   *
+   * ```js
+   * const fileSystem = new sst.aws.Efs("MyFileSystem", { vpc });
+   * ```
+   *
+   * And pass it in.
+   *
+   * ```js
+   * {
+   *   volume: {
+   *     efs: fileSystem,
+   *   }
+   * }
+   * ```
+   *
+   * By default, the file system will be mounted to `/mnt/efs`. You can change this by
+   * passing in the `path` property.
+   *
+   * ```js
+   * {
+   *   volume: {
+   *     efs: fileSystem,
+   *     path: "/mnt/my-files"
+   *   }
+   * }
+   * ```
+   *
+   * To use an existing EFS access point, pass in the EFS access point ARN.
+   *
+   * ```js
+   * {
+   *   volume: {
+   *     efs: "arn:aws:elasticfilesystem:us-east-1:123456789012:access-point/fsap-12345678",
+   *   }
+   * }
+   * ```
+   */
+  volume?: Input<{
+    /**
+     * The EFS file system to mount.
+     */
+    efs: Input<Efs | string>;
+    /**
+     * The path to mount the volumne.
+     * @default `"/mnt/efs"`
+     */
+    path?: Input<string>;
+  }>;
+  /**
    * A list of tags to add to the function.
    *
    * @example
@@ -1185,10 +1243,11 @@ export class Function extends Component implements Link.Linkable {
     const runtime = normalizeRuntime();
     const timeout = normalizeTimeout();
     const memory = normalizeMemory();
-    const architectures = normalizeArchitectures();
+    const architecture = output(args.architecture).apply((v) => v ?? "x86_64");
     const environment = normalizeEnvironment();
     const streaming = normalizeStreaming();
     const logging = normalizeLogging();
+    const volume = normalizeVolume();
     const url = normalizeUrl();
     const copyFiles = normalizeCopyFiles();
     const vpc = normalizeVpc();
@@ -1264,6 +1323,7 @@ export class Function extends Component implements Link.Linkable {
         handler: args.handler,
         internal: args._skipMetadata,
       },
+      _hint: fnUrl.apply((fnUrl) => fnUrl?.functionUrl),
     });
 
     function normalizeDev() {
@@ -1292,19 +1352,14 @@ export class Function extends Component implements Link.Linkable {
       return output(args.memory).apply((memory) => memory ?? "1024 MB");
     }
 
-    function normalizeArchitectures() {
-      return all([args.architecture]).apply(([arc]) =>
-        arc === "arm64" ? ["arm64"] : ["x86_64"],
-      );
-    }
-
     function normalizeEnvironment() {
       return all([
         args.environment,
         dev,
         bootstrapData,
         Function.encryptionKey().base64,
-      ]).apply(([environment, dev, bootstrap, key]) => {
+        args.bundle,
+      ]).apply(([environment, dev, bootstrap, key, bundle]) => {
         const result = environment ?? {};
         result.SST_RESOURCE_App = JSON.stringify({
           name: $app.name,
@@ -1344,6 +1399,18 @@ export class Function extends Component implements Link.Linkable {
           format: logging?.format ?? "text",
         };
       });
+    }
+
+    function normalizeVolume() {
+      if (!args.volume) return;
+
+      return output(args.volume).apply((volume) => ({
+        efs:
+          volume.efs instanceof Efs
+            ? volume.efs.nodes.accessPoint.arn
+            : output(volume.efs),
+        path: volume.path ?? "/mnt/efs",
+      }));
     }
 
     function normalizeUrl() {
@@ -1484,13 +1551,6 @@ export class Function extends Component implements Link.Linkable {
           };
         }
 
-        if (args.bundle) {
-          return {
-            bundle: output(args.bundle),
-            handler: output(args.handler),
-          };
-        }
-
         const buildResult = buildInput.apply(async (input) => {
           const result = await rpc.call<{
             handler: string;
@@ -1534,20 +1594,8 @@ export class Function extends Component implements Link.Linkable {
           }
 
           const hasUserInjections = injections.length > 0;
-          // already injected via esbuild when bundle is undefined
-          const hasLinkInjections = args.bundle && linkData.length > 0;
 
-          if (!hasUserInjections && !hasLinkInjections) return { handler };
-
-          const linkInjection = hasLinkInjections
-            ? linkData
-                .map((item) => [
-                  `process.env["SST_RESOURCE_${item.name}"] = ${JSON.stringify(
-                    JSON.stringify(item.properties),
-                  )};\n`,
-                ])
-                .join("")
-            : "";
+          if (!hasUserInjections) return { handler };
 
           const parsed = path.posix.parse(handler);
           const handlerDir = parsed.dir;
@@ -1567,6 +1615,18 @@ export class Function extends Component implements Link.Linkable {
               `Could not find handler file "${handler}" for function "${name}"`,
             );
 
+          const split = injections.reduce(
+            (acc, item) => {
+              if (item.startsWith("outer:")) {
+                acc.outer.push(item.substring("outer:".length));
+                return acc;
+              }
+              acc.inner.push(item);
+              return acc;
+            },
+            { outer: [] as string[], inner: [] as string[] },
+          );
+
           return {
             handler: path.posix.join(
               handlerDir,
@@ -1576,17 +1636,17 @@ export class Function extends Component implements Link.Linkable {
               name: path.posix.join(handlerDir, `${newHandlerFileName}.mjs`),
               content: streaming
                 ? [
-                    linkInjection,
+                    ...split.outer,
                     `export const ${newHandlerFunction} = awslambda.streamifyResponse(async (event, responseStream, context) => {`,
-                    ...injections,
+                    ...split.inner,
                     `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
                     `  return rawHandler(event, responseStream, context);`,
                     `});`,
                   ].join("\n")
                 : [
-                    linkInjection,
+                    ...split.outer,
                     `export const ${newHandlerFunction} = async (event, context) => {`,
-                    ...injections,
+                    ...split.inner,
                     `  const { ${oldHandlerFunction}: rawHandler} = await import("./${oldHandlerFileName}${newHandlerFileExt}");`,
                     `  return rawHandler(event, context);`,
                     `};`,
@@ -1739,7 +1799,11 @@ export class Function extends Component implements Link.Linkable {
                 inline: {},
               },
             ],
-            /// TODO: walln - enable arm64 builds by using architecture args
+            platforms: [
+              architecture.apply((v) =>
+                v === "arm64" ? "linux/arm64" : "linux/amd64",
+              ),
+            ],
             push: true,
             registries: [
               authToken.apply((authToken) => ({
@@ -1893,7 +1957,7 @@ export class Function extends Component implements Link.Linkable {
               environment: {
                 variables: environment,
               },
-              architectures,
+              architectures: [architecture],
               loggingConfig: logging && {
                 logFormat: logging.format === "json" ? "JSON" : "Text",
                 logGroup: logging.logGroup ?? logGroup!.name,
@@ -1901,6 +1965,10 @@ export class Function extends Component implements Link.Linkable {
               vpcConfig: vpc && {
                 securityGroupIds: vpc.securityGroups,
                 subnetIds: vpc.privateSubnets,
+              },
+              fileSystemConfig: volume && {
+                arn: volume.efs,
+                localMountPath: volume.path,
               },
               layers: args.layers,
               tags: args.tags,

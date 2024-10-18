@@ -10,6 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "sst": "3.0.1-37"
+    "@aws-sdk/client-sesv2": "^3.515.0",
+    "ioredis": "^5.4.1",
+    "sst": "0.0.0-1729216281"
   }
 }

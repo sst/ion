@@ -107,6 +107,7 @@ export class Component extends ComponentResource {
               "aws:s3/bucketV2:BucketV2",
               "aws:servicediscovery/privateDnsNamespace:PrivateDnsNamespace",
               "aws:servicediscovery/service:Service",
+              "aws:sesv2/configurationSet:ConfigurationSet",
             ].includes(args.type) ||
             // resources not prefixed
             [
@@ -131,6 +132,9 @@ export class Component extends ComponentResource {
               "aws:appsync/domainName:DomainName",
               "aws:appsync/domainNameApiAssociation:DomainNameApiAssociation",
               "aws:ec2/routeTableAssociation:RouteTableAssociation",
+              "aws:efs/fileSystem:FileSystem",
+              "aws:efs/mountTarget:MountTarget",
+              "aws:efs/accessPoint:AccessPoint",
               "aws:iam/accessKey:AccessKey",
               "aws:iam/instanceProfile:InstanceProfile",
               "aws:iam/policy:Policy",
@@ -163,6 +167,7 @@ export class Component extends ComponentResource {
               "aws:s3/bucketWebsiteConfigurationV2:BucketWebsiteConfigurationV2",
               "aws:secretsmanager/secretVersion:SecretVersion",
               "aws:ses/domainIdentityVerification:DomainIdentityVerification",
+              "aws:sesv2/configurationSetEventDestination:ConfigurationSetEventDestination",
               "aws:sesv2/emailIdentity:EmailIdentity",
               "aws:sns/topicSubscription:TopicSubscription",
               "cloudflare:index/record:Record",

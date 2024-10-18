@@ -70,6 +70,7 @@ const sidebar = [
   {
     label: "AWS",
     items: [
+      "docs/component/aws/efs",
       "docs/component/aws/vpc",
       "docs/component/aws/cron",
       "docs/component/aws/nuxt",
@@ -119,6 +120,7 @@ const sidebar = [
       "docs/reference/config",
       "docs/component/secret",
       "docs/component/linkable",
+      "docs/component/experimental/dev-command",
     ],
   },
   {
