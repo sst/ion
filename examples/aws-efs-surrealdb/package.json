@@ -1,5 +1,5 @@
 {
-  "name": "aws-surrealdb-fargate",
+  "name": "aws-efs-surrealdb",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -7,13 +7,10 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "zvictor (https://github.com/zvictor)",
+  "author": "",
   "license": "ISC",
   "dependencies": {
-    "surrealdb": "^1.0.1",
-    "sst": "3.1.74"
-  },
-  "devDependencies": {
-    "@types/aws-lambda": "8.10.145"
+    "sst": "latest",
+    "surrealdb": "^1.0.1"
   }
 }

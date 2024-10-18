@@ -5,18 +5,26 @@ import "sst"
 export {}
 declare module "sst" {
   export interface Resource {
-    "MyFunction": {
+    "MyApp": {
       "name": string
       "type": "sst.aws.Function"
       "url": string
     }
-    "MyVpc": {
-      "bastion": string
-      "type": "sst.aws.Vpc"
+    "MyConfig": {
+      "database": string
+      "host": string
+      "namespace": string
+      "password": string
+      "port": number
+      "type": "sst.sst.Linkable"
+      "username": string
     }
-    "SurrealDB": {
+    "MyService": {
       "service": string
       "type": "sst.aws.Service"
+    }
+    "MyVpc": {
+      "type": "sst.aws.Vpc"
     }
   }
 }
