@@ -857,6 +857,30 @@ export interface ClusterServiceArgs {
     retention?: Input<keyof typeof RETENTION>;
   }>;
   /**
+   * Configure secrets to expose to your container.
+   * @example
+   * ```js
+   * {
+   *   secrets: [
+   *     {
+   *       name: "DATABASE_PASSWORD",
+   *       valueFrom: "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-secret-123abc"
+   *     }
+   *   ]
+   * }
+   * ```
+   */
+  secrets?: Input<{
+    /**
+     * The name of the environment variable to set in the container.
+     */
+    name: string;
+    /**
+     * The secret to expose to the container. The supported values are either the full Amazon Resource Name (ARN) of the AWS Secrets Manager secret or the full ARN of the parameter in the AWS Systems Manager Parameter Store.
+     */
+    valueFrom: string;
+  }[]>;
+  /**
    * Mount Amazon EFS file systems into the container.
    *
    * @example
@@ -1011,12 +1035,25 @@ export interface ClusterServiceArgs {
      * Configure the service's logs in CloudWatch. Same as the top-level [`logging`](#logging).
      */
     logging?: Input<{
-      /**
-       * The duration the logs are kept in CloudWatch. Same as the top-level
-       * [`logging.retention`](#logging-retention).
-       */
-      retention?: Input<keyof typeof RETENTION>;
+    /**
+     * The duration the logs are kept in CloudWatch. Same as the top-level
+     * [`logging.retention`](#logging-retention).
+     */
+    retention?: Input<keyof typeof RETENTION>;
     }>;
+    /**
+     * An object that represents the secret to expose to your container (from AWS Secrets Manager or from AWS Systems Manager Parameter Store).
+     * @example
+     * ```js
+     * [
+     *   {
+     *     "name": "environment_variable_name",
+     *     "valueFrom": "arn:aws:ssm:region:aws_account_id:parameter/parameter_name"
+     *   }
+     * ]
+     * ```
+     */
+    secrets?: ClusterServiceArgs["secrets"];
     /**
      * Mount Amazon EFS file systems into the container. Same as the top-level
      * [`efs`](#efs).

@@ -241,10 +241,10 @@ export class Service extends Component implements Link.Linkable {
     function normalizeContainers() {
       if (
         args.containers &&
-        (args.image || args.logging || args.environment || args.volumes)
+        (args.image || args.logging || args.environment || args.volumes || args.secrets)
       ) {
         throw new VisibleError(
-          `You cannot provide both "containers" and "image", "logging", "environment" or "volumes".`,
+          `You cannot provide both "containers" and "image", "logging", "environment", "volumes" or "secrets".`,
         );
       }
 
@@ -255,6 +255,7 @@ export class Service extends Component implements Link.Linkable {
           image: args.image,
           logging: args.logging,
           environment: args.environment,
+          secrets: args.secrets,
           volumes: args.volumes,
           command: args.command,
           entrypoint: args.entrypoint,
@@ -679,6 +680,10 @@ export class Service extends Component implements Link.Linkable {
                       sourceVolume: volume.efs.accessPoint,
                       containerPath: volume.path,
                     })),
+                    secrets: container.secrets?.map((secret) => ({
+                      name: secret.name,
+                      valueFrom: secret.valueFrom
+                    }))
                   };
 
                   function createImage() {
