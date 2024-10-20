@@ -407,6 +407,17 @@ export interface NextjsArgs extends SsrSiteArgs {
    * ```
    */
   cachePolicy?: SsrSiteArgs["cachePolicy"];
+  /**
+   * Configure the Next.js app to use an existing CloudFront response headers policy.
+   *
+   * @example
+   * ```js
+   * {
+   *   responseHeadersPolicy: "eaab4381-ed33-4a86-88ca-d9558dc6cd63"
+   * }
+   * ```
+   */
+  responseHeadersPolicy?: SsrSiteArgs["responseHeadersPolicy"];
 }
 
 /**

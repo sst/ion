@@ -57,6 +57,7 @@ export interface SsrSiteArgs extends BaseSsrSiteArgs {
   domain?: CdnArgs["domain"];
   permissions?: FunctionArgs["permissions"];
   cachePolicy?: Input<string>;
+  responseHeadersPolicy?: Input<string>;
   invalidation?: Input<
     | false
     | {
@@ -792,6 +793,7 @@ export function createServersAndDistribution(
           compress: true,
           // CloudFront's managed CachingOptimized policy
           cachePolicyId: "658327ea-f89d-4fab-a63d-7e88639e58f6",
+          responseHeadersPolicyId: args.responseHeadersPolicy,
           functionAssociations: behavior.cfFunction
             ? [
                 {
@@ -821,6 +823,7 @@ export function createServersAndDistribution(
           cachedMethods: ["GET", "HEAD"],
           compress: true,
           cachePolicyId: args.cachePolicy ?? useServerBehaviorCachePolicy().id,
+          responseHeadersPolicyId: args.responseHeadersPolicy,
           // CloudFront's Managed-AllViewerExceptHostHeader policy
           originRequestPolicyId: "b689b0a8-53d0-40ab-baf2-68738e2966ac",
           functionAssociations: behavior.cfFunction
