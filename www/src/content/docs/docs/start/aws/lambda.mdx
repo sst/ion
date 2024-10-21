@@ -68,7 +68,7 @@ To add a dependency like `boto3`:
 uv add boto3
 ```
 
-This will add the dependency to pyproject.toml, it will automatically be installed on the lambda when deployed.
+This will add the dependency to `pyproject.toml`, it will automatically be installed on the lambda when deployed.
 
 ---
 
@@ -98,7 +98,7 @@ Now you can use Postman or anything you desire to invoke your lambda function
 
 ##### Connecting to your project
 
-You can use the SST SDK to connect to your project like so:
+You can use the SST SDK to connect to your project like so (assuming you [linked](https://sst.dev/docs/component/linkable) it):
 
 ```js
 import { Resource } from "sst";
